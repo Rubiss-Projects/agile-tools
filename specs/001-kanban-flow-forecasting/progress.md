@@ -1,5 +1,92 @@
 ---
-## Iteration 11 - 2026-04-19
+## Iteration 15 - 2026-04-18
+**User Story**: US2 complete — T027, T028, T029, T030 (Reveal Aging and On-Hold Stories)
+**Tasks Completed**: 
+- [x] T027: apps/web/src/server/views/flow-analytics.ts (pure shapeFlowAnalytics: groups FlowPoints into 3 series with stable Y ordinals) + apps/web/src/components/flow/flow-filters.tsx (FlowFiltersPanel with timeframe/issueType/status/agingOnly/onHoldOnly) + apps/web/src/components/flow/aging-scatter-plot.tsx (nivo ResponsiveScatterPlot, threshold lines via createThresholdLayer, click → onItemSelect, aria-label)
+- [x] T028: apps/web/src/components/flow/work-item-detail-drawer.tsx (fixed side-panel: fetches /items/:id on mount) + apps/web/src/components/flow/flow-analytics-section.tsx (client island: fetch /flow on mount+filter-change, renders scatter plot + drawer) + apps/web/src/components/admin/hold-definition-form.tsx (collapsible GET/PUT hold-definition form) + apps/web/src/app/scopes/[scopeId]/page.tsx (adds FlowAnalyticsSection + HoldDefinitionForm in filterOptions guard block)
+- [x] T029: tests/integration/flow-analytics.integration.test.ts (pure unit tests for buildAgingThresholdModel + classifyAgingZone; DB integration for rebuildHoldPeriods + queryCurrentWorkItems with aging zone classification)
+- [x] T030: tests/e2e/flow-analytics.spec.ts (page.route mocks for /flow and /items/:id; scatter plot visible, filter controls visible, detail API accessible for admins, hold definition form visible for admins)
+**Commit**: feat(001-kanban-flow-forecasting): US-002 Reveal Aging and On-Hold Stories
+**Files Changed**: 
+- apps/web/src/server/views/flow-analytics.ts (new)
+- apps/web/src/components/flow/flow-filters.tsx (new)
+- apps/web/src/components/flow/aging-scatter-plot.tsx (new)
+- apps/web/src/components/flow/work-item-detail-drawer.tsx (new)
+- apps/web/src/components/flow/flow-analytics-section.tsx (new)
+- apps/web/src/components/admin/hold-definition-form.tsx (new)
+- apps/web/src/app/scopes/[scopeId]/page.tsx (added FlowAnalyticsSection + HoldDefinitionForm)
+- tests/integration/flow-analytics.integration.test.ts (new)
+- tests/e2e/flow-analytics.spec.ts (new)
+- eslint.config.mjs (disabled react-hooks/exhaustive-deps for new flow components — eslint-plugin-react-hooks@4.x crashes on ESLint 9)
+- specs/001-kanban-flow-forecasting/tasks.md (T027–T030 marked complete)
+**Learnings**:
+- eslint-plugin-react-hooks@4.6.2 is incompatible with ESLint 9: context.getSource() was removed. This crashes the exhaustive-deps rule for any useEffect/useCallback. Workaround: disable the rule per-file until plugin is upgraded to v5.
+- With exactOptionalPropertyTypes: true, Zod .optional() produces T | undefined which is NOT assignable to optional props typed as ?: T. Fix: reconstruct objects with conditional spreads (..{key !== undefined && { key }}).
+- createThresholdLayer pattern (closure returning a React FunctionComponent used as a nivo custom SVG layer) avoids useMemo entirely — layer is cheap to recreate on each render.
+- nivo ScatterPlotNodeData.xValue is already typed as number when using ScatterDatum with x: number — no cast needed.
+---
+
+
+**User Story**: Partial progress on US2 — T026 (flow analytics + work-item detail APIs)
+**Tasks Completed**: 
+- [x] T026: packages/db/src/projections/current-work-item-projection.ts (added getLatestAgingThresholdModel returning full model with p70/sampleSize/metricBasis/lowConfidenceReason) + packages/db/src/repositories/work-items.ts (new — getWorkItemWithDetail with lifecycleEvents + holdPeriods) + packages/db/src/index.ts (re-export work-items) + apps/web/src/app/api/v1/scopes/[scopeId]/flow/route.ts (GET — requireWorkspaceContext, parse issueTypeIds/statusIds/historicalWindowDays/agingOnly/onHoldOnly/dataVersion, query work items, apply in-memory filters, return FlowAnalyticsResponse) + apps/web/src/app/api/v1/scopes/[scopeId]/items/[workItemId]/route.ts (GET — requireWorkspaceContext, verify scope ownership, return WorkItemDetail with hold periods and lifecycle events)
+**Tasks Remaining in Story**: T027, T028, T029, T030
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- packages/db/src/projections/current-work-item-projection.ts (added getLatestAgingThresholdModel)
+- packages/db/src/repositories/work-items.ts (new)
+- packages/db/src/index.ts (re-export work-items)
+- apps/web/src/app/api/v1/scopes/[scopeId]/flow/route.ts (new)
+- apps/web/src/app/api/v1/scopes/[scopeId]/items/[workItemId]/route.ts (new)
+- specs/001-kanban-flow-forecasting/tasks.md (T026 marked complete)
+**Learnings**:
+- `getLatestAgingThresholds` returns only {p50, p85} — added `getLatestAgingThresholdModel` alongside it for routes that need p70, sampleSize, metricBasis, and lowConfidenceReason (the full shape for FlowAnalyticsResponse.agingModel)
+- Workspace ownership for work items is enforced by verifying scopeId belongs to workspaceId first (via getFlowScope), then querying workItem by (id, scopeId) — no join needed since scope membership implies workspace membership
+- In-memory filtering is appropriate here given the plan target of "hundreds of active stories" per scope
+---
+
+---
+## Iteration 13 - 2026-04-18
+**User Story**: Partial progress on US2 — T025 (enrich current flow projections with aging zones + on-hold state)
+**Tasks Completed**: 
+- [x] T025: apps/worker/src/projections/rebuild-current-flow.ts (new — rebuildCurrentFlowProjection: queries completed stories within 90-day window, calls buildAgingThresholdModel, upserts AgingThresholdModel) + packages/db/src/projections/current-work-item-projection.ts (added AgingThresholds interface, getLatestAgingThresholds helper, inline classifyAgingZone, optional agingThresholds param on queryCurrentWorkItems) + apps/worker/src/projections/rebuild-scope-summary.ts (wired rebuildHoldPeriods + rebuildCurrentFlowProjection into rebuildScopeProjections)
+**Tasks Remaining in Story**: T026, T027, T028, T029, T030
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- apps/worker/src/projections/rebuild-current-flow.ts (new)
+- packages/db/src/projections/current-work-item-projection.ts (AgingThresholds, getLatestAgingThresholds, classifyAgingZone, options.agingThresholds)
+- apps/worker/src/projections/rebuild-scope-summary.ts (wired rebuildHoldPeriods + rebuildCurrentFlowProjection)
+- specs/001-kanban-flow-forecasting/tasks.md (T025 marked complete)
+**Learnings**:
+- @agile-tools/analytics resolves via dist/ — must run `pnpm --filter @agile-tools/analytics run build` before typechecking worker; this is already the pattern from previous iterations (same for @agile-tools/db)
+- To avoid a db→analytics circular dependency (analytics may depend on db in later tasks), classifyAgingZone is inlined in current-work-item-projection.ts rather than imported from @agile-tools/analytics
+- getLatestAgingThresholds is exposed from packages/db via the existing `export *` in index.ts — no manual re-export needed
+- rebuild-scope-summary.ts was already identified as the extension point (commented "US1 lightweight hook"); T025 fulfils that by adding hold period + aging model rebuilds before the diagnostic log
+---
+
+
+**User Story**: Partial progress on US2 — T023 + T024 (hold-definition persistence + hold-period/aging-threshold builders)
+**Tasks Completed**: 
+- [x] T023: packages/db/src/repositories/hold-definitions.ts (upsertHoldDefinition, getActiveHoldDefinition) + apps/web/src/app/api/v1/admin/scopes/[scopeId]/hold-definition/route.ts (GET + PUT handlers with admin auth, validation, mapHoldDefinition) + packages/db/src/index.ts (re-export hold-definitions)
+- [x] T024: packages/analytics/src/aging-thresholds.ts (buildAgingThresholdModel with p50/p70/p85 percentiles, classifyAgingZone, AGING_CONFIDENCE_THRESHOLD=30) + apps/worker/src/projections/rebuild-hold-periods.ts (rebuildHoldPeriods: deletes+rebuilds all HoldPeriod records for a scope using active HoldDefinition + lifecycle events) + packages/analytics/src/index.ts (export aging-thresholds)
+**Tasks Remaining in Story**: T025, T026, T027, T028, T029, T030
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- packages/db/src/repositories/hold-definitions.ts (new)
+- packages/db/src/index.ts (added hold-definitions re-export)
+- apps/web/src/app/api/v1/admin/scopes/[scopeId]/hold-definition/route.ts (new)
+- apps/worker/src/projections/rebuild-hold-periods.ts (new)
+- packages/analytics/src/aging-thresholds.ts (new)
+- packages/analytics/src/index.ts (replaced placeholder with aging-thresholds export)
+- specs/001-kanban-flow-forecasting/tasks.md (T023 + T024 marked complete)
+**Learnings**:
+- exactOptionalPropertyTypes: true means { a?: string } does NOT accept { a: string | undefined } — use conditional spread `...(val !== undefined && { a: val })` when building input objects from Zod-parsed data where optional fields may be undefined
+- After editing packages/db/src/index.ts to add a new export, the dist/ must be rebuilt (pnpm run build in packages/db) before apps/worker and apps/web can resolve the new export via their dist-based dependency resolution
+- blocked_field hold period derivation requires the "to" value of field_change lifecycle events, which is not currently stored in the WorkItemLifecycleEvent schema (only changedFieldId is persisted). Status-based hold derivation is fully implemented; blocked_field is deferred until schema stores changedFieldValue
+- The admin hold-definition route needs ../../_lib (not ../_lib) because it sits at [scopeId]/hold-definition/route.ts and _lib.ts is at scopes/_lib.ts
+---
+
+
 **User Story**: US1 complete — T021 + T022 (contract, integration, and E2E tests)
 **Tasks Completed**: 
 - [x] T021: tests/contract/admin-jira-connections.contract.test.ts (12 contract tests for POST connection, POST validate healthy/unhealthy, GET boards, GET board detail, 401/403 auth) + tests/contract/admin-scopes.contract.test.ts (12 contract tests for POST scope, PUT scope, POST sync, GET syncs, 400/401/404 error paths)

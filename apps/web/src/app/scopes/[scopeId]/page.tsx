@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { getWorkspaceContext } from '@/server/auth';
 import { buildScopeSummary } from '@/server/views/scope-summary';
 import { TriggerSyncButton } from '@/components/admin/trigger-sync-button';
+import { HoldDefinitionForm } from '@/components/admin/hold-definition-form';
+import { FlowAnalyticsSection } from '@/components/flow/flow-analytics-section';
 
 export default async function ScopePage({
   params,
@@ -137,27 +139,23 @@ export default async function ScopePage({
         {ctx.role === 'admin' && <TriggerSyncButton scopeId={scopeId} />}
       </section>
 
-      {/* Filter options — only present after at least one successful sync */}
+      {/* Flow analytics — only present after at least one successful sync */}
       {filterOptions && (
         <section style={{ marginTop: '1.5rem' }}>
-          <h2>Available Filters</h2>
-          {filterOptions.issueTypes && filterOptions.issueTypes.length > 0 && (
-            <p>
-              <strong>Issue types:</strong>{' '}
-              {filterOptions.issueTypes.map((t) => t.name).join(', ')}
-            </p>
-          )}
-          {filterOptions.statuses && filterOptions.statuses.length > 0 && (
-            <p>
-              <strong>Statuses:</strong>{' '}
-              {filterOptions.statuses.map((s) => s.name).join(', ')}
-            </p>
-          )}
-          {filterOptions.historicalWindows && filterOptions.historicalWindows.length > 0 && (
-            <p>
-              <strong>Historical windows:</strong>{' '}
-              {filterOptions.historicalWindows.map((w) => `${w}d`).join(', ')}
-            </p>
+          <h2>Flow Analytics</h2>
+          <FlowAnalyticsSection
+            scopeId={scopeId}
+            filterOptions={{
+              ...(filterOptions.issueTypes !== undefined && { issueTypes: filterOptions.issueTypes }),
+              ...(filterOptions.statuses !== undefined && { statuses: filterOptions.statuses }),
+              ...(filterOptions.historicalWindows !== undefined && { historicalWindows: filterOptions.historicalWindows }),
+            }}
+          />
+          {ctx.role === 'admin' && (
+            <HoldDefinitionForm
+              scopeId={scopeId}
+              {...(filterOptions.statuses !== undefined && { availableStatuses: filterOptions.statuses })}
+            />
           )}
         </section>
       )}

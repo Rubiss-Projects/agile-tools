@@ -55,6 +55,20 @@ export default [
     },
   },
   {
+    // eslint-plugin-react-hooks@4.x is incompatible with ESLint 9 for
+    // exhaustive-deps: context.getSource() was removed. Disable the crashing
+    // rule for files that use useEffect/useCallback until the plugin is
+    // upgraded to v5.
+    files: [
+      'apps/web/src/components/flow/flow-analytics-section.tsx',
+      'apps/web/src/components/flow/work-item-detail-drawer.tsx',
+      'apps/web/src/components/admin/hold-definition-form.tsx',
+    ],
+    rules: {
+      'react-hooks/exhaustive-deps': 'off',
+    },
+  },
+  {
     ignores: [
       '.next/**',
       'dist/**',

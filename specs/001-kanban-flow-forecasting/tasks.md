@@ -68,14 +68,14 @@
 
 ### Implementation for User Story 2
 
-- [ ] T023 [P] [US2] Implement hold-definition persistence and the admin hold-definition route with administrator authorization checks in packages/db/src/repositories/hold-definitions.ts and apps/web/src/app/api/v1/admin/scopes/[scopeId]/hold-definition/route.ts
-- [ ] T024 [P] [US2] Implement hold-period derivation and percentile aging model builders in apps/worker/src/projections/rebuild-hold-periods.ts and packages/analytics/src/aging-thresholds.ts
-- [ ] T025 [US2] Enrich current flow projections with on-hold state, aging zones, and low-confidence warnings in apps/worker/src/projections/rebuild-current-flow.ts and packages/db/src/projections/current-work-item-projection.ts
-- [ ] T026 [US2] Implement authenticated flow analytics and work-item detail APIs, including issue-type, workflow-status, and historical-window filtering, in apps/web/src/app/api/v1/scopes/[scopeId]/flow/route.ts and apps/web/src/app/api/v1/scopes/[scopeId]/items/[workItemId]/route.ts
-- [ ] T027 [US2] Build the scatter plot, timeframe picker, workflow-status filters, issue-type filters, and analytics view model in apps/web/src/components/flow/aging-scatter-plot.tsx, apps/web/src/components/flow/flow-filters.tsx, and apps/web/src/server/views/flow-analytics.ts
-- [ ] T028 [US2] Add work-item detail drill-down and hold-definition controls to the scope UI in apps/web/src/components/flow/work-item-detail-drawer.tsx and apps/web/src/app/scopes/[scopeId]/page.tsx
-- [ ] T029 [P] [US2] Add integration tests for hold derivation, percentile aging, and flow filtering in tests/integration/flow-analytics.integration.test.ts
-- [ ] T030 [P] [US2] Add end-to-end coverage for the scatter plot, filters, and item drill-down in tests/e2e/flow-analytics.spec.ts
+- [x] T023 [P] [US2] Implement hold-definition persistence and the admin hold-definition route with administrator authorization checks in packages/db/src/repositories/hold-definitions.ts and apps/web/src/app/api/v1/admin/scopes/[scopeId]/hold-definition/route.ts
+- [x] T024 [P] [US2] Implement hold-period derivation and percentile aging model builders in apps/worker/src/projections/rebuild-hold-periods.ts and packages/analytics/src/aging-thresholds.ts
+- [x] T025 [US2] Enrich current flow projections with on-hold state, aging zones, and low-confidence warnings in apps/worker/src/projections/rebuild-current-flow.ts and packages/db/src/projections/current-work-item-projection.ts
+- [x] T026 [US2] Implement authenticated flow analytics and work-item detail APIs, including issue-type, workflow-status, and historical-window filtering, in apps/web/src/app/api/v1/scopes/[scopeId]/flow/route.ts and apps/web/src/app/api/v1/scopes/[scopeId]/items/[workItemId]/route.ts
+- [x] T027 [US2] Build the scatter plot, timeframe picker, workflow-status filters, issue-type filters, and analytics view model in apps/web/src/components/flow/aging-scatter-plot.tsx, apps/web/src/components/flow/flow-filters.tsx, and apps/web/src/server/views/flow-analytics.ts
+- [x] T028 [US2] Add work-item detail drill-down and hold-definition controls to the scope UI in apps/web/src/components/flow/work-item-detail-drawer.tsx and apps/web/src/app/scopes/[scopeId]/page.tsx
+- [x] T029 [P] [US2] Add integration tests for hold derivation, percentile aging, and flow filtering in tests/integration/flow-analytics.integration.test.ts
+- [x] T030 [P] [US2] Add end-to-end coverage for the scatter plot, filters, and item drill-down in tests/e2e/flow-analytics.spec.ts
 
 **Checkpoint**: User Stories 1 and 2 should both work independently, with the scope page now exposing actionable aging and on-hold insights.
 

@@ -1,21 +1,27 @@
 import type { PrismaClient } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import { queryScopeFilterOptions } from '@agile-tools/db';
+import { rebuildHoldPeriods } from './rebuild-hold-periods.js';
+import { rebuildCurrentFlowProjection } from './rebuild-current-flow.js';
 
 /**
- * Called after a scope sync succeeds to validate projection data and emit
- * diagnostic metrics for the completed sync.
+ * Called after a scope sync succeeds to rebuild all projection data:
+ * 1. Hold periods (on-hold state from lifecycle events + hold definition)
+ * 2. Aging threshold model (percentile thresholds from completed story history)
  *
- * For US1, this is a lightweight hook (no materialized writes) that provides
- * the extension point used in later stories (T025) to rebuild enriched
- * read models (hold periods, aging zones) after each sync.
+ * The rebuilt projections enable the flow analytics API to serve on-hold state,
+ * aging zone classifications, and low-confidence warnings without re-computing
+ * from raw events on every request.
  */
 export async function rebuildScopeProjections(
   db: PrismaClient,
   scopeId: string,
   syncRunId: string,
 ): Promise<void> {
-  // Count active items pinned to this sync run to detect unexpected data gaps.
+  await rebuildHoldPeriods(db, scopeId, syncRunId);
+
+  const agingResult = await rebuildCurrentFlowProjection(db, scopeId, syncRunId);
+
   const activeCount = await db.workItem.count({
     where: { scopeId, completedAt: null, excludedReason: null, lastSyncRunId: syncRunId },
   });
@@ -33,5 +39,7 @@ export async function rebuildScopeProjections(
     completedItemCount: completedCount,
     distinctIssueTypes: filterOptions.issueTypes.length,
     distinctStatuses: filterOptions.statuses.length,
+    agingThresholdSampleSize: agingResult.sampleSize,
+    agingLowConfidence: agingResult.lowConfidenceReason !== null,
   });
 }

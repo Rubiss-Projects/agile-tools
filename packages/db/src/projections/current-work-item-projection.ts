@@ -1,5 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
 
+/**
+ * Percentile thresholds used to classify a work item's aging zone.
+ * Sourced from the latest AgingThresholdModel for the scope.
+ */
+export interface AgingThresholds {
+  p50: number;
+  p85: number;
+}
+
 export interface CurrentWorkItemRow {
   workItemId: string;
   scopeId: string;
@@ -50,7 +59,7 @@ const MS_PER_DAY = MS_PER_HOUR * 24;
 export async function queryCurrentWorkItems(
   db: PrismaClient,
   scopeId: string,
-  options?: { dataVersion?: string },
+  options?: { dataVersion?: string; agingThresholds?: AgingThresholds },
 ): Promise<CurrentWorkItemRow[]> {
   const now = new Date();
 
@@ -95,7 +104,9 @@ export async function queryCurrentWorkItems(
       startedAt: item.startedAt,
       totalHoldHours,
       onHoldNow,
-      agingZone: 'normal' as const,
+      agingZone: options?.agingThresholds
+        ? classifyAgingZone(ageInDays, options.agingThresholds)
+        : ('normal' as const),
       directUrl: item.directUrl,
     };
   });
@@ -143,4 +154,85 @@ export async function queryScopeFilterOptions(
     issueTypes: Array.from(issueTypeMap.entries()).map(([id, name]) => ({ id, name })),
     statuses: Array.from(statusMap.entries()).map(([id, name]) => ({ id, name })),
   };
+}
+
+/**
+ * Retrieve the most recently computed aging thresholds for a scope.
+ *
+ * Pass `dataVersion` (= syncRunId) to pin to a specific model version.
+ * Returns null when no AgingThresholdModel exists for the scope yet.
+ */
+export async function getLatestAgingThresholds(
+  db: PrismaClient,
+  scopeId: string,
+  options?: { dataVersion?: string },
+): Promise<AgingThresholds | null> {
+  const model = await db.agingThresholdModel.findFirst({
+    where: {
+      scopeId,
+      ...(options?.dataVersion ? { dataVersion: options.dataVersion } : {}),
+    },
+    orderBy: { calculatedAt: 'desc' },
+  });
+
+  if (!model) return null;
+  return { p50: model.p50, p85: model.p85 };
+}
+
+/**
+ * Retrieve the full AgingThresholdModel record for a scope, including p70,
+ * sampleSize, metricBasis, and lowConfidenceReason needed by the flow API.
+ *
+ * Pass `dataVersion` to pin to a specific model version.
+ * Returns null when no model has been computed yet.
+ */
+export async function getLatestAgingThresholdModel(
+  db: PrismaClient,
+  scopeId: string,
+  options?: { dataVersion?: string },
+): Promise<{
+  p50: number;
+  p70: number;
+  p85: number;
+  sampleSize: number;
+  metricBasis: string;
+  lowConfidenceReason: string | null;
+} | null> {
+  const model = await db.agingThresholdModel.findFirst({
+    where: {
+      scopeId,
+      ...(options?.dataVersion ? { dataVersion: options.dataVersion } : {}),
+    },
+    orderBy: { calculatedAt: 'desc' },
+  });
+  if (!model) return null;
+  return {
+    p50: model.p50,
+    p70: model.p70,
+    p85: model.p85,
+    sampleSize: model.sampleSize,
+    metricBasis: model.metricBasis,
+    lowConfidenceReason: model.lowConfidenceReason,
+  };
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Classify a work item's age against pre-computed percentile thresholds.
+ *
+ * - 'normal' when ageDays <= p50
+ * - 'watch'  when p50 < ageDays <= p85
+ * - 'aging'  when ageDays > p85
+ *
+ * Falls back to 'normal' when thresholds are zero (no data yet).
+ */
+function classifyAgingZone(
+  ageDays: number,
+  thresholds: AgingThresholds,
+): 'normal' | 'watch' | 'aging' {
+  if (thresholds.p85 <= 0 && thresholds.p50 <= 0) return 'normal';
+  if (ageDays > thresholds.p85) return 'aging';
+  if (ageDays > thresholds.p50) return 'watch';
+  return 'normal';
 }
