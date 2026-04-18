@@ -5,6 +5,11 @@
 **Status**: Draft  
 **Input**: User description: "$ARGUMENTS"
 
+<!--
+  NOTE: When privileged actions exist, make administrator-only and general-user
+  actions explicit in the stories, requirements, and assumptions.
+-->
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -18,6 +23,9 @@
   - Tested independently
   - Deployed independently
   - Demonstrated to users independently
+
+  Capture any role differences (for example, administrator-only setup versus
+  general-user analytics access) explicitly when they affect the workflow.
 -->
 
 ### User Story 1 - [Brief Title] (Priority: P1)
@@ -74,6 +82,8 @@
 
 - What happens when [boundary condition]?
 - How does system handle [error scenario]?
+- How does the system handle stale, partially synchronized, or unavailable upstream data?
+- How does the system handle unauthenticated or unauthorized access to privileged actions?
 
 ## Requirements *(mandatory)*
 
@@ -86,14 +96,15 @@
 
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
 - **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
+- **FR-003**: System MUST restrict privileged configuration or administrative actions to authorized roles when such actions exist
+- **FR-004**: Users MUST be able to [key interaction, e.g., "reset their password"]
+- **FR-005**: System MUST [data requirement, e.g., "persist user preferences"]
+- **FR-006**: System MUST surface stale or incomplete source data when external integrations affect user-visible outputs
 
 *Example of marking unclear requirements:*
 
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+- **FR-007**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - inherited workspace auth, email/password, SSO, OAuth?]
+- **FR-008**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
 ### Key Entities *(include if feature involves data)*
 

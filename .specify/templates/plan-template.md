@@ -31,7 +31,11 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- **Modular Monolith First**: [PASS/FAIL] [document any extra deployable or service and its justification]
+- **Projection-Backed Analytics**: [PASS/FAIL] [document how user-facing analytics read from local projections rather than live source requests]
+- **Contract and Schema Discipline**: [PASS/FAIL] [list OpenAPI, typed schema, and migration changes required by this feature]
+- **Test Coverage by Risk**: [PASS/FAIL] [list the contract, integration, end-to-end, and performance validation required]
+- **Operational Safety**: [PASS/FAIL] [document auth context, secret handling, single-sync guarantees, and operator-visible health or failure states]
 
 ## Project Structure
 
@@ -48,47 +52,23 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
+apps/
+├── web/
+│   └── src/
+├── worker/
+│   └── src/
+packages/
+├── analytics/
+├── db/
+├── jira-client/
+└── shared/
 tests/
 ├── contract/
 ├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+├── e2e/
+└── performance/
 ```
 
 **Structure Decision**: [Document the selected structure and reference the real

@@ -1,0 +1,930 @@
+openapi: 3.1.0
+info:
+  title: Kanban Flow Forecasting API
+  version: 0.1.0
+  description: |
+    Internal REST API for configuring self-hosted Jira scopes, synchronizing local analytics data,
+    serving percentile-based flow views, and generating story-count Monte Carlo forecasts.
+servers:
+  - url: https://agile-tools.internal
+    description: Example internal deployment URL
+tags:
+  - name: Admin Connections
+  - name: Admin Scopes
+  - name: Flow Analytics
+  - name: Forecasting
+security:
+  - workspaceAuth: []
+paths:
+  /v1/admin/jira-connections:
+    post:
+      tags: [Admin Connections]
+      summary: Create a self-hosted Jira connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJiraConnectionRequest'
+      responses:
+        '201':
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JiraConnection'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/admin/jira-connections/{connectionId}/validate:
+    post:
+      tags: [Admin Connections]
+      summary: Validate Jira reachability and PAT permissions
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JiraConnectionValidation'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/admin/jira-connections/{connectionId}/discovery/boards:
+    get:
+      tags: [Admin Connections]
+      summary: Discover boards visible to the Jira service account
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      responses:
+        '200':
+          description: Board discovery results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [boards]
+                properties:
+                  boards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BoardSummary'
+  /v1/admin/jira-connections/{connectionId}/discovery/boards/{boardId}:
+    get:
+      tags: [Admin Connections]
+      summary: Inspect a board's statuses, issue types, and candidate blocked fields
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: Board discovery detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardDiscoveryDetail'
+        '404':
+          description: Connection or board not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/admin/scopes:
+    post:
+      tags: [Admin Scopes]
+      summary: Create a kanban flow scope from a discovered board
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFlowScopeRequest'
+      responses:
+        '201':
+          description: Scope created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowScope'
+  /v1/admin/scopes/{scopeId}:
+    put:
+      tags: [Admin Scopes]
+      summary: Update scope boundaries, issue-type inclusion, or sync cadence
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFlowScopeRequest'
+      responses:
+        '200':
+          description: Scope updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowScope'
+  /v1/admin/scopes/{scopeId}/hold-definition:
+    put:
+      tags: [Admin Scopes]
+      summary: Define how the scope detects on-hold work
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldDefinitionRequest'
+      responses:
+        '200':
+          description: Hold definition saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldDefinition'
+  /v1/admin/scopes/{scopeId}/syncs:
+    post:
+      tags: [Admin Scopes]
+      summary: Queue a manual refresh for the scope
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      responses:
+        '202':
+          description: Sync queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncRun'
+    get:
+      tags: [Admin Scopes]
+      summary: List sync history for the scope
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      responses:
+        '200':
+          description: Sync history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [syncs]
+                properties:
+                  syncs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SyncRun'
+  /v1/syncs/{syncRunId}:
+    get:
+      tags: [Admin Scopes]
+      summary: Get a single sync run status
+      parameters:
+        - $ref: '#/components/parameters/SyncRunId'
+      responses:
+        '200':
+          description: Sync run status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncRun'
+        '404':
+          description: Sync run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/scopes/{scopeId}:
+    get:
+      tags: [Flow Analytics]
+      summary: Get scope metadata, health, and filter options
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      responses:
+        '200':
+          description: Scope summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopeSummary'
+  /v1/scopes/{scopeId}/flow:
+    get:
+      tags: [Flow Analytics]
+      summary: Get the scatter-plot flow view backed by local projections
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+        - in: query
+          name: issueTypeIds
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - in: query
+          name: statusIds
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - in: query
+          name: historicalWindowDays
+          schema:
+            type: integer
+            minimum: 30
+            maximum: 730
+        - in: query
+          name: agingOnly
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: onHoldOnly
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: dataVersion
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Flow analytics payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowAnalyticsResponse'
+  /v1/scopes/{scopeId}/items/{workItemId}:
+    get:
+      tags: [Flow Analytics]
+      summary: Get detailed lifecycle information for a single work item
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+        - $ref: '#/components/parameters/WorkItemId'
+      responses:
+        '200':
+          description: Work item detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItemDetail'
+        '404':
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/scopes/{scopeId}/throughput:
+    get:
+      tags: [Flow Analytics]
+      summary: Get daily completed-story counts for the selected historical window
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+        - in: query
+          name: historicalWindowDays
+          schema:
+            type: integer
+            minimum: 30
+            maximum: 730
+      responses:
+        '200':
+          description: Throughput analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThroughputResponse'
+  /v1/scopes/{scopeId}/forecasts:
+    post:
+      tags: [Forecasting]
+      summary: Run a story-count Monte Carlo forecast against the current local snapshot
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecastRequest'
+      responses:
+        '200':
+          description: Forecast result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResponse'
+        '422':
+          description: Forecast unavailable because the sample is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  parameters:
+    ConnectionId:
+      name: connectionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SyncRunId:
+      name: syncRunId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BoardId:
+      name: boardId
+      in: path
+      required: true
+      schema:
+        type: integer
+    WorkItemId:
+      name: workItemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Unauthorized:
+      description: Authentication is required or the workspace session is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The authenticated caller does not have permission to perform this operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  securitySchemes:
+    workspaceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session
+  schemas:
+    CreateJiraConnectionRequest:
+      type: object
+      required: [baseUrl, pat]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+        pat:
+          type: string
+          minLength: 1
+        displayName:
+          type: string
+    JiraConnection:
+      type: object
+      required: [id, baseUrl, healthStatus]
+      properties:
+        id:
+          type: string
+          format: uuid
+        baseUrl:
+          type: string
+          format: uri
+        displayName:
+          type: string
+        healthStatus:
+          type: string
+          enum: [draft, validating, healthy, unhealthy, stale, disabled]
+        lastValidatedAt:
+          type: string
+          format: date-time
+        lastHealthyAt:
+          type: string
+          format: date-time
+        lastErrorCode:
+          type: string
+    JiraConnectionValidation:
+      type: object
+      required: [connectionId, healthStatus, validatedAt, warnings]
+      properties:
+        connectionId:
+          type: string
+          format: uuid
+        healthStatus:
+          type: string
+          enum: [healthy, unhealthy, stale]
+        validatedAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+    BoardSummary:
+      type: object
+      required: [boardId, boardName]
+      properties:
+        boardId:
+          type: integer
+        boardName:
+          type: string
+        projectKeys:
+          type: array
+          items:
+            type: string
+    BoardDiscoveryDetail:
+      type: object
+      required: [boardId, boardName, columns, statuses, issueTypes]
+      properties:
+        boardId:
+          type: integer
+        boardName:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardColumn'
+        statuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedValue'
+        issueTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedValue'
+        blockedFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedValue'
+    BoardColumn:
+      type: object
+      required: [name, statusIds]
+      properties:
+        name:
+          type: string
+        statusIds:
+          type: array
+          items:
+            type: string
+    NamedValue:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    CreateFlowScopeRequest:
+      type: object
+      required: [connectionId, boardId, timezone, includedIssueTypeIds, startStatusIds, doneStatusIds, syncIntervalMinutes]
+      properties:
+        connectionId:
+          type: string
+          format: uuid
+        boardId:
+          type: integer
+        timezone:
+          type: string
+        includedIssueTypeIds:
+          type: array
+          items:
+            type: string
+        startStatusIds:
+          type: array
+          items:
+            type: string
+        doneStatusIds:
+          type: array
+          items:
+            type: string
+        syncIntervalMinutes:
+          type: integer
+          minimum: 5
+          maximum: 15
+    UpdateFlowScopeRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateFlowScopeRequest'
+    FlowScope:
+      type: object
+      required: [id, connectionId, boardId, timezone, includedIssueTypeIds, startStatusIds, doneStatusIds, syncIntervalMinutes, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        connectionId:
+          type: string
+          format: uuid
+        boardId:
+          type: integer
+        boardName:
+          type: string
+        timezone:
+          type: string
+        includedIssueTypeIds:
+          type: array
+          items:
+            type: string
+        startStatusIds:
+          type: array
+          items:
+            type: string
+        doneStatusIds:
+          type: array
+          items:
+            type: string
+        syncIntervalMinutes:
+          type: integer
+        status:
+          type: string
+          enum: [active, paused, needs_attention]
+    HoldDefinitionRequest:
+      type: object
+      required: [holdStatusIds]
+      properties:
+        holdStatusIds:
+          type: array
+          items:
+            type: string
+        blockedFieldId:
+          type: string
+        blockedTruthyValues:
+          type: array
+          items:
+            type: string
+    HoldDefinition:
+      type: object
+      required: [scopeId, holdStatusIds]
+      properties:
+        scopeId:
+          type: string
+          format: uuid
+        holdStatusIds:
+          type: array
+          items:
+            type: string
+        blockedFieldId:
+          type: string
+        blockedTruthyValues:
+          type: array
+          items:
+            type: string
+        effectiveFrom:
+          type: string
+          format: date-time
+    SyncRun:
+      type: object
+      required: [id, scopeId, trigger, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        scopeId:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+          enum: [scheduled, manual]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, canceled]
+        requestedBy:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        dataVersion:
+          type: string
+        errorCode:
+          type: string
+        errorSummary:
+          type: string
+    ScopeSummary:
+      type: object
+      required: [scope, connectionHealth, lastSync, filterOptions, warnings]
+      properties:
+        scope:
+          $ref: '#/components/schemas/FlowScope'
+        connectionHealth:
+          type: string
+          enum: [draft, validating, healthy, unhealthy, stale, disabled]
+        lastSync:
+          $ref: '#/components/schemas/SyncRun'
+        filterOptions:
+          type: object
+          properties:
+            issueTypes:
+              type: array
+              items:
+                $ref: '#/components/schemas/NamedValue'
+            statuses:
+              type: array
+              items:
+                $ref: '#/components/schemas/NamedValue'
+            historicalWindows:
+              type: array
+              items:
+                type: integer
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+    FlowAnalyticsResponse:
+      type: object
+      required: [scopeId, dataVersion, syncedAt, historicalWindowDays, sampleSize, warnings, agingModel, points]
+      properties:
+        scopeId:
+          type: string
+          format: uuid
+        dataVersion:
+          type: string
+        syncedAt:
+          type: string
+          format: date-time
+        sampleSize:
+          type: integer
+        historicalWindowDays:
+          type: integer
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+        agingModel:
+          $ref: '#/components/schemas/AgingModel'
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlowPoint'
+    AgingModel:
+      type: object
+      required: [metricBasis, p50, p70, p85, sampleSize]
+      properties:
+        metricBasis:
+          type: string
+          enum: [cycle_time]
+        p50:
+          type: number
+        p70:
+          type: number
+        p85:
+          type: number
+        sampleSize:
+          type: integer
+        lowConfidenceReason:
+          type: string
+    FlowPoint:
+      type: object
+      required: [workItemId, issueKey, summary, currentStatus, ageDays, onHoldNow, agingZone]
+      properties:
+        workItemId:
+          type: string
+          format: uuid
+        issueKey:
+          type: string
+        summary:
+          type: string
+        issueType:
+          type: string
+        currentStatus:
+          type: string
+        currentColumn:
+          type: string
+        ageDays:
+          type: number
+        totalHoldHours:
+          type: number
+        onHoldNow:
+          type: boolean
+        holdReason:
+          type: string
+        agingZone:
+          type: string
+          enum: [normal, watch, aging]
+        jiraUrl:
+          type: string
+          format: uri
+    WorkItemDetail:
+      type: object
+      required: [workItemId, issueKey, summary, currentStatus, ageDays, jiraUrl, lifecycleEvents, holdPeriods, warnings]
+      properties:
+        workItemId:
+          type: string
+          format: uuid
+        issueKey:
+          type: string
+        summary:
+          type: string
+        currentStatus:
+          type: string
+        ageDays:
+          type: number
+        jiraUrl:
+          type: string
+          format: uri
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        holdPeriods:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldPeriod'
+        lifecycleEvents:
+          type: array
+          items:
+            $ref: '#/components/schemas/LifecycleEvent'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+    HoldPeriod:
+      type: object
+      required: [startedAt, source]
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum: [status, blocked_field]
+        sourceValue:
+          type: string
+    LifecycleEvent:
+      type: object
+      required: [eventType, changedAt]
+      properties:
+        eventType:
+          type: string
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+    ThroughputResponse:
+      type: object
+      required: [scopeId, dataVersion, syncedAt, historicalWindowDays, sampleSize, warnings, days]
+      properties:
+        scopeId:
+          type: string
+          format: uuid
+        dataVersion:
+          type: string
+        syncedAt:
+          type: string
+          format: date-time
+        historicalWindowDays:
+          type: integer
+        sampleSize:
+          type: integer
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThroughputDay'
+    ThroughputDay:
+      type: object
+      required: [day, completedStoryCount]
+      properties:
+        day:
+          type: string
+          format: date
+        completedStoryCount:
+          type: integer
+        complete:
+          type: boolean
+    ForecastRequest:
+      oneOf:
+        - type: object
+          required: [type, remainingStoryCount, historicalWindowDays, confidenceLevels]
+          properties:
+            type:
+              type: string
+              enum: [when]
+            remainingStoryCount:
+              type: integer
+              minimum: 1
+            historicalWindowDays:
+              type: integer
+              minimum: 30
+              maximum: 730
+            confidenceLevels:
+              type: array
+              items:
+                type: integer
+                minimum: 1
+                maximum: 99
+            iterations:
+              type: integer
+              minimum: 1000
+              maximum: 50000
+            dataVersion:
+              type: string
+        - type: object
+          required: [type, targetDate, historicalWindowDays, confidenceLevels]
+          properties:
+            type:
+              type: string
+              enum: [how_many]
+            targetDate:
+              type: string
+              format: date
+            historicalWindowDays:
+              type: integer
+              minimum: 30
+              maximum: 730
+            confidenceLevels:
+              type: array
+              items:
+                type: integer
+                minimum: 1
+                maximum: 99
+            iterations:
+              type: integer
+              minimum: 1000
+              maximum: 50000
+            dataVersion:
+              type: string
+    ForecastResponse:
+      type: object
+      required: [scopeId, dataVersion, type, historicalWindowDays, sampleSize, iterations, warnings, results]
+      properties:
+        scopeId:
+          type: string
+          format: uuid
+        dataVersion:
+          type: string
+        type:
+          type: string
+          enum: [when, how_many]
+        historicalWindowDays:
+          type: integer
+        sampleSize:
+          type: integer
+        iterations:
+          type: integer
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastResult'
+    ForecastResult:
+      type: object
+      required: [confidenceLevel]
+      properties:
+        confidenceLevel:
+          type: integer
+        completionDate:
+          type: string
+          format: date
+        completedStoryCount:
+          type: integer
+    Warning:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: string

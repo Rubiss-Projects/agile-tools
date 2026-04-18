@@ -1,50 +1,64 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+Version change: 1.0.0 -> 1.1.0
+Modified principles:
+- I. Modular Monolith First -> I. Modular Monolith First
+- II. Projection-Backed Analytics -> II. Projection-Backed Analytics
+- III. Contract and Schema Discipline -> III. Contract and Schema Discipline
+- IV. Test Coverage by Risk -> IV. Test Coverage by Risk
+- V. Operational Safety -> V. Operational Safety
+Added sections:
+- None
+Removed sections:
+- None
+Templates requiring updates:
+- ✅ .specify/templates/plan-template.md
+- ✅ .specify/templates/spec-template.md
+- ✅ .specify/templates/tasks-template.md
+- ✅ .github/copilot-instructions.md
+Follow-up TODOs:
+- None
+-->
+# Agile Tools Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Modular Monolith First
+Features MUST ship inside the workspace monolith by default. New deployables or services require a written justification tied to scaling, isolation, or operational constraints that cannot be met inside the monolith. This preserves delivery speed while the product’s core workflows and boundaries are still evolving.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Projection-Backed Analytics
+User-facing analytics MUST read from locally persisted projections or read models derived from synchronized source data. Live Jira requests MAY be used for connection validation and source discovery, but MUST NOT sit on the request path for analytics or forecasting. This keeps the product responsive and resilient when Jira is slow, unavailable, or partially inconsistent.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Contract and Schema Discipline
+HTTP routes MUST be represented in OpenAPI and backed by typed request and response schemas. Database changes MUST ship with explicit migrations and compatibility considerations. This keeps interfaces reviewable, testable, and reproducible across environments.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Test Coverage by Risk
+Analytics logic MUST have unit or integration coverage. Jira sync, persistence, and projection code MUST have integration coverage. Each shipped user story MUST have end-to-end validation of its primary journey, and performance-sensitive features MUST have benchmark or threshold validation when the plan defines latency goals. This ensures the highest-risk behavior is verified at the right level.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Operational Safety
+PAT values MUST be write-only secrets and MUST NOT be logged or returned. Only one sync MAY run per scope at a time. Authentication failures, authorization failures, and unhealthy or stale Jira connections MUST be visible to operators and users through explicit system states. This reduces data corruption risk and keeps operational failures diagnosable.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Additional Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- The first release targets self-hosted Jira Data Center with a service-account PAT.
+- Forecasting uses story-count sampling as the planning basis; forecast outputs may be dates or story counts depending on forecast type.
+- Scheduled sync plus manual refresh is the supported ingestion model for v1.
+- The application reuses an existing workspace authentication context for user identity and role enforcement.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- Spec, plan, tasks, and analysis MUST exist before implementation begins.
+- Every implementation plan MUST include a Constitution Check that evaluates each core principle explicitly.
+- Changes to contracts, schemas, projections, sync behavior, or security boundaries MUST trigger a fresh consistency analysis before implementation continues.
+- Tasks MUST include the validation work required by this constitution, not just implementation work.
+- Quickstart and operator-facing documentation MUST be updated when behavior, configuration, or validation flows change.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes conflicting local habits or undocumented process.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- Amendment procedure: update this file, update any affected templates or runtime guidance in the same branch, and prepend a new Sync Impact Report describing the version bump and propagation work.
+- Versioning policy: MAJOR for incompatible governance changes or principle removals, MINOR for new principles or materially expanded guidance, PATCH for clarifications and wording-only refinements.
+- Compliance review expectations: plans MUST document constitution compliance, tasks MUST carry required validation coverage, and reviews MUST verify contracts, migrations, tests, security handling, and performance validation when affected.
+
+**Version**: 1.1.0 | **Ratified**: 2026-04-17 | **Last Amended**: 2026-04-17
