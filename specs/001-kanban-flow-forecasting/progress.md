@@ -16,6 +16,52 @@ Started: 2026-04-17 23:02:35
 - Prisma client must be regenerated (`prisma generate`) after every schema change before `tsc` can resolve `@prisma/client` types
 - Repository functions use free-function style with `PrismaClient` as first arg; they catch `PrismaClientKnownRequestError P2025` and return `null` for not-found
 - `FlowScope.boardId` is stored as `String` in Postgres; repositories accept `number` and convert with `String()`; callers convert back
+- Route handlers MUST use `ResponseError` (not `throw Response.json(...)`) to satisfy `@typescript-eslint/only-throw-error`; import from `@/server/errors`
+- `auth.ts` requires `/* global Buffer */` comment at top for the Node.js `Buffer` global
+- Prisma types are NOT directly importable in `apps/web`; infer with `NonNullable<Awaited<ReturnType<typeof repoFn>>>`
+
+## Iteration 6 - 2026-04-18
+**User Story**: US1 T016 — Jira sync pipeline
+**Tasks Completed**: 
+- [x] T016: apps/worker/src/sync/normalize-jira-issues.ts (RawJiraIssue → NormalizedWorkItem with lifecycle events, startedAt/completedAt derivation) + apps/worker/src/sync/run-scope-sync.ts (full sync orchestrator: atomic SyncRun claim, board snapshot upsert, paginated issue streaming, batch-10 concurrent processing, idempotent WorkItem+LifecycleEvent writes) + packages/db/src/repositories/sync-runs.ts (updateSyncRun function) + apps/worker/src/jobs/register-jobs.ts (wire runScopeSync, manual syncs use pre-created syncRunId, scheduled syncs call createSyncRun)
+**Tasks Remaining in Story**: T017, T018, T019, T020, T021, T022
+**Commit**: 4e731af
+
+---
+
+
+**User Story**: US1 T015 — Admin scope and sync status routes
+**Tasks Completed**: 
+- [x] T015: packages/db/src/repositories/sync-runs.ts (createSyncRun, getSyncRun workspace-scoped, listSyncRuns, getActiveSyncRun) + apps/web/src/server/errors.ts (ResponseError class) + apps/web/src/server/queue.ts (lazy pg-boss publisher for web, enqueueScopeSyncJob) + apps/web/src/app/api/v1/admin/scopes/route.ts (POST create, fetches real boardName from Jira) + apps/web/src/app/api/v1/admin/scopes/[scopeId]/route.ts (PUT update) + apps/web/src/app/api/v1/admin/scopes/[scopeId]/syncs/route.ts (POST manual sync with 409 guard + GET list) + apps/web/src/app/api/v1/syncs/[syncRunId]/route.ts (GET status, workspace-scoped)
+**Tasks Remaining in Story**: T016, T017, T018, T019, T020, T021, T022
+**Commit**: d549efe
+**Files Changed**: 
+- packages/db/src/repositories/sync-runs.ts
+- packages/db/src/index.ts (re-export sync-runs)
+- apps/web/package.json (added pg-boss)
+- apps/web/next.config.ts (pg-boss in serverExternalPackages)
+- apps/web/src/server/errors.ts (new ResponseError class)
+- apps/web/src/server/queue.ts (lazy pg-boss publisher)
+- apps/web/src/server/auth.ts (use ResponseError, add /* global Buffer */)
+- apps/web/src/app/api/v1/admin/scopes/_lib.ts
+- apps/web/src/app/api/v1/admin/scopes/route.ts
+- apps/web/src/app/api/v1/admin/scopes/[scopeId]/route.ts
+- apps/web/src/app/api/v1/admin/scopes/[scopeId]/syncs/route.ts
+- apps/web/src/app/api/v1/syncs/[syncRunId]/route.ts
+- apps/web/src/app/api/v1/admin/jira-connections/_lib.ts (ResponseError import)
+- apps/web/src/app/api/v1/admin/jira-connections/route.ts (ResponseError catch)
+- apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/validate/route.ts
+- apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/discovery/boards/route.ts
+- apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/discovery/boards/[boardId]/route.ts
+**Learnings**:
+- `@typescript-eslint/only-throw-error` forbids `throw Response.json(...)` — must wrap in `ResponseError extends Error`; route handlers catch `ResponseError` and return `err.response`
+- `SyncRun` has no `workspaceId` column; workspace scope is enforced via Prisma nested `where: { scope: { workspaceId } }` filter
+- pg-boss `singletonKey` deduplicates queued jobs at the queue level; the web app also guards via `getActiveSyncRun` DB check before creating a SyncRun record
+- Manual sync: Create SyncRun in DB first, then best-effort pg-boss enqueue; log warn on enqueue failure but still return 202 with the SyncRun
+- `boardName` must be fetched from Jira at scope creation/update time — do not default to boardId string
+- `CreateFlowScopeRequestSchema` does not include `boardName`; route looks it up via `getBoardDetail` using the provided `connectionId`+`boardId`
+---
+
 
 ---
 
