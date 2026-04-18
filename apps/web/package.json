@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@agile-tools/db": "workspace:*",
+    "@agile-tools/jira-client": "workspace:*",
     "@agile-tools/shared": "workspace:*",
     "@nivo/core": "^0.87.0",
     "@nivo/line": "^0.87.0",

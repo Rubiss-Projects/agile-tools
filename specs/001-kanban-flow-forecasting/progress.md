@@ -11,6 +11,62 @@ Started: 2026-04-17 23:02:35
 - `apps/web` builds with `next build`; all other packages build with `tsc`
 - Root devDependencies holds shared tooling (vitest, playwright, typescript, eslint) — packages declare their own `typescript` for IDE support but rely on workspace hoisting
 - Package naming convention: `@agile-tools/<name>` (e.g., `@agile-tools/db`, `@agile-tools/shared`)
+- `@agile-tools/shared` exports contracts via subpath `@agile-tools/shared/contracts/api` — the root `@agile-tools/shared` only exports config, secrets, and logging
+- Cross-package type resolution requires the dependency to be built (`pnpm --filter X build`) before typechecking a consumer
+- Prisma client must be regenerated (`prisma generate`) after every schema change before `tsc` can resolve `@prisma/client` types
+- Repository functions use free-function style with `PrismaClient` as first arg; they catch `PrismaClientKnownRequestError P2025` and return `null` for not-found
+- `FlowScope.boardId` is stored as `String` in Postgres; repositories accept `number` and convert with `String()`; callers convert back
+
+---
+
+## Iteration 3 - 2026-04-17
+**User Story**: US1 T012 + T013 (parallel foundational tasks)
+**Tasks Completed**: 
+- [x] T012: packages/db/src/repositories/jira-connections.ts (createJiraConnection, getJiraConnection, listJiraConnections, updateConnectionHealth, deleteJiraConnection) + packages/db/src/repositories/flow-scopes.ts (createFlowScope, getFlowScope, listFlowScopes, updateFlowScope, updateFlowScopeStatus, deleteFlowScope) — also added displayName to JiraConnection schema + migration
+- [x] T013: packages/jira-client/src/client.ts (JiraClient class, bearer auth, p-retry/p-limit, validateConnection with both /myself and Agile board check) + packages/jira-client/src/discovery.ts (listBoards, getBoardDetail) + packages/jira-client/src/issues.ts (fetchBoardIssues, streamBoardIssues with de-dup, fetchIssueChangelog)
+**Tasks Remaining in Story**: T014, T015, T016, T017, T018, T019, T020, T021, T022
+**Commit**: 9b43de8
+**Files Changed**: 
+- packages/db/prisma/schema.prisma (added displayName)
+- packages/db/prisma/migrations/20260418_jira_connection_display_name/migration.sql
+- packages/db/src/repositories/jira-connections.ts
+- packages/db/src/repositories/flow-scopes.ts
+- packages/db/src/index.ts (re-export repositories)
+- packages/jira-client/src/client.ts
+- packages/jira-client/src/discovery.ts
+- packages/jira-client/src/issues.ts
+- packages/jira-client/src/index.ts (full exports)
+- specs/001-kanban-flow-forecasting/tasks.md
+**Learnings**:
+- `@agile-tools/shared` root export only exposes config/secrets/logging; contracts require the subpath `@agile-tools/shared/contracts/api`
+- When using `@@unique([workspaceId, id])` in Prisma, the compound accessor is `workspaceId_id`; using `findFirst` + `update(id)` or catching `P2025` are both safe alternatives
+- `p-retry` AbortError wraps an existing Error (not just a string) to propagate the underlying JiraClientError through the retry wrapper
+- `FlowScope` update uses `where: { id, workspaceId }` compound filter which Prisma accepts in update() when both fields form a unique constraint path
+
+---
+## Iteration 4 - 2026-04-17
+**User Story**: US1 T014 — Admin Jira connection + discovery routes
+**Tasks Completed**: 
+- [x] T014: apps/web/src/app/api/v1/admin/jira-connections/_lib.ts (mapConnection, requireJiraConnection, createClientForConnection, normalizeJiraError helpers) + route.ts (POST create connection, encrypts PAT) + [connectionId]/validate/route.ts (POST validate — sets validating state, calls Jira, updates health to healthy/unhealthy) + [connectionId]/discovery/boards/route.ts (GET list boards) + [connectionId]/discovery/boards/[boardId]/route.ts (GET board detail with strict integer boardId validation)
+**Tasks Remaining in Story**: T015, T016, T017, T018, T019, T020, T021, T022
+**Commit**: (see git log)
+**Files Changed**: 
+- apps/web/package.json (added @agile-tools/jira-client workspace dep)
+- apps/web/next.config.ts (moved to serverExternalPackages, added jira-client)
+- apps/web/src/app/api/v1/admin/jira-connections/_lib.ts
+- apps/web/src/app/api/v1/admin/jira-connections/route.ts
+- apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/validate/route.ts
+- apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/discovery/boards/route.ts
+- apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/discovery/boards/[boardId]/route.ts
+- pnpm-lock.yaml
+**Learnings**:
+- Next.js 16 uses `serverExternalPackages` (top-level) not `experimental.serverComponentsExternalPackages` — apply to packages with ESM-only deps or native bindings
+- Prisma types are not directly importable in the web app; use `NonNullable<Awaited<ReturnType<typeof repoFn>>>` to infer DB record types from repository functions
+- `exactOptionalPropertyTypes: true` requires spreading optional values with `...(x !== undefined && { key: x })` — passing `key: x | undefined` is a type error
+- In Next.js App Router, dynamic route params are `Promise<{key: string}>` and must be `await`-ed before accessing
+- The `validating` health state should be set before the Jira call so concurrent observers see the in-progress transition; then updated to `healthy` or `unhealthy` after
+- Outer try/catch returns thrown `Response` objects (from auth helpers); inner try/catch around Jira calls handles `JiraClientError` specifically
+---
 
 ---
 

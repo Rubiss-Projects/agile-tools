@@ -47,6 +47,9 @@ importers:
       '@agile-tools/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@agile-tools/jira-client':
+        specifier: workspace:*
+        version: link:../../packages/jira-client
       '@agile-tools/shared':
         specifier: workspace:*
         version: link:../../packages/shared
