@@ -1,4 +1,4 @@
-import { type PrismaClient, type SyncRun, type SyncRunTrigger } from '@prisma/client';
+import { Prisma, type PrismaClient, type SyncRun, type SyncRunTrigger, type SyncRunStatus } from '@prisma/client';
 
 export interface CreateSyncRunInput {
   scopeId: string;
@@ -50,6 +50,35 @@ export async function listSyncRuns(
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
+}
+
+export interface UpdateSyncRunInput {
+  status?: SyncRunStatus;
+  startedAt?: Date;
+  finishedAt?: Date;
+  dataVersion?: string | null;
+  errorCode?: string | null;
+  errorSummary?: string | null;
+}
+
+/**
+ * Update a subset of SyncRun fields. Undefined values are left unchanged;
+ * explicit null values clear the column.
+ */
+export async function updateSyncRun(
+  client: PrismaClient,
+  syncRunId: string,
+  input: UpdateSyncRunInput,
+): Promise<SyncRun> {
+  const data: Prisma.SyncRunUpdateInput = {};
+  if (input.status !== undefined) data.status = input.status;
+  if (input.startedAt !== undefined) data.startedAt = input.startedAt;
+  if (input.finishedAt !== undefined) data.finishedAt = input.finishedAt;
+  if (input.dataVersion !== undefined) data.dataVersion = input.dataVersion;
+  if (input.errorCode !== undefined) data.errorCode = input.errorCode;
+  if (input.errorSummary !== undefined) data.errorSummary = input.errorSummary;
+
+  return client.syncRun.update({ where: { id: syncRunId }, data });
 }
 
 /**

@@ -1,10 +1,14 @@
 import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
+import { getPrismaClient, createSyncRun } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import type PgBoss from 'pg-boss';
+import { runScopeSync } from '../sync/run-scope-sync.js';
 
 // Job data shapes — these are the payloads stored in pg-boss job records.
 interface ScopeSyncJobData {
   scopeId: string;
+  /** Present for manual syncs enqueued by the web API (SyncRun was pre-created). */
+  syncRunId?: string;
   requestedBy?: string;
   trigger?: 'manual' | 'scheduled';
 }
@@ -12,9 +16,6 @@ interface ScopeSyncJobData {
 /**
  * Register all job handlers with the pg-boss queue instance.
  * This function is called once during worker startup.
- *
- * Each handler is a placeholder stub that subsequent tasks (T016, T017, T018)
- * will replace with the actual sync, projection, and health-update logic.
  */
 export async function registerJobs(): Promise<void> {
   const boss = getQueue();
@@ -30,14 +31,35 @@ export async function registerJobs(): Promise<void> {
 }
 
 async function handleScopeSync(jobs: PgBoss.Job<ScopeSyncJobData>[]): Promise<void> {
+  const db = getPrismaClient();
+
   for (const job of jobs) {
-    const { scopeId, trigger = 'scheduled' } = job.data;
-    logger.info('Scope sync started', { jobId: job.id, scopeId, trigger });
+    const { scopeId, syncRunId: existingSyncRunId, trigger = 'scheduled' } = job.data;
 
-    // Placeholder: the full sync pipeline is wired in T016 (run-scope-sync.ts).
-    // This stub ensures the job queue is operational from day one so integration
-    // tests can enqueue and dequeue jobs without importing unimplemented modules.
+    let syncRunId: string;
 
-    logger.info('Scope sync completed (stub)', { jobId: job.id, scopeId });
+    if (existingSyncRunId) {
+      // Manual sync: use the SyncRun created by the web API before enqueueing.
+      syncRunId = existingSyncRunId;
+    } else {
+      // Scheduled sync: create a new SyncRun in the worker.
+      const newRun = await createSyncRun(db, { scopeId, trigger: 'scheduled' });
+      syncRunId = newRun.id;
+    }
+
+    logger.info('Scope sync job received', { jobId: job.id, scopeId, syncRunId, trigger });
+
+    try {
+      await runScopeSync(db, syncRunId);
+    } catch (err) {
+      // runScopeSync already marks the SyncRun as failed and logs the error.
+      // Log here too so the job failure is visible at the queue level.
+      logger.error('Scope sync job failed', {
+        jobId: job.id,
+        scopeId,
+        syncRunId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
