@@ -1,4 +1,36 @@
 ---
+## Iteration 20 - 2026-04-22
+**User Story**: Phase 6 complete — T038–T043 (Polish & Cross-Cutting Concerns)
+**Tasks Completed**:
+- [x] T038: README.md (project overview, prerequisites, bootstrap steps, developer commands); quickstart.md updated (fixed ENCRYPTION_KEY env var name, added SESSION_SECRET, corrected sync interval default, added pnpm typecheck to automated checks)
+- [x] T039: packages/shared/src/secrets.ts (maskSecret() helper with configurable visibleChars); packages/shared/src/index.ts (maskSecret exported); apps/web/src/server/services/jira-connections.ts (new: mapJiraConnectionErrorCode, isConnectionStale, effectiveConnectionStatus, STALE_CONNECTION_THRESHOLD_MS); apps/worker/src/sync/update-connection-health.ts (JIRA_NETWORK_ERROR mapping, alertIfConnectionIsStale function)
+- [x] T040: packages/db/prisma/migrations/20260417_projection_tuning/migration.sql (three partial composite indexes); packages/db/src/projections/current-work-item-projection.ts (explicit select replacing include); packages/analytics/src/monte-carlo.ts (FORECAST_CACHE_TTL_HOURS=6 constant); apps/web/src/app/api/v1/scopes/[scopeId]/forecasts/route.ts (TTL-based expiresAt on cache store + opportunistic expired-row cleanup)
+- [x] T041: quickstart.md finalized (Performance Acceptance Thresholds table, corrected env vars, final developer commands)
+- [x] T042: tests/integration/performance/flow-and-forecast.perf.test.ts (benchmarks seeding 500 active + 400 completed items, measuring queryCurrentWorkItems, getWorkItemWithDetail, queryDailyThroughput, runWhenForecast, runHowManyForecast against p95 thresholds)
+- [x] T043: tests/integration/performance/vitest.config.ts (120s test timeout, 180s hook timeout, singleFork); .env.example fixed
+**Tasks Remaining**: None — all T001–T043 complete
+**Commit**: feat(001-kanban-flow-forecasting): Phase 6 Polish and Cross-Cutting Concerns (aea989d)
+**Files Changed**:
+- README.md (new)
+- apps/web/src/server/services/jira-connections.ts (new)
+- packages/db/prisma/migrations/20260417_projection_tuning/migration.sql (new)
+- tests/integration/performance/flow-and-forecast.perf.test.ts (new)
+- tests/integration/performance/vitest.config.ts (new)
+- .env.example, packages/shared/src/secrets.ts, packages/shared/src/index.ts
+- apps/worker/src/sync/update-connection-health.ts
+- packages/analytics/src/monte-carlo.ts
+- packages/db/src/projections/current-work-item-projection.ts
+- apps/web/src/app/api/v1/scopes/[scopeId]/forecasts/route.ts
+- specs/001-kanban-flow-forecasting/quickstart.md
+- specs/001-kanban-flow-forecasting/tasks.md (T038–T043 marked complete)
+**Learnings**:
+- When workspace packages use `"exports": { "types": "./dist/index.d.ts" }`, typecheck against the dist. After adding a new export to source, run `pnpm --filter <pkg> build` before root-level typecheck.
+- Stale connection detection is best derived at read time (web service layer) rather than persisted only during sync — `effectiveConnectionStatus()` computes stale vs the stored status at query time.
+- Partial composite indexes (WHERE clause) give better selectivity than plain indexes for active/completed queries.
+- Pre-existing baseline lint failures in `tests/**` and `packages/*/dist/**` (no tsconfig.json for type-aware linting) are not regressions; verify new files don't introduce NEW error categories.
+---
+
+---
 ## Iteration 19 - 2026-04-22
 **User Story**: US3 complete — T036 + T037 (forecasting integration & E2E tests)
 **Tasks Completed**: 
