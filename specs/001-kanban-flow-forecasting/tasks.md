@@ -105,12 +105,12 @@
 
 **Purpose**: Finish documentation, hardening, performance tuning, and end-to-end operator validation across the whole feature.
 
-- [ ] T038 [P] Document repository bootstrap and operator workflows in README.md and specs/001-kanban-flow-forecasting/quickstart.md
-- [ ] T039 Harden PAT redaction, sync error mapping, and stale-connection alerts in packages/shared/src/secrets.ts, apps/web/src/server/services/jira-connections.ts, and apps/worker/src/sync/update-connection-health.ts
-- [ ] T040 Create projection indexes, tune forecast cache invalidation, and measure flow and forecast latency against the plan thresholds in packages/db/prisma/migrations/20260417_projection_tuning/migration.sql, packages/db/src/projections/current-work-item-projection.ts, and packages/analytics/src/monte-carlo.ts
-- [ ] T041 [P] Run the quickstart validation flow and capture final developer commands in package.json and specs/001-kanban-flow-forecasting/quickstart.md
-- [ ] T042 [P] Add performance benchmarks for GET /v1/scopes/{scopeId}/flow, GET /v1/scopes/{scopeId}/items/{workItemId}, and POST /v1/scopes/{scopeId}/forecasts in tests/integration/performance/flow-and-forecast.perf.test.ts
-- [ ] T043 Wire a test:perf script and document acceptance thresholds in package.json and specs/001-kanban-flow-forecasting/quickstart.md
+- [x] T038 [P] Document repository bootstrap and operator workflows in README.md and specs/001-kanban-flow-forecasting/quickstart.md
+- [x] T039 Harden PAT redaction, sync error mapping, and stale-connection alerts in packages/shared/src/secrets.ts, apps/web/src/server/services/jira-connections.ts, and apps/worker/src/sync/update-connection-health.ts
+- [x] T040 Create projection indexes, tune forecast cache invalidation, and measure flow and forecast latency against the plan thresholds in packages/db/prisma/migrations/20260417_projection_tuning/migration.sql, packages/db/src/projections/current-work-item-projection.ts, and packages/analytics/src/monte-carlo.ts
+- [x] T041 [P] Run the quickstart validation flow and capture final developer commands in package.json and specs/001-kanban-flow-forecasting/quickstart.md
+- [x] T042 [P] Add performance benchmarks for GET /v1/scopes/{scopeId}/flow, GET /v1/scopes/{scopeId}/items/{workItemId}, and POST /v1/scopes/{scopeId}/forecasts in tests/integration/performance/flow-and-forecast.perf.test.ts
+- [x] T043 Wire a test:perf script and document acceptance thresholds in package.json and specs/001-kanban-flow-forecasting/quickstart.md
 
 ---
 

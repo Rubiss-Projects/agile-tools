@@ -55,3 +55,18 @@ export function redactCredentials<T extends Record<string, unknown>>(obj: T): Om
   delete (copy as Record<string, unknown>)['password'];
   return copy as Omit<T, 'pat' | 'token' | 'secret' | 'password'>;
 }
+
+/**
+ * Return a log-safe representation of a secret value, showing only the last
+ * `visibleChars` characters and replacing the rest with asterisks.
+ *
+ * Used to confirm a PAT was received without persisting the plaintext value in
+ * application logs.
+ *
+ * @example maskSecret('mysecrettoken1234') → '****4'
+ */
+export function maskSecret(value: string, visibleChars = 4): string {
+  if (value.length === 0) return '****';
+  const visible = value.slice(-visibleChars);
+  return `****${visible}`;
+}

@@ -28,8 +28,9 @@ Create local environment files for the web and worker processes with at least th
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/agile_tools
 APP_BASE_URL=http://localhost:3000
-APP_ENCRYPTION_KEY=replace-with-local-dev-key
-DEFAULT_SYNC_INTERVAL_MINUTES=15
+ENCRYPTION_KEY=replace-with-local-dev-key
+SESSION_SECRET=replace-with-local-dev-session-secret
+DEFAULT_SYNC_INTERVAL_MINUTES=10
 LOG_LEVEL=debug
 ```
 
@@ -108,6 +109,7 @@ Run the planned validation suite before merging implementation work:
 
 ```bash
 pnpm lint
+pnpm typecheck
 pnpm test
 pnpm test:contract
 pnpm test:integration
@@ -116,5 +118,18 @@ pnpm test:perf
 ```
 
 The contract and integration suites should include Jira API normalization, projection rebuild correctness, and sync concurrency scenarios. The end-to-end suite should cover the three primary user stories from the spec.
+
+## Performance Acceptance Thresholds
+
+Performance benchmarks run via `pnpm test:perf` (Vitest with Testcontainers Postgres).
+
+| Path | p95 target |
+|---|---|
+| `queryCurrentWorkItems` (flow scatter-plot DB query) | < 500 ms |
+| `getWorkItemWithDetail` (item detail DB query) | < 500 ms |
+| `runWhenForecast` / `runHowManyForecast` (Monte Carlo simulation, 10k trials) | < 3 000 ms |
+| `queryDailyThroughput` (throughput projection DB query) | < 500 ms |
+
+These are query-level guardrails measured against a seeded dataset of 500 active work items with lifecycle and hold-period history. They do not include Next.js route handling or network latency.
 
 Performance validation should confirm that the flow view and item detail read paths stay under the plan target of `p95 < 500 ms` and forecast responses stay under `3 s` on representative historical datasets.

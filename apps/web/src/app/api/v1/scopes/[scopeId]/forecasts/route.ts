@@ -21,6 +21,7 @@ import {
   runWhenForecast,
   runHowManyForecast,
   DEFAULT_MONTE_CARLO_ITERATIONS,
+  FORECAST_CACHE_TTL_HOURS,
   type MonteCarloForecastResult,
 } from '@agile-tools/analytics';
 import { requireWorkspaceContext } from '@/server/auth';
@@ -184,7 +185,8 @@ export async function POST(
       });
     }
 
-    // Persist result to cache.
+    // Persist result to cache with a TTL so entries are eventually reaped.
+    const cacheExpiresAt = new Date(Date.now() + FORECAST_CACHE_TTL_HOURS * 60 * 60 * 1000);
     const cachePayload: ForecastCachePayload = {
       results: monteCarlo.results,
       warnings: monteCarlo.warnings,
@@ -198,7 +200,21 @@ export async function POST(
       sampleSize,
       dataVersion: effectiveDataVersion,
       payload: cachePayload,
+      expiresAt: cacheExpiresAt,
     });
+
+    // Opportunistically remove expired cache entries for this scope so the
+    // ForecastResultCache table does not grow unbounded over time.
+    db.forecastResultCache
+      .deleteMany({
+        where: { scopeId, expiresAt: { lt: new Date() } },
+      })
+      .catch((err: unknown) => {
+        logger.debug('Opportunistic forecast cache cleanup failed (non-fatal)', {
+          scopeId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
 
     return Response.json(
       shapeForecastResponse({

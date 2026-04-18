@@ -70,7 +70,22 @@ export async function queryCurrentWorkItems(
       excludedReason: null,
       ...(options?.dataVersion ? { lastSyncRunId: options.dataVersion } : {}),
     },
-    include: { holdPeriods: true },
+    select: {
+      id: true,
+      scopeId: true,
+      issueKey: true,
+      summary: true,
+      issueTypeId: true,
+      issueTypeName: true,
+      currentStatusId: true,
+      currentColumn: true,
+      startedAt: true,
+      createdAt: true,
+      directUrl: true,
+      holdPeriods: {
+        select: { startedAt: true, endedAt: true },
+      },
+    },
     orderBy: { startedAt: 'asc' },
   });
 

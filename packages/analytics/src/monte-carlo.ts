@@ -10,6 +10,17 @@ export const FORECAST_MIN_SAMPLE_SIZE = 60;
 
 export const DEFAULT_MONTE_CARLO_ITERATIONS = 10_000;
 
+/**
+ * Default cache TTL for persisted forecast results.
+ *
+ * Forecasts are pinned to a `dataVersion` (sync run ID), so they are logically
+ * immutable — the same inputs will always produce the same distribution.
+ * The TTL is a backstop to prevent unbounded cache growth when scopes are
+ * synced frequently; 6 hours is conservative enough to survive a slow-moving
+ * board without forcing every request to re-run the simulation.
+ */
+export const FORECAST_CACHE_TTL_HOURS = 6;
+
 export interface ForecastWarning {
   code: string;
   message: string;
