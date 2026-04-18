@@ -9,7 +9,7 @@ const config: NextConfig = {
 
   // Packages with native bindings or ESM-only deps that Node.js should load
   // directly rather than having Next.js bundle them.
-  serverExternalPackages: ['@prisma/client', '@agile-tools/jira-client'],
+  serverExternalPackages: ['@prisma/client', '@agile-tools/jira-client', 'pg-boss'],
 };
 
 export default config;

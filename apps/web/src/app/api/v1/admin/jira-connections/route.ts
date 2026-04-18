@@ -3,6 +3,7 @@ import { getPrismaClient, createJiraConnection } from '@agile-tools/db';
 import { getConfig, encryptSecret, logger } from '@agile-tools/shared';
 import { CreateJiraConnectionRequestSchema } from '@agile-tools/shared/contracts/api';
 import { requireAdminContext } from '@/server/auth';
+import { ResponseError } from '@/server/errors';
 import { mapConnection } from './_lib';
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     return Response.json(mapConnection(conn), { status: 201 });
   } catch (err) {
-    if (err instanceof Response) return err;
+    if (err instanceof ResponseError) return err.response;
     logger.error('Failed to create Jira connection', {
       error: err instanceof Error ? err.message : String(err),
     });

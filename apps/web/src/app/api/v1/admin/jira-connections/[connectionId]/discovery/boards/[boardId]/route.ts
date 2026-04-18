@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import { logger } from '@agile-tools/shared';
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { requireAdminContext } from '@/server/auth';
+import { ResponseError } from '@/server/errors';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../../../_lib';
 
 export async function GET(
@@ -42,7 +43,7 @@ export async function GET(
       throw jiraErr;
     }
   } catch (err) {
-    if (err instanceof Response) return err;
+    if (err instanceof ResponseError) return err.response;
     logger.error('Failed to discover board detail', {
       connectionId,
       boardId,

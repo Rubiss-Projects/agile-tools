@@ -2,6 +2,7 @@ import type { JiraConnection as ApiConnection } from '@agile-tools/shared/contra
 import { getPrismaClient, getJiraConnection } from '@agile-tools/db';
 import { decryptSecret, getConfig } from '@agile-tools/shared';
 import { createJiraClient, JiraClientError, type JiraClient } from '@agile-tools/jira-client';
+import { ResponseError } from '@/server/errors';
 
 /** The Prisma JiraConnection record shape, inferred from the repository. */
 type DbConnection = NonNullable<Awaited<ReturnType<typeof getJiraConnection>>>;
@@ -33,9 +34,11 @@ export async function requireJiraConnection(
   const prisma = getPrismaClient();
   const conn = await getJiraConnection(prisma, workspaceId, connectionId);
   if (!conn) {
-    throw Response.json(
-      { code: 'NOT_FOUND', message: 'Jira connection not found.' },
-      { status: 404 },
+    throw new ResponseError(
+      Response.json(
+        { code: 'NOT_FOUND', message: 'Jira connection not found.' },
+        { status: 404 },
+      ),
     );
   }
   return conn;

@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import { logger } from '@agile-tools/shared';
 import { listBoards } from '@agile-tools/jira-client';
 import { requireAdminContext } from '@/server/auth';
+import { ResponseError } from '@/server/errors';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../../_lib';
 
 export async function GET(
@@ -17,7 +18,7 @@ export async function GET(
     const boards = await listBoards(client);
     return Response.json({ boards });
   } catch (err) {
-    if (err instanceof Response) return err;
+    if (err instanceof ResponseError) return err.response;
     const jiraErr = normalizeJiraError(err);
     if (jiraErr) {
       const status =

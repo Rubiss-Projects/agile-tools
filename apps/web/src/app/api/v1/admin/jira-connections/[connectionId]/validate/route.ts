@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import { getPrismaClient, updateConnectionHealth } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import { requireAdminContext } from '@/server/auth';
+import { ResponseError } from '@/server/errors';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../_lib';
 
 export async function POST(
@@ -59,7 +60,7 @@ export async function POST(
       });
     }
   } catch (err) {
-    if (err instanceof Response) return err;
+    if (err instanceof ResponseError) return err.response;
     logger.error('Failed to validate Jira connection', {
       connectionId,
       error: err instanceof Error ? err.message : String(err),

@@ -1,5 +1,7 @@
+/* global Buffer */
 import { cookies } from 'next/headers';
 import { logger } from '@agile-tools/shared';
+import { ResponseError } from './errors';
 
 export type WorkspaceRole = 'admin' | 'member';
 
@@ -50,7 +52,9 @@ export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
 export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
   const ctx = await getWorkspaceContext();
   if (!ctx) {
-    throw Response.json({ code: 'UNAUTHENTICATED', message: 'Authentication required.' }, { status: 401 });
+    throw new ResponseError(
+      Response.json({ code: 'UNAUTHENTICATED', message: 'Authentication required.' }, { status: 401 }),
+    );
   }
   return ctx;
 }
@@ -62,7 +66,9 @@ export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
 export async function requireAdminContext(): Promise<WorkspaceContext> {
   const ctx = await requireWorkspaceContext();
   if (ctx.role !== 'admin') {
-    throw Response.json({ code: 'FORBIDDEN', message: 'Administrator access required.' }, { status: 403 });
+    throw new ResponseError(
+      Response.json({ code: 'FORBIDDEN', message: 'Administrator access required.' }, { status: 403 }),
+    );
   }
   return ctx;
 }
