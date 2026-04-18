@@ -103,6 +103,27 @@ export async function getLastSucceededSyncRun(
 }
 
 /**
+ * Return the succeeded sync run that published a specific dataVersion for a scope.
+ * Used to validate client-supplied dataVersion pins and retrieve the correct syncedAt.
+ * Returns null if no matching succeeded sync run exists for this scope/workspace.
+ */
+export async function getSyncRunByDataVersion(
+  client: PrismaClient,
+  workspaceId: string,
+  scopeId: string,
+  dataVersion: string,
+): Promise<SyncRun | null> {
+  return client.syncRun.findFirst({
+    where: {
+      scopeId,
+      scope: { workspaceId },
+      dataVersion,
+      status: 'succeeded',
+    },
+  });
+}
+
+/**
  * Return the most recent queued or running sync run for a scope, or null if none.
  * Used to detect active syncs before enqueuing a new manual run.
  */

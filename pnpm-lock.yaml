@@ -56,6 +56,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@agile-tools/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@agile-tools/db':
         specifier: workspace:*
         version: link:../../packages/db

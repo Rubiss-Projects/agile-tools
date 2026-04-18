@@ -1,5 +1,78 @@
 ---
-## Iteration 15 - 2026-04-18
+## Iteration 18 - 2026-04-18
+**User Story**: Partial progress on US3 — T035 (throughput and forecast UI flows)
+**Tasks Completed**: 
+- [x] T035: apps/web/src/components/forecast/throughput-chart.tsx (ThroughputChart: ResponsiveLine from @nivo/line, dynamic tick decimation, warnings banner, sample size caption) + apps/web/src/components/forecast/forecast-form.tsx (ForecastForm: when/how_many type selector, remaining-story-count/target-date inputs, historical-window select, confidence-level checkboxes, inline validation) + apps/web/src/components/forecast/forecast-results.tsx (ForecastResults: confidence table with formatted dates/counts, LOW_SAMPLE_SIZE / NO_THROUGHPUT_HISTORY warning highlight, metadata strip) + apps/web/src/app/scopes/[scopeId]/forecast/page.tsx (client component: useParams, fetchThroughput on mount, handleForecast POST, dataVersion pinning, renders ThroughputChart + ForecastForm + ForecastResults) + apps/web/src/app/scopes/[scopeId]/page.tsx (added forecast page link in navigation, only shown when filterOptions is present)
+**Tasks Remaining in Story**: T036, T037
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- apps/web/src/components/forecast/throughput-chart.tsx (new)
+- apps/web/src/components/forecast/forecast-form.tsx (new)
+- apps/web/src/components/forecast/forecast-results.tsx (new)
+- apps/web/src/app/scopes/[scopeId]/forecast/page.tsx (new)
+- apps/web/src/app/scopes/[scopeId]/page.tsx (added forecast link)
+- specs/001-kanban-flow-forecasting/tasks.md (T035 marked complete)
+**Learnings**:
+- exactOptionalPropertyTypes: true blocks explicit type annotations on spread objects that include optional properties. Fix: omit the type annotation and let TypeScript infer, or use conditional spreads. The `ForecastRequest & { dataVersion?: string }` pattern fails because the optional `dataVersion` spreads as `string | undefined` but the type requires `string` exactly.
+- For client-component pages in Next.js App Router, use `useParams<{ scopeId: string }>()` from 'next/navigation' — not the `params` prop which is a Promise that requires `use()` to unwrap.
+- @nivo/line with `xScale: { type: 'point' }` and string x values (YYYY-MM-DD) works well for sparse daily data. Tick decimation using `tickValues` is needed to avoid label crowding for 90+ day windows.
+- Forecast page dataVersion pinning: always forward the dataVersion from the ThroughputResponse to the forecast POST so that throughput chart and forecast results are consistent to the same sync snapshot.
+---
+
+---
+## Iteration 17 - 2026-04-18
+**User Story**: Partial progress on US3 — T033 + T034 (throughput route, forecast route, forecast response view)
+**Tasks Completed**: 
+- [x] T033: packages/db/src/projections/throughput-projection.ts (new — queryCompletedStories + queryDailyThroughput moved here from worker; exported from packages/db) + apps/worker projections refactored to re-export from @agile-tools/db + apps/web/src/app/api/v1/scopes/[scopeId]/throughput/route.ts (GET — validateDataVersion, getSyncRunByDataVersion for pinned syncedAt, queryDailyThroughput, ThroughputResponse) + apps/web/src/app/api/v1/scopes/[scopeId]/forecasts/route.ts (POST — ForecastRequestSchema validation, how_many past-date rejection, dataVersion validation, cache lookup/store, filter complete days for MC, runWhenForecast/runHowManyForecast, shapeForecastResponse)
+- [x] T034: apps/web/src/server/views/forecast-response.ts (pure shapeForecastResponse: maps MonteCarloForecastResult + request params → ForecastResponse; shared between cache-hit and fresh-compute paths) + packages/db/src/repositories/forecast-result-cache.ts (lookupForecastCache updated to return ForecastCacheHit {payload, sampleSize} instead of ForecastCachePayload | null) + packages/db/src/repositories/sync-runs.ts (getSyncRunByDataVersion added)
+**Tasks Remaining in Story**: T035, T036, T037
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- packages/db/src/projections/throughput-projection.ts (new)
+- packages/db/src/index.ts (added throughput-projection export)
+- packages/db/src/repositories/sync-runs.ts (added getSyncRunByDataVersion)
+- packages/db/src/repositories/forecast-result-cache.ts (lookupForecastCache now returns ForecastCacheHit with sampleSize)
+- apps/worker/src/projections/rebuild-completed-stories.ts (refactored to re-export from @agile-tools/db)
+- apps/worker/src/projections/rebuild-daily-throughput.ts (refactored to re-export from @agile-tools/db)
+- apps/web/package.json (added @agile-tools/analytics dependency)
+- apps/web/src/server/views/forecast-response.ts (new)
+- apps/web/src/app/api/v1/scopes/[scopeId]/throughput/route.ts (new)
+- apps/web/src/app/api/v1/scopes/[scopeId]/forecasts/route.ts (new)
+- specs/001-kanban-flow-forecasting/tasks.md (T033 + T034 marked complete)
+**Learnings**:
+- Worker projection files (rebuild-completed-stories.ts, rebuild-daily-throughput.ts) were pure DB query functions — moved to packages/db/src/projections/throughput-projection.ts so the web app can import them without cross-app imports. Worker files now re-export from @agile-tools/db.
+- ForecastResultCache stores sampleSize as a separate column (not in the JSON payload). Updated lookupForecastCache to return ForecastCacheHit {payload, sampleSize} so the forecast route can reconstruct full ForecastResponse on cache hits without a second DB query.
+- Monte Carlo forecast must filter out today's partial day: use `allDays.filter(d => d.complete)` before building historicalDailyThroughput. Including the partial day would bias forecasts optimistically.
+- For how_many forecasts, validate targetDate > today (scope-local timezone) and return 400. Use `formatDateInTimezone` from @agile-tools/db for scope-aware date comparison.
+- For pinned dataVersion, always load the specific SyncRun via getSyncRunByDataVersion to get the correct syncedAt. Don't use lastSucceeded.finishedAt when the client pins to an older snapshot.
+- @agile-tools/analytics must be added to apps/web/package.json explicitly — workspace dependencies are not automatically inferred.
+---
+
+---
+## Iteration 16 - 2026-04-18
+**User Story**: Partial progress on US3 — T031 + T032 (completed-story projection, daily throughput, Monte Carlo, and forecast cache)
+**Tasks Completed**: 
+- [x] T031: apps/worker/src/projections/rebuild-completed-stories.ts (queryCompletedStories: queries completed+non-excluded WorkItems with HoldPeriods, computes cycleTimeDays and holdTimeDays) + apps/worker/src/projections/rebuild-daily-throughput.ts (rebuildDailyThroughput: timezone-local day bucketing via Intl.DateTimeFormat en-CA, includes 0-completion days for realistic Monte Carlo sampling, complete flag marks fully-past days)
+- [x] T032: packages/analytics/src/monte-carlo.ts (runWhenForecast: p-th percentile of sorted completion-days; runHowManyForecast: (100-p)-th percentile of story counts; FORECAST_MIN_SAMPLE_SIZE=60, NO_THROUGHPUT_HISTORY guard, safety cap for low-throughput when loops) + packages/db/src/repositories/forecast-result-cache.ts (computeForecastRequestHash: SHA-256 of sorted+normalized inputs; lookupForecastCache: expired-entry check; storeForecastCache: upsert with Prisma.InputJsonValue casts)
+**Tasks Remaining in Story**: T033, T034, T035, T036, T037
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- apps/worker/src/projections/rebuild-completed-stories.ts (new)
+- apps/worker/src/projections/rebuild-daily-throughput.ts (new)
+- packages/analytics/src/monte-carlo.ts (new)
+- packages/analytics/src/index.ts (added monte-carlo export)
+- packages/db/src/repositories/forecast-result-cache.ts (new)
+- packages/db/src/index.ts (added forecast-result-cache export)
+- specs/001-kanban-flow-forecasting/tasks.md (T031 + T032 marked complete)
+**Learnings**:
+- @agile-tools/shared sub-path exports use `"./contracts/*"` pattern (no .js extension). Consumer imports must be `@agile-tools/shared/contracts/forecast` (not `.js`) — the wildcard substitutes the filename only, so appending `.js` doubles the extension in the resolved path.
+- `new Array(n)` is typed as `any[]` by TypeScript and triggers `@typescript-eslint/no-unsafe-assignment`. Use `const arr: T[] = []` + `.push()` instead.
+- For Prisma `Json` field writes, cast through `unknown` first: `value as unknown as Prisma.InputJsonValue`. This handles `exactOptionalPropertyTypes: true` + strict mode without weakening the source type.
+- For `ForecastResultCache.upsert`, use `Prisma.ForecastResultCacheUncheckedCreateInput` as the explicit type annotation on the create data object to get proper type-checking without fighting the XOR type.
+- "How many" forecast confidence semantics: at p% confidence, at least X stories complete → X is the (100-p)-th percentile of the simulated story-count distribution (so 85% confidence = 15th percentile of outcomes, meaning 85% of trials produced >= X stories).
+---
+
+
 **User Story**: US2 complete — T027, T028, T029, T030 (Reveal Aging and On-Hold Stories)
 **Tasks Completed**: 
 - [x] T027: apps/web/src/server/views/flow-analytics.ts (pure shapeFlowAnalytics: groups FlowPoints into 3 series with stable Y ordinals) + apps/web/src/components/flow/flow-filters.tsx (FlowFiltersPanel with timeframe/issueType/status/agingOnly/onHoldOnly) + apps/web/src/components/flow/aging-scatter-plot.tsx (nivo ResponsiveScatterPlot, threshold lines via createThresholdLayer, click → onItemSelect, aria-label)

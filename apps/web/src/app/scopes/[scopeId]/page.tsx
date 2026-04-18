@@ -188,11 +188,16 @@ export default async function ScopePage({
       </section>
 
       {/* Navigation */}
-      <p style={{ marginTop: '2rem' }}>
-        <a href="/admin/jira" style={{ color: '#1d4ed8', textDecoration: 'none' }}>
+      <div style={{ marginTop: '2rem', display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <a href="/admin/jira" style={{ color: '#1d4ed8', textDecoration: 'none', fontSize: '0.875rem' }}>
           ← Back to Jira Setup
         </a>
-      </p>
+        {filterOptions && (
+          <a href={`/scopes/${scopeId}/forecast`} style={{ color: '#1d4ed8', textDecoration: 'none', fontSize: '0.875rem' }}>
+            📊 Forecast →
+          </a>
+        )}
+      </div>
     </main>
   );
 }

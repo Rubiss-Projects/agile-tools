@@ -89,13 +89,13 @@
 
 ### Implementation for User Story 3
 
-- [ ] T031 [P] [US3] Implement completed-story and daily-throughput projection rebuilds in apps/worker/src/projections/rebuild-completed-stories.ts and apps/worker/src/projections/rebuild-daily-throughput.ts
-- [ ] T032 [P] [US3] Implement story-count Monte Carlo analytics and ForecastResultCache persistence in packages/analytics/src/monte-carlo.ts and packages/db/src/repositories/forecast-result-cache.ts
-- [ ] T033 [US3] Implement authenticated throughput and forecast API routes in apps/web/src/app/api/v1/scopes/[scopeId]/throughput/route.ts and apps/web/src/app/api/v1/scopes/[scopeId]/forecasts/route.ts
-- [ ] T034 [US3] Implement forecast response shaping, confidence warnings, and dataVersion pinning in apps/web/src/server/views/forecast-response.ts and packages/shared/src/contracts/forecast.ts
-- [ ] T035 [US3] Build throughput and forecast UI flows in apps/web/src/app/scopes/[scopeId]/forecast/page.tsx, apps/web/src/components/forecast/throughput-chart.tsx, apps/web/src/components/forecast/forecast-form.tsx, and apps/web/src/components/forecast/forecast-results.tsx
-- [ ] T036 [P] [US3] Add integration tests for throughput, Monte Carlo sampling, and low-confidence warnings in tests/integration/forecasting.integration.test.ts
-- [ ] T037 [P] [US3] Add end-to-end coverage for completion-date and completion-volume forecasts in tests/e2e/forecasting.spec.ts
+- [x] T031 [P] [US3] Implement completed-story and daily-throughput projection rebuilds in apps/worker/src/projections/rebuild-completed-stories.ts and apps/worker/src/projections/rebuild-daily-throughput.ts
+- [x] T032 [P] [US3] Implement story-count Monte Carlo analytics and ForecastResultCache persistence in packages/analytics/src/monte-carlo.ts and packages/db/src/repositories/forecast-result-cache.ts
+- [x] T033 [US3] Implement authenticated throughput and forecast API routes in apps/web/src/app/api/v1/scopes/[scopeId]/throughput/route.ts and apps/web/src/app/api/v1/scopes/[scopeId]/forecasts/route.ts
+- [x] T034 [US3] Implement forecast response shaping, confidence warnings, and dataVersion pinning in apps/web/src/server/views/forecast-response.ts and packages/shared/src/contracts/forecast.ts
+- [x] T035 [US3] Build throughput and forecast UI flows in apps/web/src/app/scopes/[scopeId]/forecast/page.tsx, apps/web/src/components/forecast/throughput-chart.tsx, apps/web/src/components/forecast/forecast-form.tsx, and apps/web/src/components/forecast/forecast-results.tsx
+- [x] T036 [P] [US3] Add integration tests for throughput, Monte Carlo sampling, and low-confidence warnings in tests/integration/forecasting.integration.test.ts
+- [x] T037 [P] [US3] Add end-to-end coverage for completion-date and completion-volume forecasts in tests/e2e/forecasting.spec.ts
 
 **Checkpoint**: All three user stories should now be independently functional.
 
