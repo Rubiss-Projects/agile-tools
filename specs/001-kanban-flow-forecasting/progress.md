@@ -1,5 +1,22 @@
 ---
-## Iteration 18 - 2026-04-18
+## Iteration 19 - 2026-04-22
+**User Story**: US3 complete — T036 + T037 (forecasting integration & E2E tests)
+**Tasks Completed**: 
+- [x] T036: tests/integration/forecasting.integration.test.ts (pure unit tests for runWhenForecast, runHowManyForecast, computeForecastRequestHash; DB integration tests for queryDailyThroughput, queryCompletedStories, forecast cache round-trip using Testcontainers) — fixed missing projectId on WorkItem seed data
+- [x] T037: tests/e2e/forecasting.spec.ts (page load + throughput chart, form type selector, "when" forecast with LOW_SAMPLE_SIZE warning, "how_many" story counts, back-to-scope link, real POST /forecasts API smoke test) — fixed missing projectId on WorkItem seed data
+**Tasks Remaining in Story**: None (US3 complete)
+**Commit**: feat(001-kanban-flow-forecasting): US-003 Forecast Story Completion (f0b2095)
+**Files Changed**: 
+- tests/integration/forecasting.integration.test.ts (added projectId to TH-*, CS-* WorkItem seeds)
+- tests/e2e/forecasting.spec.ts (added projectId to FC-* WorkItem seeds)
+- specs/001-kanban-flow-forecasting/tasks.md (T036, T037 marked complete)
+**Learnings**:
+- Prisma WorkItem.createMany requires projectId (non-nullable String). All test seed data must include this field. Use the issue key prefix (e.g., 'TH', 'CS', 'FC') as a stable placeholder.
+- Pure unit tests for Monte Carlo (runWhenForecast, runHowManyForecast) run without Docker; Testcontainers DB tests require Docker and are safely skipped in environments without it.
+- pnpm exec tsc --project tsconfig.node.json --noEmit | Select-String "forecasting" is the most efficient way to verify only forecasting file errors without noise from pre-existing issues in other files.
+---
+
+
 **User Story**: Partial progress on US3 — T035 (throughput and forecast UI flows)
 **Tasks Completed**: 
 - [x] T035: apps/web/src/components/forecast/throughput-chart.tsx (ThroughputChart: ResponsiveLine from @nivo/line, dynamic tick decimation, warnings banner, sample size caption) + apps/web/src/components/forecast/forecast-form.tsx (ForecastForm: when/how_many type selector, remaining-story-count/target-date inputs, historical-window select, confidence-level checkboxes, inline validation) + apps/web/src/components/forecast/forecast-results.tsx (ForecastResults: confidence table with formatted dates/counts, LOW_SAMPLE_SIZE / NO_THROUGHPUT_HISTORY warning highlight, metadata strip) + apps/web/src/app/scopes/[scopeId]/forecast/page.tsx (client component: useParams, fetchThroughput on mount, handleForecast POST, dataVersion pinning, renders ThroughputChart + ForecastForm + ForecastResults) + apps/web/src/app/scopes/[scopeId]/page.tsx (added forecast page link in navigation, only shown when filterOptions is present)
