@@ -2,12 +2,15 @@ import type { PrismaClient } from '@agile-tools/db';
 import { getConfig, decryptSecret, logger } from '@agile-tools/shared';
 import type { JiraClient } from '@agile-tools/jira-client';
 import {
+  JiraClientError,
   createJiraClient,
   getBoardDetail,
   streamBoardIssues,
   fetchIssueChangelog,
 } from '@agile-tools/jira-client';
 import type { RawJiraIssue } from '@agile-tools/jira-client';
+import { detectBoardDrift, applyBoardDriftHandling } from './detect-board-drift.js';
+import { updateConnectionHealthAfterSync } from './update-connection-health.js';
 import {
   normalizeJiraIssue,
   type NormalizeContext,
@@ -53,11 +56,18 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     return;
   }
 
+  // Track connection context so the catch block can update health even on early errors.
+  let scopeWorkspaceId: string | undefined;
+  let scopeConnectionId: string | undefined;
+
   try {
     const scope = await db.flowScope.findUnique({ where: { id: syncRun.scopeId } });
     if (!scope) {
       throw new SyncError('SCOPE_NOT_FOUND', `FlowScope ${syncRun.scopeId} not found`);
     }
+
+    scopeWorkspaceId = scope.workspaceId;
+    scopeConnectionId = scope.connectionId;
 
     if (scope.status !== 'active') {
       await db.syncRun.update({
@@ -88,6 +98,20 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
 
     const boardId = Number(scope.boardId);
     const boardDetail = await getBoardDetail(jiraClient, boardId);
+
+    // Abort early if the board layout has drifted away from the scope's configured statuses.
+    // Continuing would produce incorrect lifecycle data (startedAt/completedAt derivation
+    // depends on startStatusIds/doneStatusIds matching real board statuses).
+    const drift = detectBoardDrift(scope, boardDetail);
+    if (drift) {
+      await applyBoardDriftHandling(db, scope, drift);
+      await db.syncRun.update({
+        where: { id: syncRunId },
+        data: { status: 'canceled', finishedAt: new Date(), errorCode: 'BOARD_DRIFT_DETECTED' },
+      });
+      logger.info('Scope sync canceled due to board drift', { syncRunId, scopeId: scope.id });
+      return;
+    }
 
     // Build inverted status → column lookup from board configuration.
     const statusIdsByColumn: Record<string, string> = {};
@@ -147,14 +171,40 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       data: { status: 'succeeded', finishedAt: new Date(), dataVersion: syncRunId },
     });
 
+    // Mark connection healthy now that Jira was reachable and the sync succeeded.
+    await updateConnectionHealthAfterSync(db, scope.workspaceId, scope.connectionId, {
+      succeeded: true,
+    }).catch((healthErr: unknown) => {
+      logger.warn('Failed to update connection health after sync success', {
+        connectionId: scope.connectionId,
+        error: healthErr instanceof Error ? healthErr.message : String(healthErr),
+      });
+    });
+
     logger.info('Scope sync succeeded', {
       syncRunId,
       scopeId: scope.id,
       projectCount: projectIdsSet.size,
     });
   } catch (err) {
-    const errorCode = err instanceof SyncError ? err.code : 'UNEXPECTED_ERROR';
-    const errorSummary = err instanceof Error ? err.message.slice(0, 500) : String(err);
+    // Map errors to deterministic codes so the health updater can classify failures.
+    let errorCode: string;
+    let errorSummary: string;
+
+    if (err instanceof SyncError) {
+      errorCode = err.code;
+      errorSummary = err.message.slice(0, 500);
+    } else if (err instanceof JiraClientError) {
+      // 401/403 → auth failure; all other HTTP errors → generic transport failure.
+      errorCode =
+        err.code === 'unauthorized' || err.code === 'forbidden'
+          ? 'JIRA_AUTH_ERROR'
+          : 'JIRA_HTTP_ERROR';
+      errorSummary = err.message.slice(0, 500);
+    } else {
+      errorCode = 'UNEXPECTED_ERROR';
+      errorSummary = err instanceof Error ? err.message.slice(0, 500) : String(err);
+    }
 
     await db.syncRun
       .update({
@@ -167,6 +217,19 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
           error: updateErr instanceof Error ? updateErr.message : String(updateErr),
         });
       });
+
+    // Update connection health only when we have context and the failure was Jira-related.
+    if (scopeWorkspaceId && scopeConnectionId) {
+      await updateConnectionHealthAfterSync(db, scopeWorkspaceId, scopeConnectionId, {
+        succeeded: false,
+        errorCode,
+      }).catch((healthErr: unknown) => {
+        logger.warn('Failed to update connection health after sync failure', {
+          connectionId: scopeConnectionId,
+          error: healthErr instanceof Error ? healthErr.message : String(healthErr),
+        });
+      });
+    }
 
     logger.error('Scope sync failed', { syncRunId, errorCode, errorSummary });
     throw err;

@@ -21,7 +21,7 @@ export async function startWorker(): Promise<void> {
   logger.info('Queue initialised');
 
   // Register all job handlers.
-  await registerJobs();
+  await registerJobs(prisma);
   logger.info('Jobs registered');
 
   _started = true;

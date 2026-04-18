@@ -1,8 +1,10 @@
 import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
 import { getPrismaClient, createSyncRun } from '@agile-tools/db';
+import type { PrismaClient } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import type PgBoss from 'pg-boss';
 import { runScopeSync } from '../sync/run-scope-sync.js';
+import { registerScopeSyncDispatch } from './schedule-scope-syncs.js';
 
 // Job data shapes — these are the payloads stored in pg-boss job records.
 interface ScopeSyncJobData {
@@ -17,7 +19,7 @@ interface ScopeSyncJobData {
  * Register all job handlers with the pg-boss queue instance.
  * This function is called once during worker startup.
  */
-export async function registerJobs(): Promise<void> {
+export async function registerJobs(db: PrismaClient): Promise<void> {
   const boss = getQueue();
 
   // ── Scope sync job ────────────────────────────────────────────────────────
@@ -26,6 +28,9 @@ export async function registerJobs(): Promise<void> {
     { batchSize: 1 },
     handleScopeSync,
   );
+
+  // Register the dispatch job that fires every minute and enqueues syncs for due scopes.
+  await registerScopeSyncDispatch(db);
 
   logger.info('All jobs registered');
 }
