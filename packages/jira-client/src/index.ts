@@ -1,3 +1,14 @@
-// Jira client package — implemented in Phase 3 (T012–T015).
-// This placeholder satisfies TypeScript's "no inputs" constraint.
-export {};
+export { JiraClient, JiraClientError, createJiraClient } from './client.js';
+export type { JiraServerInfo, FetchOptions } from './client.js';
+
+export { listBoards, getBoardDetail } from './discovery.js';
+
+export { fetchBoardIssues, streamBoardIssues, fetchIssueChangelog } from './issues.js';
+export type {
+  RawJiraIssue,
+  RawJiraIssueFields,
+  ChangelogHistory,
+  ChangelogItem,
+  FetchBoardIssuesOptions,
+  FetchBoardIssuesResult,
+} from './issues.js';

@@ -44,8 +44,8 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Implement Jira connection and flow scope repositories in packages/db/src/repositories/jira-connections.ts and packages/db/src/repositories/flow-scopes.ts
-- [ ] T013 [P] [US1] Implement Jira PAT validation, board discovery, issue pagination, and changelog retrieval in packages/jira-client/src/client.ts, packages/jira-client/src/discovery.ts, and packages/jira-client/src/issues.ts
+- [x] T012 [P] [US1] Implement Jira connection and flow scope repositories in packages/db/src/repositories/jira-connections.ts and packages/db/src/repositories/flow-scopes.ts
+- [x] T013 [P] [US1] Implement Jira PAT validation, board discovery, issue pagination, and changelog retrieval in packages/jira-client/src/client.ts, packages/jira-client/src/discovery.ts, and packages/jira-client/src/issues.ts
 - [ ] T014 [US1] Implement admin connection, validation, and board discovery routes with administrator authorization checks in apps/web/src/app/api/v1/admin/jira-connections/route.ts, apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/validate/route.ts, apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/discovery/boards/route.ts, and apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/discovery/boards/[boardId]/route.ts
 - [ ] T015 [US1] Implement scope creation, scope update, manual sync, and sync status routes with role-based access checks in apps/web/src/app/api/v1/admin/scopes/route.ts, apps/web/src/app/api/v1/admin/scopes/[scopeId]/route.ts, apps/web/src/app/api/v1/admin/scopes/[scopeId]/syncs/route.ts, and apps/web/src/app/api/v1/syncs/[syncRunId]/route.ts
 - [ ] T016 [US1] Implement the Jira sync pipeline to persist board snapshots, work items, lifecycle events, and sync runs in apps/worker/src/sync/run-scope-sync.ts and apps/worker/src/sync/normalize-jira-issues.ts
