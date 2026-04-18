@@ -23,14 +23,14 @@
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete.
 
-- [ ] T004 Define the initial Prisma schema and base migration for Workspace, JiraConnection, FlowScope, BoardSnapshot, HoldDefinition, SyncRun, WorkItem, WorkItemLifecycleEvent, HoldPeriod, AgingThresholdModel, and ForecastResultCache in packages/db/prisma/schema.prisma and packages/db/prisma/migrations/20260417_init/migration.sql
-- [ ] T005 [P] Implement shared database bootstrap and Prisma access helpers in packages/db/src/client.ts and packages/db/src/index.ts
-- [ ] T006 [P] Implement environment validation, secret encryption helpers, and structured logging in packages/shared/src/config.ts, packages/shared/src/secrets.ts, and packages/shared/src/logging.ts
-- [ ] T007 [P] Bootstrap the Next.js server shell, workspace auth context, and worker entrypoints in apps/web/src/app/layout.tsx, apps/web/src/server/auth.ts, apps/web/src/server/index.ts, apps/worker/src/index.ts, and apps/worker/src/lib/worker.ts
-- [ ] T008 Implement pg-boss queue registration, recurring job wiring, and per-scope sync locking in apps/worker/src/lib/queue.ts and apps/worker/src/jobs/register-jobs.ts
-- [ ] T009 [P] Create shared API/domain contract types for warnings, dataVersion snapshots, scope summaries, and forecast payloads in packages/shared/src/contracts/api.ts and packages/shared/src/contracts/forecast.ts
-- [ ] T010 [P] Create shared test configuration in vitest.config.ts, playwright.config.ts, tests/msw/jira-handlers.ts, and tests/integration/support/postgres.ts
-- [ ] T011 [P] Wire repository-wide validation commands in package.json and apps/web/package.json for lint, unit, contract, integration, end-to-end, and performance checks
+- [x] T004 Define the initial Prisma schema and base migration for Workspace, JiraConnection, FlowScope, BoardSnapshot, HoldDefinition, SyncRun, WorkItem, WorkItemLifecycleEvent, HoldPeriod, AgingThresholdModel, and ForecastResultCache in packages/db/prisma/schema.prisma and packages/db/prisma/migrations/20260417_init/migration.sql
+- [x] T005 [P] Implement shared database bootstrap and Prisma access helpers in packages/db/src/client.ts and packages/db/src/index.ts
+- [x] T006 [P] Implement environment validation, secret encryption helpers, and structured logging in packages/shared/src/config.ts, packages/shared/src/secrets.ts, and packages/shared/src/logging.ts
+- [x] T007 [P] Bootstrap the Next.js server shell, workspace auth context, and worker entrypoints in apps/web/src/app/layout.tsx, apps/web/src/server/auth.ts, apps/web/src/server/index.ts, apps/worker/src/index.ts, and apps/worker/src/lib/worker.ts
+- [x] T008 Implement pg-boss queue registration, recurring job wiring, and per-scope sync locking in apps/worker/src/lib/queue.ts and apps/worker/src/jobs/register-jobs.ts
+- [x] T009 [P] Create shared API/domain contract types for warnings, dataVersion snapshots, scope summaries, and forecast payloads in packages/shared/src/contracts/api.ts and packages/shared/src/contracts/forecast.ts
+- [x] T010 [P] Create shared test configuration in vitest.config.ts, playwright.config.ts, tests/msw/jira-handlers.ts, and tests/integration/support/postgres.ts
+- [x] T011 [P] Wire repository-wide validation commands in package.json and apps/web/package.json for lint, unit, contract, integration, end-to-end, and performance checks
 
 **Checkpoint**: Foundation ready. User story work can now begin.
 

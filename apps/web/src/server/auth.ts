@@ -1,0 +1,78 @@
+import { cookies } from 'next/headers';
+import { logger } from '@agile-tools/shared';
+
+export type WorkspaceRole = 'admin' | 'member';
+
+export interface WorkspaceContext {
+  userId: string;
+  workspaceId: string;
+  role: WorkspaceRole;
+}
+
+// Session cookie name — must match the value set by the auth middleware.
+const SESSION_COOKIE = 'agile_session';
+
+/**
+ * Parse the opaque session cookie and return the workspace context, or null
+ * when the request is unauthenticated.
+ *
+ * In production the session value is a signed JWT or opaque token issued by
+ * the workspace auth middleware. For v1 the implementation reads from a signed
+ * cookie; swap the body for your actual session provider without changing the
+ * contract.
+ */
+export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE);
+  if (!sessionCookie?.value) return null;
+
+  try {
+    // Decode the base64-encoded JSON session payload.
+    // In production: verify a signed JWT or look up an opaque token in the DB.
+    const payload = JSON.parse(
+      Buffer.from(sessionCookie.value, 'base64').toString('utf8'),
+    ) as unknown;
+
+    if (!isValidPayload(payload)) return null;
+    return payload;
+  } catch (err) {
+    logger.warn('Failed to parse session cookie', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * Return the workspace context or throw a Response with 401 status.
+ * Use this in API route handlers that require authentication.
+ */
+export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
+  const ctx = await getWorkspaceContext();
+  if (!ctx) {
+    throw Response.json({ code: 'UNAUTHENTICATED', message: 'Authentication required.' }, { status: 401 });
+  }
+  return ctx;
+}
+
+/**
+ * Return the workspace context or throw a Response with 403 status.
+ * Use this in API route handlers that require administrator access.
+ */
+export async function requireAdminContext(): Promise<WorkspaceContext> {
+  const ctx = await requireWorkspaceContext();
+  if (ctx.role !== 'admin') {
+    throw Response.json({ code: 'FORBIDDEN', message: 'Administrator access required.' }, { status: 403 });
+  }
+  return ctx;
+}
+
+function isValidPayload(value: unknown): value is WorkspaceContext {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj['userId'] === 'string' &&
+    typeof obj['workspaceId'] === 'string' &&
+    (obj['role'] === 'admin' || obj['role'] === 'member')
+  );
+}

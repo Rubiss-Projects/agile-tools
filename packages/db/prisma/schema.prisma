@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum ConnectionHealthStatus {
+  draft
+  validating
+  healthy
+  unhealthy
+  stale
+  disabled
+}
+
+enum FlowScopeStatus {
+  active
+  paused
+  needs_attention
+}
+
+enum SyncRunTrigger {
+  scheduled
+  manual
+}
+
+enum SyncRunStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+}
+
+enum LifecycleEventType {
+  status_change
+  field_change
+  reopened
+  completed
+}
+
+enum HoldPeriodSource {
+  status
+  blocked_field
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Workspace {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  defaultTimezone String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  connections JiraConnection[]
+  scopes      FlowScope[]
+}
+
+model JiraConnection {
+  id                 String                 @id @default(uuid())
+  workspaceId        String
+  baseUrl            String
+  authType           String                 @default("pat")
+  encryptedSecretRef String
+  healthStatus       ConnectionHealthStatus @default(draft)
+  lastValidatedAt    DateTime?
+  lastHealthyAt      DateTime?
+  lastErrorCode      String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scopes    FlowScope[]
+
+  // Composite unique enables cross-workspace FK integrity from FlowScope
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+}
+
+model FlowScope {
+  id                   String          @id @default(uuid())
+  workspaceId          String
+  connectionId         String
+  boardId              String
+  boardName            String
+  timezone             String
+  includedIssueTypeIds String[]
+  startStatusIds       String[]
+  doneStatusIds        String[]
+  syncIntervalMinutes  Int
+  status               FlowScopeStatus @default(active)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Composite FK enforces that connectionId belongs to the same workspace
+  connection     JiraConnection        @relation(fields: [workspaceId, connectionId], references: [workspaceId, id])
+  holdDefinitions HoldDefinition[]
+  boardSnapshots  BoardSnapshot[]
+  syncRuns        SyncRun[]
+  workItems       WorkItem[]
+  agingModels     AgingThresholdModel[]
+  forecastCache   ForecastResultCache[]
+
+  @@index([workspaceId])
+  @@index([connectionId])
+}
+
+model BoardSnapshot {
+  id                String   @id @default(uuid())
+  scopeId           String
+  syncRunId         String?
+  fetchedAt         DateTime
+  columns           Json
+  statusIdsByColumn Json
+  projectRefs       Json
+  filterId          String?
+  createdAt         DateTime @default(now())
+
+  scope   FlowScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  syncRun SyncRun?  @relation(fields: [syncRunId], references: [id], onDelete: SetNull)
+
+  @@index([scopeId, fetchedAt])
+}
+
+// Versioned hold rules — effectiveFrom records when each version became active.
+// Application code queries for MAX(effectiveFrom) <= now() to get the current definition.
+model HoldDefinition {
+  id                  String   @id @default(uuid())
+  scopeId             String
+  holdStatusIds       String[]
+  blockedFieldId      String?
+  blockedTruthyValues String[]
+  effectiveFrom       DateTime
+  updatedBy           String
+  createdAt           DateTime @default(now())
+
+  scope FlowScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@unique([scopeId, effectiveFrom])
+  @@index([scopeId, effectiveFrom])
+}
+
+model SyncRun {
+  id           String         @id @default(uuid())
+  scopeId      String
+  trigger      SyncRunTrigger
+  status       SyncRunStatus  @default(queued)
+  requestedBy  String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  dataVersion  String?
+  errorCode    String?
+  errorSummary String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  scope          FlowScope       @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  boardSnapshots BoardSnapshot[]
+
+  @@index([scopeId, createdAt])
+  @@index([scopeId, status])
+}
+
+model WorkItem {
+  id              String    @id @default(uuid())
+  scopeId         String
+  jiraIssueId     String
+  issueKey        String
+  summary         String
+  issueTypeId     String
+  projectId       String
+  currentStatusId String
+  currentColumn   String?
+  createdAt       DateTime  // Jira creation timestamp — NOT auto-generated
+  startedAt       DateTime?
+  completedAt     DateTime?
+  reopenedCount   Int       @default(0)
+  directUrl       String
+  excludedReason  String?
+  // Provenance fields
+  syncedAt        DateTime  @default(now())
+  lastSyncRunId   String?
+  updatedAt       DateTime  @updatedAt
+
+  scope           FlowScope                @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  lifecycleEvents WorkItemLifecycleEvent[]
+  holdPeriods     HoldPeriod[]
+
+  @@unique([scopeId, jiraIssueId])
+  @@index([scopeId, completedAt])
+  @@index([scopeId, currentColumn])
+  @@index([scopeId, startedAt])
+}
+
+model WorkItemLifecycleEvent {
+  id             String             @id @default(uuid())
+  workItemId     String
+  rawChangelogId String?
+  eventType      LifecycleEventType
+  fromStatusId   String?
+  toStatusId     String?
+  changedFieldId String?
+  changedAt      DateTime
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate derivation for the same changelog entry + event type
+  @@unique([workItemId, rawChangelogId, eventType])
+  @@index([workItemId, changedAt])
+}
+
+model HoldPeriod {
+  id          String           @id @default(uuid())
+  workItemId  String
+  startedAt   DateTime
+  endedAt     DateTime?
+  source      HoldPeriodSource
+  sourceValue String
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  // Non-overlap per (workItemId, source) is enforced via application logic and
+  // the btree_gist exclusion constraint in the base migration SQL.
+  @@index([workItemId, startedAt])
+  @@index([workItemId, endedAt])
+}
+
+model AgingThresholdModel {
+  id                   String   @id @default(uuid())
+  scopeId              String
+  historicalWindowDays Int
+  sampleSize           Int
+  metricBasis          String   @default("cycle_time")
+  p50                  Float
+  p70                  Float
+  p85                  Float
+  calculatedAt         DateTime
+  dataVersion          String
+  lowConfidenceReason  String?
+  createdAt            DateTime @default(now())
+
+  scope FlowScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@index([scopeId, calculatedAt])
+}
+
+model ForecastResultCache {
+  id                   String    @id @default(uuid())
+  scopeId              String
+  requestHash          String
+  historicalWindowDays Int
+  iterations           Int
+  confidenceLevels     Float[]
+  sampleSize           Int
+  dataVersion          String
+  warnings             Json
+  resultPayload        Json
+  createdAt            DateTime  @default(now())
+  expiresAt            DateTime?
+
+  scope FlowScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@unique([scopeId, requestHash, dataVersion])
+  @@index([scopeId, dataVersion])
+}
