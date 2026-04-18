@@ -11,9 +11,9 @@
 
 **Purpose**: Initialize the monorepo, package manifests, and local developer tooling.
 
-- [ ] T001 Create the pnpm workspace and root build scripts in package.json, pnpm-workspace.yaml, and tsconfig.base.json
-- [ ] T002 Scaffold package manifests for the web app, worker, and shared libraries in apps/web/package.json, apps/worker/package.json, packages/db/package.json, packages/jira-client/package.json, packages/analytics/package.json, and packages/shared/package.json
-- [ ] T003 [P] Add local developer runtime files in docker-compose.yml, .env.example, .gitignore, and eslint.config.mjs
+- [x] T001 Create the pnpm workspace and root build scripts in package.json, pnpm-workspace.yaml, and tsconfig.base.json
+- [x] T002 Scaffold package manifests for the web app, worker, and shared libraries in apps/web/package.json, apps/worker/package.json, packages/db/package.json, packages/jira-client/package.json, packages/analytics/package.json, and packages/shared/package.json
+- [x] T003 [P] Add local developer runtime files in docker-compose.yml, .env.example, .gitignore, and eslint.config.mjs
 
 ---
 
