@@ -25,6 +25,7 @@ export interface NormalizedWorkItem {
   issueKey: string;
   summary: string;
   issueTypeId: string;
+  issueTypeName: string;
   projectId: string;
   currentStatusId: string;
   currentColumn: string | null;
@@ -59,6 +60,7 @@ export function normalizeJiraIssue(
     issueKey: issue.key,
     summary: fields.summary,
     issueTypeId: fields.issuetype.id,
+    issueTypeName: fields.issuetype.name,
     projectId: fields.project.id,
     currentStatusId,
     currentColumn: ctx.statusIdsByColumn[currentStatusId] ?? null,

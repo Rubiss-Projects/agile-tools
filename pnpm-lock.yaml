@@ -8,12 +8,24 @@ importers:
 
   .:
     devDependencies:
+      '@agile-tools/db':
+        specifier: workspace:*
+        version: link:packages/db
+      '@agile-tools/jira-client':
+        specifier: workspace:*
+        version: link:packages/jira-client
+      '@agile-tools/shared':
+        specifier: workspace:*
+        version: link:packages/shared
       '@eslint/js':
         specifier: ^9.0.0
         version: 9.39.4
       '@playwright/test':
         specifier: ^1.44.0
         version: 1.59.1
+      '@prisma/client':
+        specifier: ^6.0.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.17

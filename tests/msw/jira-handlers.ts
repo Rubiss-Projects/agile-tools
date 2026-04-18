@@ -66,6 +66,20 @@ export const jiraHandlers = [
     HttpResponse.json(boardConfig),
   ),
 
+  // Board projects (optional — returns empty, falls back to global issue types)
+  http.get(`${JIRA_BASE}/rest/agile/1.0/board/:boardId/project`, () =>
+    HttpResponse.json({ maxResults: 10, startAt: 0, total: 0, isLast: true, values: [] }),
+  ),
+
+  // All statuses (used by board detail discovery to label column statuses)
+  http.get(`${JIRA_BASE}/rest/api/2/status`, () =>
+    HttpResponse.json([
+      { id: '1', name: 'To Do' },
+      { id: '2', name: 'In Progress' },
+      { id: '3', name: 'Done' },
+    ]),
+  ),
+
   // Issue types for a project
   http.get(`${JIRA_BASE}/rest/api/2/issuetype`, () =>
     HttpResponse.json([{ id: 'it-1', name: 'Story' }]),

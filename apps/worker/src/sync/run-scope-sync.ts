@@ -16,6 +16,7 @@ import {
   type NormalizeContext,
   type NormalizedWorkItem,
 } from './normalize-jira-issues.js';
+import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js';
 
 const BATCH_SIZE = 10;
 
@@ -171,6 +172,15 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       data: { status: 'succeeded', finishedAt: new Date(), dataVersion: syncRunId },
     });
 
+    // Rebuild projection data after the sync is marked as succeeded (non-blocking).
+    await rebuildScopeProjections(db, scope.id, syncRunId).catch((rebuildErr: unknown) => {
+      logger.warn('Projection rebuild failed after sync success', {
+        syncRunId,
+        scopeId: scope.id,
+        error: rebuildErr instanceof Error ? rebuildErr.message : String(rebuildErr),
+      });
+    });
+
     // Mark connection healthy now that Jira was reachable and the sync succeeded.
     await updateConnectionHealthAfterSync(db, scope.workspaceId, scope.connectionId, {
       succeeded: true,
@@ -273,6 +283,7 @@ async function upsertWorkItem(
       issueKey: item.issueKey,
       summary: item.summary,
       issueTypeId: item.issueTypeId,
+      issueTypeName: item.issueTypeName,
       projectId: item.projectId,
       currentStatusId: item.currentStatusId,
       currentColumn: item.currentColumn,
@@ -289,6 +300,7 @@ async function upsertWorkItem(
       issueKey: item.issueKey,
       summary: item.summary,
       issueTypeId: item.issueTypeId,
+      issueTypeName: item.issueTypeName,
       projectId: item.projectId,
       currentStatusId: item.currentStatusId,
       currentColumn: item.currentColumn,

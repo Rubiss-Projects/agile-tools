@@ -1,4 +1,111 @@
-# Ralph Progress Log
+---
+## Iteration 11 - 2026-04-19
+**User Story**: US1 complete — T021 + T022 (contract, integration, and E2E tests)
+**Tasks Completed**: 
+- [x] T021: tests/contract/admin-jira-connections.contract.test.ts (12 contract tests for POST connection, POST validate healthy/unhealthy, GET boards, GET board detail, 401/403 auth) + tests/contract/admin-scopes.contract.test.ts (12 contract tests for POST scope, PUT scope, POST sync, GET syncs, 400/401/404 error paths)
+- [x] T022: tests/integration/sync-pipeline.integration.test.ts (9 pure unit tests for normalizeJiraIssue + 9 DB integration tests for queryCurrentWorkItems/queryScopeFilterOptions) + tests/e2e/admin-jira-setup.spec.ts (3 Playwright E2E specs for admin/jira and /scopes/:id pages)
+**Tasks Remaining in Story**: None — US1 complete ✅
+**Commit**: feat(001-kanban-flow-forecasting): US-001 Connect Self-Hosted Jira and See Team Flow
+**Files Changed**: 
+- tests/contract/vitest.config.ts (added resolve.alias for @, next/server, next/headers, next/navigation, next/cache; added next dir var)
+- tests/contract/admin-jira-connections.contract.test.ts (new)
+- tests/contract/admin-scopes.contract.test.ts (new)
+- tests/integration/sync-pipeline.integration.test.ts (new)
+- tests/e2e/admin-jira-setup.spec.ts (new)
+- tests/msw/jira-handlers.ts (added GET /rest/api/2/status + GET /rest/agile/1.0/board/:boardId/project handlers)
+- package.json (added @agile-tools/db, @agile-tools/jira-client, @agile-tools/shared, @prisma/client to root devDependencies for test resolution)
+- specs/001-kanban-flow-forecasting/tasks.md (T021 + T022 marked complete)
+**Learnings**:
+- In a pnpm monorepo, workspace packages must be added to the root package.json devDependencies for root-level test tooling (vitest) to resolve them. Vitest runs from the root and cannot hoist packages from child workspaces.
+- Next.js packages (next/server, next/headers) are installed under apps/web/node_modules and require explicit resolve.alias entries in root-level vitest configs. Use path.join(nextDir, 'server.js') etc.
+- vi.mock calls are hoisted before imports in Vitest, so dynamic imports (via await import()) after vi.mock correctly receive the mocked module. This is the correct pattern for mocking next/headers cookies in contract tests.
+- When contract/integration tests share a single Postgres container, use an ensureDbStarted() helper with a module-level flag to avoid starting duplicate containers across multiple describe-level beforeAll hooks.
+- Testcontainers needs Docker Desktop (Linux engine) running on Windows. Tests correctly skip with "Could not find a working container runtime strategy" when Docker is unavailable — this is the expected behaviour in environments without Docker.
+---
+
+
+**User Story**: Partial progress on US1 — T020 (admin setup screens + scope summary page)
+**Tasks Completed**: 
+- [x] T020: apps/web/src/app/admin/jira/page.tsx (Server Component: requireAdminContext, listJiraConnections + listFlowScopes, renders connection list with ValidateConnectionButton, JiraConnectionForm, scope list, FlowScopeForm) + apps/web/src/components/admin/jira-connection-form.tsx (JiraConnectionForm + ValidateConnectionButton client components) + apps/web/src/components/admin/flow-scope-form.tsx (multi-step FlowScopeForm: discover boards → inspect board → configure + submit) + apps/web/src/app/scopes/[scopeId]/page.tsx (Server Component: buildScopeSummary, scope/health/sync/warnings/filterOptions/config display + TriggerSyncButton for admin) + apps/web/src/components/admin/trigger-sync-button.tsx (TriggerSyncButton client component with router.refresh())
+**Tasks Remaining in Story**: T021, T022
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- apps/web/src/app/admin/jira/page.tsx (new)
+- apps/web/src/components/admin/jira-connection-form.tsx (new)
+- apps/web/src/components/admin/flow-scope-form.tsx (new)
+- apps/web/src/app/scopes/[scopeId]/page.tsx (new)
+- apps/web/src/components/admin/trigger-sync-button.tsx (new)
+- eslint.config.mjs (browser globals for apps/web)
+**Learnings**:
+- ESLint flat config requires an explicit globals block for browser globals (fetch, window, etc.) scoped to apps/web — they are not inherited from js.configs.recommended
+- Async event handlers in JSX must be wrapped with void to satisfy @typescript-eslint/no-misused-promises: `onClick={() => { void handleAction(); }}`
+- onSubmit must also use void wrapper: `onSubmit={(e) => { void handleSubmit(e); }}` with FormEvent<HTMLFormElement> type
+- Server Component pages should use getWorkspaceContext() (not require*) and guard ctx early before accessing ctx.workspaceId or ctx.role
+- router.refresh() from next/navigation is the correct pattern for re-triggering server component data fetching after client-side mutations
+- TriggerSyncButton, ValidateConnectionButton should also call router.refresh() after success so server-rendered health/lastSync fields update
+---
+
+
+**User Story**: Partial progress on US1 — T019 (scope summary read API + view shaping)
+**Tasks Completed**: 
+- [x] T019: packages/db/src/repositories/sync-runs.ts (added getLastSucceededSyncRun — finds most recent succeeded run with a dataVersion, used to pin projection filter options to a stable snapshot) + apps/web/src/server/views/scope-summary.ts (buildScopeSummary: fetches scope, connection health, last sync run, and pinned filter options concurrently; omits filterOptions when no succeeded sync exists; emits connection/drift warnings) + apps/web/src/app/api/v1/scopes/[scopeId]/route.ts (GET handler; requireWorkspaceContext; 404 on missing scope)
+**Tasks Remaining in Story**: T020, T021, T022
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- packages/db/src/repositories/sync-runs.ts (getLastSucceededSyncRun function)
+- apps/web/src/server/views/scope-summary.ts (new)
+- apps/web/src/app/api/v1/scopes/[scopeId]/route.ts (new)
+**Learnings**:
+- Must pin filter options (queryScopeFilterOptions) to the latest *succeeded* sync's dataVersion, not the latest run — a queued/failed/running run would cause mixed-state reads during in-progress syncs
+- Omit filterOptions entirely when no succeeded sync exists so the UI can distinguish "not yet synced" vs "synced and empty"
+- View functions in apps/web/src/server/views/ call getPrismaClient() internally rather than accepting a PrismaClient param (avoids the Prisma type import constraint in apps/web)
+- Import mapScope/mapSyncRun from @/app/api/v1/admin/scopes/_lib (already defined there) rather than duplicating
+---
+
+
+**User Story**: Partial progress on US1 — T018 (current flow + scope summary projections)
+**Tasks Completed**: 
+- [x] T018: packages/db/prisma/schema.prisma + migration (added issueTypeName to WorkItem) + apps/worker/src/sync/normalize-jira-issues.ts (added issueTypeName field) + apps/worker/src/sync/run-scope-sync.ts (includes issueTypeName in upsert, calls rebuildScopeProjections after sync success) + packages/db/src/projections/current-work-item-projection.ts (queryCurrentWorkItems, queryScopeFilterOptions with dataVersion pinning) + apps/worker/src/projections/rebuild-scope-summary.ts (lightweight post-sync hook that logs item counts and filter options)
+**Tasks Remaining in Story**: T019, T020, T021, T022
+**Commit**: No commit - partial progress
+**Files Changed**: 
+- packages/db/prisma/schema.prisma (issueTypeName field on WorkItem)
+- packages/db/prisma/migrations/20260418_work_item_issue_type_name/migration.sql (new)
+- packages/db/src/projections/current-work-item-projection.ts (new)
+- packages/db/src/index.ts (re-export projections)
+- apps/worker/src/sync/normalize-jira-issues.ts (issueTypeName in NormalizedWorkItem)
+- apps/worker/src/sync/run-scope-sync.ts (issueTypeName in upsert, rebuildScopeProjections call)
+- apps/worker/src/projections/rebuild-scope-summary.ts (new)
+**Learnings**:
+- Current work item projection is computed on-the-fly (no materialized table in schema); `queryCurrentWorkItems` and `queryScopeFilterOptions` accept an optional `dataVersion` parameter (= syncRunId) to filter by `lastSyncRunId` and exclude stale items that disappeared from the board between syncs
+- issueTypeName must be stored in WorkItem at sync time — Jira status names can be derived from currentColumn (board column name) but issue type names are not otherwise queryable after sync
+- For `filterOptions.statuses`: id = Jira status ID (for server-side filtering), name = currentColumn (board column name for display) — this lets the UI show meaningful column names while the API correctly filters by status ID
+- `rebuildScopeProjections` is non-blocking (errors are caught + logged, not re-thrown) so projection diagnostics never fail a sync
+---
+
+
+**User Story**: US1 T017 — Scheduled refresh, connection health, board drift
+**Tasks Completed**: 
+- [x] T017: apps/worker/src/jobs/schedule-scope-syncs.ts (dispatch job fires every minute, queries active scopes, enqueues scope:sync for any scope whose syncIntervalMinutes has elapsed — fixes pg-boss schedule-name/queue-name mismatch from T008) + apps/worker/src/sync/update-connection-health.ts (updateConnectionHealthAfterSync: healthy on success; unhealthy on JIRA_AUTH_ERROR/JIRA_HTTP_ERROR; no change for config/drift errors) + apps/worker/src/sync/detect-board-drift.ts (detectBoardDrift compares scope startStatusIds/doneStatusIds against live board columns; applyBoardDriftHandling marks scope needs_attention) + apps/worker/src/sync/run-scope-sync.ts (integrates drift abort before writes, maps JiraClientError to typed codes, calls health updater on success and connection failures) + apps/worker/src/jobs/register-jobs.ts (wires dispatch job) + apps/worker/src/lib/worker.ts (passes db to registerJobs) + eslint.config.mjs (Node.js globals for worker)
+**Tasks Remaining in Story**: T018, T019, T020, T021, T022
+**Commit**: bd8eb71
+**Files Changed**: 
+- apps/worker/src/jobs/schedule-scope-syncs.ts (new)
+- apps/worker/src/sync/detect-board-drift.ts (new)
+- apps/worker/src/sync/update-connection-health.ts (new)
+- apps/worker/src/sync/run-scope-sync.ts
+- apps/worker/src/jobs/register-jobs.ts
+- apps/worker/src/lib/worker.ts
+- eslint.config.mjs
+**Learnings**:
+- pg-boss `schedule(name, cron, data)` uses `name` as both the schedule ID AND the destination queue name — so per-scope schedules with `scope:sync:${scopeId}` names go to queues nobody works; fix is a single dispatch cron job that queries the DB and enqueues to the real `scope:sync` queue
+- Board drift must abort the sync BEFORE any writes (snapshot, work items, lifecycle events) — continuing would produce incorrect startedAt/completedAt because those fields depend on startStatusIds/doneStatusIds matching real board statuses
+- JiraClientError.code values: `unauthorized`, `forbidden`, `not_found`, `http_error` — map 401/403 → JIRA_AUTH_ERROR; others → JIRA_HTTP_ERROR for health classification
+- Connection health should NOT be updated for non-connectivity failures (SCOPE_NOT_FOUND, BOARD_DRIFT_DETECTED, UNEXPECTED_ERROR) — the Jira link may still be functional
+- ESLint flat config requires explicit `languageOptions.globals` for Node.js globals (process, console, Buffer) — not inherited from `js.configs.recommended`
+---
+
+
 
 Feature: 001-kanban-flow-forecasting
 Started: 2026-04-17 23:02:35

@@ -19,8 +19,12 @@
     "dev": "pnpm -r --parallel dev"
   },
   "devDependencies": {
+    "@agile-tools/db": "workspace:*",
+    "@agile-tools/jira-client": "workspace:*",
+    "@agile-tools/shared": "workspace:*",
     "@eslint/js": "^9.0.0",
     "@playwright/test": "^1.44.0",
+    "@prisma/client": "^6.0.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

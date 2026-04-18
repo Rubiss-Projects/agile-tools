@@ -176,6 +176,7 @@ model WorkItem {
   issueKey        String
   summary         String
   issueTypeId     String
+  issueTypeName   String?
   projectId       String
   currentStatusId String
   currentColumn   String?

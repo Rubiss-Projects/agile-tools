@@ -41,6 +41,20 @@ export default [
     },
   },
   {
+    // Browser globals for Next.js web app client components
+    files: ['apps/web/src/**/*.ts', 'apps/web/src/**/*.tsx'],
+    languageOptions: {
+      globals: {
+        fetch: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
+  {
     ignores: [
       '.next/**',
       'dist/**',
