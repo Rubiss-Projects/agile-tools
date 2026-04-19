@@ -1,0 +1,82 @@
+# @agile-tools/db
+
+## Purpose
+
+`@agile-tools/db` is the persistence layer for the monolith. It owns:
+
+- the Prisma schema and migrations
+- the shared Prisma client singleton
+- repositories for operational records
+- projection queries used by the web app and worker
+
+This package is the boundary between application code and PostgreSQL.
+
+## Architecture
+
+### Main areas
+
+- `prisma/schema.prisma`
+  Declarative data model for workspaces, Jira connections, scopes, sync runs,
+  work items, hold periods, aging models, and forecast cache entries.
+- `prisma/migrations/`
+  Versioned SQL/Prisma migrations.
+- `src/client.ts`
+  Prisma client singleton with environment-sensitive logging.
+- `src/repositories/`
+  CRUD-style accessors for operational entities.
+- `src/projections/`
+  Read-oriented queries for current work items, throughput, and related
+  analytics views.
+- `src/index.ts`
+  The public export barrel used by apps and other packages.
+
+### Data model role in the system
+
+- The worker writes normalized Jira data and projection inputs here.
+- The web app reads local projections here instead of calling Jira on request
+  paths.
+- Forecast results are cached here and pinned to a `dataVersion`.
+
+## Development
+
+### Common commands
+
+```bash
+pnpm --filter @agile-tools/db build
+pnpm --filter @agile-tools/db typecheck
+pnpm --filter @agile-tools/db prisma:generate
+pnpm --filter @agile-tools/db prisma:migrate
+```
+
+### Environment expectations
+
+- `DATABASE_URL` must be present in the root environment.
+- Prisma commands should be run with awareness of the workspace root env file.
+
+## Development Considerations
+
+- Keep repositories small and intention-revealing. If a query serves a UI or
+  projection shape directly, it probably belongs under `src/projections/` rather
+  than `src/repositories/`.
+- Reuse the Prisma singleton from `src/client.ts` instead of creating new
+  clients across the codebase.
+- Schema changes should preserve the projection-backed product design. Additions
+  to Jira-derived data usually need both schema and rebuild logic.
+- The initial hold-period exclusion constraint intentionally uses
+  `"source" WITH =` in SQL because PostgreSQL `btree_gist` can handle the enum
+  directly.
+- Be careful with migration edits after they have been applied locally. Treat
+  them as durable history once other environments depend on them.
+
+## When To Change This Package
+
+- Add or modify tables, enums, indexes, or constraints.
+- Add repository helpers.
+- Add projection queries needed by web or worker code.
+- Add forecast cache or sync-run persistence behavior.
+
+## When Not To Change This Package
+
+- Do not put HTTP request handling here.
+- Do not place queue registration logic here.
+- Do not place domain math here if it can remain pure in `@agile-tools/analytics`.
