@@ -4,23 +4,47 @@ import { buildScopeSummary } from '@/server/views/scope-summary';
 import { TriggerSyncButton } from '@/components/admin/trigger-sync-button';
 import { HoldDefinitionForm } from '@/components/admin/hold-definition-form';
 import { FlowAnalyticsSection } from '@/components/flow/flow-analytics-section';
+import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
+import {
+  codeStyle,
+  eyebrowStyle,
+  heroCardStyle,
+  heroCopyStyle,
+  heroTitleStyle,
+  noticeStyle,
+  pageShellStyle,
+  sectionCardStyle,
+  sectionCopyStyle,
+  sectionHeaderRowStyle,
+  sectionStackStyle,
+  sectionTitleStyle,
+  statCardStyle,
+  statGridStyle,
+  statLabelStyle,
+  statValueStyle,
+  tonePillStyle,
+  linkStyle,
+  insetPanelStyle,
+} from '@/components/app/chrome';
 
 export default async function ScopePage({
   params,
 }: {
   params: Promise<{ scopeId: string }>;
 }) {
+  const { scopeId } = await params;
   const ctx = await getWorkspaceContext();
 
   if (!ctx) {
     return (
-      <main style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-        <p>Authentication required. Please sign in.</p>
-      </main>
+      <AuthRequiredPanel
+        title="Scope analytics require a workspace session"
+        description="This route only works inside a workspace context. In local development you can seed a demo workspace and land straight back on this scope."
+        nextPath={`/scopes/${scopeId}`}
+      />
     );
   }
 
-  const { scopeId } = await params;
   const summary = await buildScopeSummary(ctx.workspaceId, scopeId);
   if (!summary) notFound();
 
@@ -41,162 +65,190 @@ export default async function ScopePage({
     needs_attention: 'red',
   };
 
+  const connectionTone = connectionHealth === 'healthy'
+    ? 'positive'
+    : connectionHealth === 'stale'
+      ? 'warning'
+      : connectionHealth === 'unhealthy'
+        ? 'danger'
+        : connectionHealth === 'validating'
+          ? 'info'
+          : 'neutral';
+
+  const scopeTone = scope.status === 'active'
+    ? 'positive'
+    : scope.status === 'paused'
+      ? 'warning'
+      : scope.status === 'needs_attention'
+        ? 'danger'
+        : 'neutral';
+
   return (
-    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{scope.boardName ?? `Board ${scope.boardId}`}</h1>
-          <p style={{ margin: '0.25rem 0 0', color: '#6b7280' }}>
-            Scope ID: <code>{scope.id}</code>
-          </p>
+    <main style={pageShellStyle}>
+      <section style={heroCardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <p style={eyebrowStyle}>Flow Scope</p>
+            <h1 style={heroTitleStyle}>{scope.boardName ?? `Board ${scope.boardId}`}</h1>
+            <p style={heroCopyStyle}>
+              Track active work, sync health, and aging signals for this board snapshot.
+            </p>
+            <p style={{ margin: '0.9rem 0 0', color: '#475569', fontSize: '0.92rem' }}>
+              Scope ID <span style={codeStyle}>{scope.id}</span>
+            </p>
+          </div>
+          <span style={tonePillStyle(scopeTone)}>{scope.status}</span>
         </div>
-        <span
-          style={{
-            padding: '0.25rem 0.75rem',
-            borderRadius: '9999px',
-            background: '#f3f4f6',
-            color: scopeStatusColor[scope.status] ?? '#6b7280',
-            fontWeight: 600,
-            fontSize: '0.875rem',
-          }}
-        >
-          {scope.status}
-        </span>
-      </div>
 
-      {/* Warnings */}
-      {warnings.length > 0 && (
-        <div
-          style={{
-            marginTop: '1rem',
-            padding: '0.75rem 1rem',
-            background: '#fef9c3',
-            border: '1px solid #fde047',
-            borderRadius: '4px',
-          }}
-        >
-          <strong>⚠ Warnings</strong>
-          <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem' }}>
-            {warnings.map((w, i) => (
-              <li key={i}>{w.message}</li>
-            ))}
-          </ul>
+        <div style={statGridStyle}>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Connection Health</p>
+            <p style={{ ...statValueStyle, color: healthColor[connectionHealth] ?? '#0f172a' }}>{connectionHealth}</p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Last Sync</p>
+            <p style={{ ...statValueStyle, fontSize: '1rem' }}>
+              {lastSync?.finishedAt ? new Date(lastSync.finishedAt).toLocaleString() : 'No sync yet'}
+            </p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Timezone</p>
+            <p style={statValueStyle}>{scope.timezone}</p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Cadence</p>
+            <p style={statValueStyle}>Every {scope.syncIntervalMinutes}m</p>
+          </article>
         </div>
-      )}
-
-      {/* Connection health */}
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>Connection Health</h2>
-        <p>
-          Status:{' '}
-          <strong style={{ color: healthColor[connectionHealth] ?? '#6b7280' }}>
-            {connectionHealth}
-          </strong>
-        </p>
       </section>
 
-      {/* Sync status */}
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>Sync Status</h2>
+      <div style={sectionStackStyle}>
+        {warnings.length > 0 && (
+          <section style={noticeStyle('warning')}>
+            <strong style={{ display: 'block', marginBottom: '0.35rem' }}>Warnings</strong>
+            <div style={{ display: 'grid', gap: '0.45rem' }}>
+              {warnings.map((w, i) => (
+                <p key={i} style={{ margin: 0 }}>{w.message}</p>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderRowStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Connection and sync</h2>
+              <p style={sectionCopyStyle}>Current health, most recent sync outcome, and the active snapshot identifier.</p>
+            </div>
+            <span style={tonePillStyle(connectionTone)}>{connectionHealth}</span>
+          </div>
+
         {lastSync ? (
-          <div>
-            <p>
-              Last sync:{' '}
-              <strong
-                style={{
-                  color:
-                    lastSync.status === 'succeeded'
-                      ? 'green'
-                      : lastSync.status === 'failed'
-                        ? 'red'
-                        : '#1d4ed8',
-                }}
-              >
-                {lastSync.status}
-              </strong>
-              {lastSync.finishedAt && (
-                <span style={{ marginLeft: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
-                  (finished {new Date(lastSync.finishedAt).toLocaleString()})
-                </span>
-              )}
-            </p>
-            {lastSync.dataVersion && (
-              <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-                Data version: <code>{lastSync.dataVersion}</code>
+          <div style={{ display: 'grid', gap: '0.85rem' }}>
+            <div style={insetPanelStyle}>
+              <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
+                Last sync{' '}
+                <strong
+                  style={{
+                    color:
+                      lastSync.status === 'succeeded'
+                        ? 'green'
+                        : lastSync.status === 'failed'
+                          ? 'red'
+                          : '#1d4ed8',
+                  }}
+                >
+                  {lastSync.status}
+                </strong>
+                {lastSync.finishedAt && (
+                  <span style={{ marginLeft: '0.45rem', color: '#64748b' }}>
+                    finished {new Date(lastSync.finishedAt).toLocaleString()}
+                  </span>
+                )}
               </p>
+            </div>
+            {lastSync.dataVersion && (
+              <div style={insetPanelStyle}>
+                <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
+                  Data version <span style={codeStyle}>{lastSync.dataVersion}</span>
+                </p>
+              </div>
             )}
             {lastSync.errorCode && (
-              <p style={{ color: 'red', fontSize: '0.875rem' }}>
+              <p style={{ margin: 0, color: 'red', fontSize: '0.875rem' }}>
                 Error: {lastSync.errorCode}
                 {lastSync.errorSummary && ` — ${lastSync.errorSummary}`}
               </p>
             )}
           </div>
         ) : (
-          <p>No sync runs yet.</p>
+          <p style={sectionCopyStyle}>No sync runs yet.</p>
         )}
         {ctx.role === 'admin' && <TriggerSyncButton scopeId={scopeId} />}
-      </section>
-
-      {/* Flow analytics — only present after at least one successful sync */}
-      {filterOptions && (
-        <section style={{ marginTop: '1.5rem' }}>
-          <h2>Flow Analytics</h2>
-          <FlowAnalyticsSection
-            scopeId={scopeId}
-            filterOptions={{
-              ...(filterOptions.issueTypes !== undefined && { issueTypes: filterOptions.issueTypes }),
-              ...(filterOptions.statuses !== undefined && { statuses: filterOptions.statuses }),
-              ...(filterOptions.historicalWindows !== undefined && { historicalWindows: filterOptions.historicalWindows }),
-            }}
-          />
-          {ctx.role === 'admin' && (
-            <HoldDefinitionForm
-              scopeId={scopeId}
-              {...(filterOptions.statuses !== undefined && { availableStatuses: filterOptions.statuses })}
-            />
-          )}
         </section>
-      )}
 
-      {/* Scope configuration */}
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>Configuration</h2>
-        <table style={{ borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-          <tbody>
-            <tr>
-              <td style={{ paddingRight: '1rem', color: '#6b7280' }}>Board ID</td>
-              <td>{scope.boardId}</td>
-            </tr>
-            <tr>
-              <td style={{ paddingRight: '1rem', color: '#6b7280' }}>Timezone</td>
-              <td>{scope.timezone}</td>
-            </tr>
-            <tr>
-              <td style={{ paddingRight: '1rem', color: '#6b7280' }}>Sync interval</td>
-              <td>every {scope.syncIntervalMinutes} minutes</td>
-            </tr>
-            <tr>
-              <td style={{ paddingRight: '1rem', color: '#6b7280', verticalAlign: 'top' }}>
-                Issue types ({scope.includedIssueTypeIds.length})
-              </td>
-              <td>{scope.includedIssueTypeIds.join(', ')}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+        {filterOptions && (
+          <section style={sectionCardStyle}>
+            <div style={sectionHeaderRowStyle}>
+              <div>
+                <h2 style={sectionTitleStyle}>Flow analytics</h2>
+                <p style={sectionCopyStyle}>Use the filters to focus the aging view on specific statuses, issue types, or blocked work.</p>
+              </div>
+            </div>
+            <FlowAnalyticsSection
+              scopeId={scopeId}
+              filterOptions={{
+                ...(filterOptions.issueTypes !== undefined && { issueTypes: filterOptions.issueTypes }),
+                ...(filterOptions.statuses !== undefined && { statuses: filterOptions.statuses }),
+                ...(filterOptions.historicalWindows !== undefined && { historicalWindows: filterOptions.historicalWindows }),
+              }}
+            />
+            {ctx.role === 'admin' && (
+              <HoldDefinitionForm
+                scopeId={scopeId}
+                {...(filterOptions.statuses !== undefined && { availableStatuses: filterOptions.statuses })}
+              />
+            )}
+          </section>
+        )}
 
-      {/* Navigation */}
-      <div style={{ marginTop: '2rem', display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <a href="/admin/jira" style={{ color: '#1d4ed8', textDecoration: 'none', fontSize: '0.875rem' }}>
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderRowStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Configuration</h2>
+              <p style={sectionCopyStyle}>The scope definition below controls what is included in cycle time, throughput, and forecast calculations.</p>
+            </div>
+          </div>
+          <div style={statGridStyle}>
+            <article style={statCardStyle}>
+              <p style={statLabelStyle}>Board ID</p>
+              <p style={statValueStyle}>{scope.boardId}</p>
+            </article>
+            <article style={statCardStyle}>
+              <p style={statLabelStyle}>Timezone</p>
+              <p style={statValueStyle}>{scope.timezone}</p>
+            </article>
+            <article style={statCardStyle}>
+              <p style={statLabelStyle}>Sync Interval</p>
+              <p style={statValueStyle}>{scope.syncIntervalMinutes} min</p>
+            </article>
+            <article style={statCardStyle}>
+              <p style={statLabelStyle}>Issue Types</p>
+              <p style={{ ...statValueStyle, fontSize: '0.98rem', lineHeight: 1.4 }}>{scope.includedIssueTypeIds.join(', ')}</p>
+            </article>
+          </div>
+        </section>
+
+        <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <a href="/admin/jira" style={linkStyle}>
           ← Back to Jira Setup
         </a>
         {filterOptions && (
-          <a href={`/scopes/${scopeId}/forecast`} style={{ color: '#1d4ed8', textDecoration: 'none', fontSize: '0.875rem' }}>
+          <a href={`/scopes/${scopeId}/forecast`} style={linkStyle}>
             📊 Forecast →
           </a>
         )}
+        </div>
       </div>
     </main>
   );

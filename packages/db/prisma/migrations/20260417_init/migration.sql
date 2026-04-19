@@ -216,7 +216,7 @@ ALTER TABLE "HoldPeriod"
   ADD CONSTRAINT "HoldPeriod_no_overlap"
   EXCLUDE USING GIST (
     "workItemId"  WITH =,
-    "source"::text WITH =,
+    "source" WITH =,
     tsrange("startedAt", "endedAt") WITH &&
   );
 

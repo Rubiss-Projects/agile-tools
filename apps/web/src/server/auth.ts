@@ -12,7 +12,11 @@ export interface WorkspaceContext {
 }
 
 // Session cookie name — must match the value set by the auth middleware.
-const SESSION_COOKIE = 'agile_session';
+export const SESSION_COOKIE_NAME = 'agile_session';
+
+export function serializeWorkspaceContext(context: WorkspaceContext): string {
+  return Buffer.from(JSON.stringify(context), 'utf8').toString('base64');
+}
 
 /**
  * Parse the opaque session cookie and return the workspace context, or null
@@ -25,7 +29,7 @@ const SESSION_COOKIE = 'agile_session';
  */
 export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE);
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
   if (!sessionCookie?.value) return null;
 
   try {

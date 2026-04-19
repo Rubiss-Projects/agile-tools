@@ -7,6 +7,24 @@ import type { ForecastResponse, ForecastRequest } from '@agile-tools/shared/cont
 import { ThroughputChart } from '@/components/forecast/throughput-chart';
 import { ForecastForm } from '@/components/forecast/forecast-form';
 import { ForecastResults } from '@/components/forecast/forecast-results';
+import {
+  heroCardStyle,
+  heroCopyStyle,
+  heroTitleStyle,
+  pageShellStyle,
+  sectionCardStyle,
+  sectionCopyStyle,
+  sectionHeaderRowStyle,
+  sectionTitleStyle,
+  statCardStyle,
+  statGridStyle,
+  statLabelStyle,
+  statValueStyle,
+  eyebrowStyle,
+  linkStyle,
+  noticeStyle,
+  codeStyle,
+} from '@/components/app/chrome';
 
 export default function ForecastPage() {
   const { scopeId } = useParams<{ scopeId: string }>();
@@ -69,57 +87,100 @@ export default function ForecastPage() {
   }
 
   return (
-    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      {/* Navigation */}
-      <p style={{ margin: '0 0 1.25rem' }}>
-        <a href={`/scopes/${scopeId}`} style={{ color: '#1d4ed8', textDecoration: 'none', fontSize: '0.875rem' }}>
-          ← Back to Scope
-        </a>
-      </p>
+    <main style={pageShellStyle}>
+      <section style={heroCardStyle}>
+        <p style={eyebrowStyle}>Forecasting</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={heroTitleStyle}>Forecast</h1>
+            <p style={heroCopyStyle}>
+              Review recent throughput and run Monte Carlo forecasts against the pinned snapshot for this scope.
+            </p>
+            <p style={{ margin: '1rem 0 0' }}>
+              <a href={`/scopes/${scopeId}`} style={linkStyle}>← Back to Scope</a>
+            </p>
+          </div>
+        </div>
 
-      <h1 style={{ margin: '0 0 1.5rem' }}>Forecast</h1>
+        <div style={statGridStyle}>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Scope</p>
+            <p style={{ ...statValueStyle, fontSize: '0.92rem' }}><span style={codeStyle}>{scopeId}</span></p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Sample Size</p>
+            <p style={statValueStyle}>{throughput?.sampleSize ?? '—'}</p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Window</p>
+            <p style={statValueStyle}>{throughput?.historicalWindowDays ?? 90}d</p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Snapshot</p>
+            <p style={{ ...statValueStyle, fontSize: '0.92rem' }}>
+              <span style={codeStyle}>{throughput?.dataVersion || 'latest'}</span>
+            </p>
+          </article>
+        </div>
+      </section>
 
-      {/* Historical throughput */}
-      <section style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.125rem' }}>Historical Throughput</h2>
+      <div style={{ display: 'grid', gap: '1.25rem', marginTop: '1.5rem' }}>
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderRowStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Historical throughput</h2>
+              <p style={sectionCopyStyle}>The chart includes zero-completion days so the Monte Carlo sample reflects real dry-day frequency.</p>
+            </div>
+          </div>
         {throughputLoading && (
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Loading throughput data…</p>
+          <p style={sectionCopyStyle}>Loading throughput data…</p>
         )}
         {throughputError && (
-          <p style={{ color: 'red', fontSize: '0.875rem' }}>{throughputError}</p>
+          <div style={noticeStyle('danger')}>
+            <p style={{ margin: 0 }}>{throughputError}</p>
+          </div>
         )}
         {throughput && !throughputLoading && (
           <ThroughputChart response={throughput} />
         )}
-      </section>
+        </section>
 
-      {/* Forecast form */}
-      <section style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.125rem' }}>Run Forecast</h2>
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderRowStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Run forecast</h2>
+              <p style={sectionCopyStyle}>Choose the forecast type, historical window, and confidence levels you want to inspect.</p>
+            </div>
+          </div>
         <ForecastForm
           onSubmit={(req) => { void handleForecast(req); }}
           disabled={forecastLoading || throughputLoading}
           historicalWindowOptions={[30, 60, 90, 180, 365]}
         />
         {forecastLoading && (
-          <p style={{ marginTop: '0.75rem', color: '#6b7280', fontSize: '0.875rem' }}>
+          <p style={{ marginTop: '0.85rem', color: '#64748b', fontSize: '0.875rem' }}>
             Running Monte Carlo simulation…
           </p>
         )}
         {forecastError && (
-          <p style={{ marginTop: '0.75rem', color: 'red', fontSize: '0.875rem' }}>
-            {forecastError}
-          </p>
+          <div style={{ ...noticeStyle('danger'), marginTop: '0.85rem' }}>
+            <p style={{ margin: 0 }}>{forecastError}</p>
+          </div>
         )}
-      </section>
-
-      {/* Forecast results */}
-      {forecastResponse && (
-        <section>
-          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.125rem' }}>Results</h2>
-          <ForecastResults response={forecastResponse} />
         </section>
-      )}
+
+        {forecastResponse && (
+          <section style={sectionCardStyle}>
+            <div style={sectionHeaderRowStyle}>
+              <div>
+                <h2 style={sectionTitleStyle}>Results</h2>
+                <p style={sectionCopyStyle}>Confidence levels are computed from the current throughput sample pinned to the selected data version.</p>
+              </div>
+            </div>
+            <ForecastResults response={forecastResponse} />
+          </section>
+        )}
+      </div>
     </main>
   );
 }

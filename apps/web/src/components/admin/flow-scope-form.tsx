@@ -8,6 +8,18 @@ import type {
   BoardSummary,
   BoardDiscoveryDetail,
 } from '@agile-tools/shared/contracts/api';
+import {
+  buttonStyle,
+  checkboxChipStyle,
+  fieldLabelStyle,
+  helperTextStyle,
+  inputStyle,
+  insetPanelStyle,
+  noticeStyle,
+  sectionCopyStyle,
+  sectionTitleStyle,
+  selectStyle,
+} from '@/components/app/chrome';
 
 interface Props {
   connections: JiraConnection[];
@@ -137,7 +149,7 @@ export function FlowScopeForm({ connections }: Props) {
 
   if (!expanded) {
     return (
-      <button type="button" onClick={() => setExpanded(true)} style={{ marginTop: '0.75rem' }}>
+      <button type="button" onClick={() => setExpanded(true)} style={{ ...buttonStyle('secondary'), marginTop: '0.75rem' }}>
         + Add Flow Scope
       </button>
     );
@@ -145,7 +157,7 @@ export function FlowScopeForm({ connections }: Props) {
 
   if (created) {
     return (
-      <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f9f0', border: '1px solid #b2dfdb' }}>
+      <div style={{ ...noticeStyle('success'), marginTop: '1rem' }}>
         <strong>✓ Flow scope created</strong> for board &ldquo;
         {created.boardName ?? `Board ${created.boardId}`}&rdquo;
         <div style={{ marginTop: '0.5rem' }}>
@@ -162,18 +174,20 @@ export function FlowScopeForm({ connections }: Props) {
     includedIssueTypeIds.length > 0;
 
   return (
-    <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd' }}>
-      <h3 style={{ marginTop: 0 }}>Create Flow Scope</h3>
+    <div style={{ ...insetPanelStyle, marginTop: '1rem' }}>
+      <h3 style={{ ...sectionTitleStyle, marginBottom: '0.35rem' }}>Create Flow Scope</h3>
+      <p style={{ ...sectionCopyStyle, marginBottom: '1rem' }}>
+        Discover a board, inspect the workflow, and define what counts as start, done, and included work.
+      </p>
 
       {/* Step 1: Select connection and discover boards */}
-      <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ ...insetPanelStyle, marginBottom: '0.9rem' }}>
         <label>
-          Connection
-          <br />
+          <span style={fieldLabelStyle}>Connection</span>
           <select
             value={connectionId}
             onChange={(e) => handleConnectionChange(e.target.value)}
-            style={{ marginRight: '0.5rem' }}
+            style={{ ...selectStyle, marginBottom: '0.75rem' }}
           >
             {connections.map((c) => (
               <option key={c.id} value={c.id}>
@@ -182,25 +196,25 @@ export function FlowScopeForm({ connections }: Props) {
             ))}
           </select>
         </label>
-        <button type="button" onClick={() => { void loadBoards(); }} disabled={loadingBoards || !connectionId}>
+        <button type="button" onClick={() => { void loadBoards(); }} disabled={loadingBoards || !connectionId} style={buttonStyle('secondary', loadingBoards || !connectionId)}>
           {loadingBoards ? 'Loading…' : 'Discover Boards'}
         </button>
-        {boardsError && <p style={{ color: 'red', margin: '0.25rem 0' }}>{boardsError}</p>}
+        <p style={helperTextStyle}>Board discovery uses the selected Jira connection and current PAT permissions.</p>
+        {boardsError && <div style={{ ...noticeStyle('danger'), marginTop: '0.75rem' }}><p style={{ margin: 0 }}>{boardsError}</p></div>}
       </div>
 
       {/* Step 2: Select board and inspect */}
       {boards.length > 0 && (
-        <div style={{ marginBottom: '0.75rem' }}>
+        <div style={{ ...insetPanelStyle, marginBottom: '0.9rem' }}>
           <label>
-            Board
-            <br />
+            <span style={fieldLabelStyle}>Board</span>
             <select
               value={selectedBoardId ?? ''}
               onChange={(e) => {
                 setSelectedBoardId(Number(e.target.value));
                 setBoardDetail(null);
               }}
-              style={{ marginRight: '0.5rem' }}
+              style={{ ...selectStyle, marginBottom: '0.75rem' }}
             >
               {boards.map((b) => (
                 <option key={b.boardId} value={b.boardId}>
@@ -209,83 +223,91 @@ export function FlowScopeForm({ connections }: Props) {
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => { void inspectBoard(); }} disabled={inspecting || !selectedBoardId}>
+          <button type="button" onClick={() => { void inspectBoard(); }} disabled={inspecting || !selectedBoardId} style={buttonStyle('secondary', inspecting || !selectedBoardId)}>
             {inspecting ? 'Inspecting…' : 'Inspect Board'}
           </button>
-          {inspectError && <p style={{ color: 'red', margin: '0.25rem 0' }}>{inspectError}</p>}
+          <p style={helperTextStyle}>Inspection reads board statuses and available issue types so you can map flow boundaries.</p>
+          {inspectError && <div style={{ ...noticeStyle('danger'), marginTop: '0.75rem' }}><p style={{ margin: 0 }}>{inspectError}</p></div>}
         </div>
       )}
 
       {/* Step 3: Configure and submit */}
       {boardDetail && (
         <form onSubmit={(e) => { void handleSubmit(e); }}>
-          <fieldset style={{ marginBottom: '0.75rem', border: '1px solid #ccc', padding: '0.75rem' }}>
+            <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
             <legend>
               <strong>Start Statuses</strong> — when work begins
             </legend>
-            {boardDetail.statuses.map((s) => (
-              <label key={s.id} style={{ display: 'block' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+              {boardDetail.statuses.map((s) => (
+                <label key={s.id} style={checkboxChipStyle(startStatusIds.includes(s.id))}>
                 <input
                   type="checkbox"
                   checked={startStatusIds.includes(s.id)}
                   onChange={() => setStartStatusIds((prev) => toggleId(prev, s.id))}
+                    style={{ accentColor: '#1d4ed8' }}
                 />{' '}
                 {s.name}
               </label>
             ))}
+              </div>
           </fieldset>
 
-          <fieldset style={{ marginBottom: '0.75rem', border: '1px solid #ccc', padding: '0.75rem' }}>
+            <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
             <legend>
               <strong>Done Statuses</strong> — when work completes
             </legend>
-            {boardDetail.statuses.map((s) => (
-              <label key={s.id} style={{ display: 'block' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+              {boardDetail.statuses.map((s) => (
+                <label key={s.id} style={checkboxChipStyle(doneStatusIds.includes(s.id))}>
                 <input
                   type="checkbox"
                   checked={doneStatusIds.includes(s.id)}
                   onChange={() => setDoneStatusIds((prev) => toggleId(prev, s.id))}
+                    style={{ accentColor: '#1d4ed8' }}
                 />{' '}
                 {s.name}
               </label>
             ))}
+              </div>
           </fieldset>
 
-          <fieldset style={{ marginBottom: '0.75rem', border: '1px solid #ccc', padding: '0.75rem' }}>
+            <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
             <legend>
               <strong>Issue Types</strong> — types to include in flow tracking
             </legend>
-            {boardDetail.issueTypes.map((t) => (
-              <label key={t.id} style={{ display: 'block' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+              {boardDetail.issueTypes.map((t) => (
+                <label key={t.id} style={checkboxChipStyle(includedIssueTypeIds.includes(t.id))}>
                 <input
                   type="checkbox"
                   checked={includedIssueTypeIds.includes(t.id)}
                   onChange={() => setIncludedIssueTypeIds((prev) => toggleId(prev, t.id))}
+                    style={{ accentColor: '#1d4ed8' }}
                 />{' '}
                 {t.name}
               </label>
             ))}
+              </div>
           </fieldset>
 
           <div style={{ marginBottom: '0.75rem' }}>
             <label>
-              Timezone (IANA name)
-              <br />
+                <span style={fieldLabelStyle}>Timezone</span>
               <input
                 type="text"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
                 required
                 placeholder="UTC"
-                style={{ width: '200px' }}
+                  style={{ ...inputStyle, maxWidth: '16rem' }}
               />
             </label>
           </div>
 
           <div style={{ marginBottom: '0.75rem' }}>
             <label>
-              Sync interval (minutes, 5–15)
-              <br />
+                <span style={fieldLabelStyle}>Sync Interval</span>
               <input
                 type="number"
                 value={syncIntervalMinutes}
@@ -293,17 +315,18 @@ export function FlowScopeForm({ connections }: Props) {
                 max={15}
                 onChange={(e) => setSyncIntervalMinutes(Number(e.target.value))}
                 required
-                style={{ width: '80px' }}
+                  style={{ ...inputStyle, maxWidth: '8rem' }}
               />
             </label>
+              <p style={helperTextStyle}>Use a 5 to 15 minute cadence to stay within the default guard rails.</p>
           </div>
 
-          {submitError && <p style={{ color: 'red' }}>{submitError}</p>}
-          <button type="submit" disabled={!canSubmit}>
+            {submitError && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{submitError}</p></div>}
+            <button type="submit" disabled={!canSubmit} style={buttonStyle('primary', !canSubmit)}>
             {submitting ? 'Creating…' : 'Create Flow Scope'}
           </button>
           {!submitting && !canSubmit && (
-            <span style={{ marginLeft: '0.5rem', color: '#888', fontSize: '0.875rem' }}>
+              <span style={{ marginLeft: '0.75rem', color: '#64748b', fontSize: '0.875rem' }}>
               Select at least one start status, done status, and issue type.
             </span>
           )}
@@ -311,7 +334,7 @@ export function FlowScopeForm({ connections }: Props) {
       )}
 
       <div style={{ marginTop: '1rem' }}>
-        <button type="button" onClick={() => setExpanded(false)}>
+          <button type="button" onClick={() => setExpanded(false)} style={buttonStyle('secondary')}>
           Cancel
         </button>
       </div>

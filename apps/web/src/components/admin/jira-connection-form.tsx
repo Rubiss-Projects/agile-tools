@@ -3,6 +3,17 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { JiraConnection } from '@agile-tools/shared/contracts/api';
+import {
+  buttonStyle,
+  fieldLabelStyle,
+  helperTextStyle,
+  inputStyle,
+  insetPanelStyle,
+  noticeStyle,
+  sectionCopyStyle,
+  sectionTitleStyle,
+  tonePillStyle,
+} from '@/components/app/chrome';
 
 // ─── Create Connection Form ───────────────────────────────────────────────────
 
@@ -47,56 +58,58 @@ export function JiraConnectionForm() {
   }
 
   return (
-    <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd' }}>
-      <h3 style={{ marginTop: 0 }}>Add Jira Connection</h3>
+    <div style={{ ...insetPanelStyle, marginTop: '1rem' }}>
+      <h3 style={{ ...sectionTitleStyle, marginBottom: '0.35rem' }}>Add Jira Connection</h3>
+      <p style={{ ...sectionCopyStyle, marginBottom: '1rem' }}>
+        Store the Jira base URL and PAT used for board discovery and scheduled syncs.
+      </p>
       <form onSubmit={(e) => { void handleSubmit(e); }}>
         <div style={{ marginBottom: '0.75rem' }}>
           <label>
-            Jira Base URL
-            <br />
+            <span style={fieldLabelStyle}>Jira Base URL</span>
             <input
               type="url"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://jira.example.com"
               required
-              style={{ width: '100%', maxWidth: '400px' }}
+              style={inputStyle}
             />
           </label>
+          <p style={helperTextStyle}>Use the root Jira URL for the Data Center instance you want to query.</p>
         </div>
         <div style={{ marginBottom: '0.75rem' }}>
           <label>
-            Personal Access Token (PAT)
-            <br />
+            <span style={fieldLabelStyle}>Personal Access Token</span>
             <input
               type="password"
               value={pat}
               onChange={(e) => setPat(e.target.value)}
               required
-              style={{ width: '100%', maxWidth: '400px' }}
+              style={inputStyle}
             />
           </label>
         </div>
         <div style={{ marginBottom: '0.75rem' }}>
           <label>
-            Display Name (optional)
-            <br />
+            <span style={fieldLabelStyle}>Display Name</span>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="e.g. My Team Jira"
-              style={{ width: '100%', maxWidth: '400px' }}
+              style={inputStyle}
             />
           </label>
+          <p style={helperTextStyle}>Optional label used to distinguish multiple Jira instances in the workspace.</p>
         </div>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit" disabled={submitting}>
+        {error && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{error}</p></div>}
+        <button type="submit" disabled={submitting} style={buttonStyle('primary', submitting)}>
           {submitting ? 'Creating…' : 'Create Connection'}
         </button>
       </form>
       {created && (
-        <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f0f9f0', border: '1px solid #b2dfdb' }}>
+        <div style={{ ...noticeStyle('success'), marginTop: '0.85rem' }}>
           <strong>✓ Connection created</strong>: {created.displayName ?? created.baseUrl}
           <div style={{ marginTop: '0.5rem' }}>
             <ValidateConnectionButton connectionId={created.id} />
@@ -139,12 +152,12 @@ export function ValidateConnectionButton({ connectionId }: { connectionId: strin
   }
 
   return (
-    <span>
-      <button type="button" onClick={() => { void handleValidate(); }} disabled={validating}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.65rem' }}>
+      <button type="button" onClick={() => { void handleValidate(); }} disabled={validating} style={buttonStyle('secondary', validating)}>
         {validating ? 'Validating…' : 'Validate Connection'}
       </button>
       {result && (
-        <span style={{ marginLeft: '0.5rem', color: result.healthy ? 'green' : 'red' }}>
+        <span style={tonePillStyle(result.healthy ? 'positive' : 'danger')}>
           {result.message}
         </span>
       )}

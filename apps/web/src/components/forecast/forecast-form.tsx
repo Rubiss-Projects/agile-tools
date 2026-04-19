@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import type { ForecastRequest } from '@agile-tools/shared/contracts/forecast';
+import { buttonStyle, checkboxChipStyle, fieldLabelStyle, insetPanelStyle, noticeStyle, inputStyle, selectStyle } from '@/components/app/chrome';
 
 interface ForecastFormProps {
   onSubmit: (request: ForecastRequest) => void;
@@ -71,22 +72,13 @@ export function ForecastForm({
   return (
     <form
       onSubmit={handleSubmit}
-      style={{
-        padding: '0.75rem 1rem',
-        background: '#f9fafb',
-        border: '1px solid #e5e7eb',
-        borderRadius: '4px',
-        fontSize: '0.875rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.875rem',
-      }}
+      style={{ ...insetPanelStyle, fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.95rem' }}
     >
       {/* Forecast type */}
       <div>
-        <p style={{ margin: '0 0 0.375rem', fontWeight: 500 }}>Forecast Type</p>
+        <p style={{ ...fieldLabelStyle, margin: '0 0 0.5rem' }}>Forecast Type</p>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+          <label style={checkboxChipStyle(type === 'when')}>
             <input
               type="radio"
               name="forecast-type"
@@ -94,11 +86,12 @@ export function ForecastForm({
               checked={type === 'when'}
               onChange={() => setType('when')}
               disabled={disabled}
+              style={{ accentColor: '#1d4ed8' }}
               aria-label="When will we finish?"
             />
             When will we finish?
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+          <label style={checkboxChipStyle(type === 'how_many')}>
             <input
               type="radio"
               name="forecast-type"
@@ -106,6 +99,7 @@ export function ForecastForm({
               checked={type === 'how_many'}
               onChange={() => setType('how_many')}
               disabled={disabled}
+              style={{ accentColor: '#1d4ed8' }}
               aria-label="How many stories by a date?"
             />
             How many by a date?
@@ -118,7 +112,7 @@ export function ForecastForm({
         <div>
           <label
             htmlFor="remaining-stories"
-            style={{ display: 'block', marginBottom: '0.25rem', color: '#374151' }}
+            style={{ ...fieldLabelStyle, marginBottom: '0.35rem' }}
           >
             Remaining story count
           </label>
@@ -129,7 +123,7 @@ export function ForecastForm({
             value={remainingStoryCount}
             onChange={(e) => setRemainingStoryCount(Number(e.target.value))}
             disabled={disabled}
-            style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem', width: '6rem' }}
+            style={{ ...inputStyle, maxWidth: '8rem' }}
             aria-label="Number of remaining stories"
           />
         </div>
@@ -137,7 +131,7 @@ export function ForecastForm({
         <div>
           <label
             htmlFor="target-date"
-            style={{ display: 'block', marginBottom: '0.25rem', color: '#374151' }}
+            style={{ ...fieldLabelStyle, marginBottom: '0.35rem' }}
           >
             Target date
           </label>
@@ -148,7 +142,7 @@ export function ForecastForm({
             min={dateOffset(1)}
             onChange={(e) => setTargetDate(e.target.value)}
             disabled={disabled}
-            style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+            style={{ ...inputStyle, maxWidth: '14rem' }}
             aria-label="Target completion date"
           />
         </div>
@@ -158,7 +152,7 @@ export function ForecastForm({
       <div>
         <label
           htmlFor="forecast-window"
-          style={{ display: 'block', marginBottom: '0.25rem', color: '#374151' }}
+          style={{ ...fieldLabelStyle, marginBottom: '0.35rem' }}
         >
           Historical window
         </label>
@@ -167,7 +161,7 @@ export function ForecastForm({
           value={historicalWindowDays}
           onChange={(e) => setHistoricalWindowDays(Number(e.target.value))}
           disabled={disabled}
-          style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
+          style={{ ...selectStyle, maxWidth: '11rem' }}
           aria-label="Historical window in days"
         >
           {windows.map((w) => (
@@ -180,18 +174,19 @@ export function ForecastForm({
 
       {/* Confidence levels */}
       <div>
-        <p style={{ margin: '0 0 0.375rem', color: '#374151' }}>Confidence levels</p>
+        <p style={{ ...fieldLabelStyle, margin: '0 0 0.5rem' }}>Confidence Levels</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
           {CONFIDENCE_OPTIONS.map((level) => (
             <label
               key={level}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}
+              style={checkboxChipStyle(confidenceLevels.includes(level))}
             >
               <input
                 type="checkbox"
                 checked={confidenceLevels.includes(level)}
                 onChange={() => toggleConfidence(level)}
                 disabled={disabled}
+                style={{ accentColor: '#1d4ed8' }}
                 aria-label={`${level}% confidence`}
               />
               {level}%
@@ -201,22 +196,14 @@ export function ForecastForm({
       </div>
 
       {validationError && (
-        <p style={{ margin: 0, color: 'red', fontSize: '0.8125rem' }}>{validationError}</p>
+        <div style={noticeStyle('danger')}><p style={{ margin: 0, fontSize: '0.8125rem' }}>{validationError}</p></div>
       )}
 
       <div>
         <button
           type="submit"
           disabled={disabled}
-          style={{
-            padding: '0.4375rem 1rem',
-            fontSize: '0.875rem',
-            background: disabled ? '#e5e7eb' : '#1d4ed8',
-            color: disabled ? '#6b7280' : 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-          }}
+          style={buttonStyle('primary', Boolean(disabled))}
         >
           Run Forecast
         </button>

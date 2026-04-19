@@ -21,6 +21,7 @@ async function getBoss(): Promise<PgBoss> {
   });
 
   await _boss.start();
+  await _boss.createQueue(SCOPE_SYNC_QUEUE);
   return _boss;
 }
 

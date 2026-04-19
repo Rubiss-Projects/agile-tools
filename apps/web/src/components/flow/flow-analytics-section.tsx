@@ -7,6 +7,7 @@ import { FlowFiltersPanel } from './flow-filters';
 import type { FlowFilters, FilterOptions } from './flow-filters';
 import { AgingScatterPlot } from './aging-scatter-plot';
 import { WorkItemDetailDrawer } from './work-item-detail-drawer';
+import { codeStyle, insetPanelStyle, noticeStyle, tonePillStyle } from '@/components/app/chrome';
 
 interface FlowAnalyticsSectionProps {
   scopeId: string;
@@ -79,14 +80,16 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
     <div>
       {/* Aging model summary */}
       {response && (
-        <div style={{ marginBottom: '0.75rem', fontSize: '0.8125rem', color: '#6b7280' }}>
+        <div style={{ ...insetPanelStyle, marginBottom: '0.85rem', fontSize: '0.85rem', color: '#475569' }}>
           {response.agingModel.sampleSize > 0 ? (
             <span>
               Thresholds (p50 / p70 / p85):{' '}
-              <strong style={{ color: '#374151' }}>
+              <strong style={{ color: '#0f172a' }}>
                 {response.agingModel.p50.toFixed(1)}d / {response.agingModel.p70.toFixed(1)}d / {response.agingModel.p85.toFixed(1)}d
-              </strong>{' '}
-              from {response.agingModel.sampleSize} completed stories
+              </strong>{' '}from {response.agingModel.sampleSize} completed stories
+              <span style={{ marginLeft: '0.55rem' }}>
+                <span style={codeStyle}>{response.sampleSize} active items</span>
+              </span>
             </span>
           ) : (
             <span>No aging thresholds yet (sync more data)</span>
@@ -109,16 +112,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
 
       {/* Warnings from API */}
       {response?.warnings && response.warnings.length > 0 && (
-        <div
-          style={{
-            marginTop: '0.75rem',
-            padding: '0.5rem 0.75rem',
-            background: '#fef9c3',
-            border: '1px solid #fde047',
-            borderRadius: '4px',
-            fontSize: '0.875rem',
-          }}
-        >
+        <div style={{ ...noticeStyle('warning'), marginTop: '0.75rem', fontSize: '0.875rem' }}>
           {response.warnings.map((w, i) => (
             <p key={i} style={{ margin: i === 0 ? 0 : '0.25rem 0 0' }}>
               ⚠ {w.message}
@@ -128,7 +122,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
       )}
 
       {/* Scatter plot */}
-      <div style={{ marginTop: '0.75rem', position: 'relative' }}>
+      <div style={{ ...insetPanelStyle, marginTop: '0.85rem', position: 'relative' }}>
         {loading && (
           <div
             style={{
@@ -160,13 +154,13 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.75rem' }}>
+      <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.75rem', fontSize: '0.75rem', flexWrap: 'wrap' }}>
         {[
           { color: '#22c55e', label: 'Normal (≤ p50)' },
           { color: '#f59e0b', label: 'Watch (p50–p85)' },
           { color: '#ef4444', label: 'Aging (> p85)' },
         ].map((item) => (
-          <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span key={item.label} style={{ ...tonePillStyle('neutral'), gap: '0.45rem' }}>
             <span
               style={{
                 width: '0.75rem',

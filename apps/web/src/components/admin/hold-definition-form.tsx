@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type FormEvent } from 'react';
 import type { HoldDefinitionResponse } from '@agile-tools/shared/contracts/api';
+import { buttonStyle, checkboxChipStyle, insetPanelStyle, noticeStyle, sectionCopyStyle } from '@/components/app/chrome';
 
 interface HoldDefinitionFormProps {
   scopeId: string;
@@ -74,47 +75,41 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
   }
 
   return (
-    <div style={{ marginTop: '1rem', borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+    <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
       <button
         onClick={() => setExpanded((v) => !v)}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          fontSize: '0.875rem',
-          color: '#1d4ed8',
-          padding: 0,
-        }}
+        style={buttonStyle('secondary')}
       >
         {expanded ? '▲' : '▼'} Hold Definition
         {current && (
-          <span style={{ marginLeft: '0.5rem', color: '#6b7280' }}>
+          <span style={{ marginLeft: '0.5rem', color: '#475569' }}>
             ({current.holdStatusIds.length} hold statuses)
           </span>
         )}
       </button>
 
       {expanded && (
-        <div style={{ marginTop: '0.75rem', fontSize: '0.875rem' }}>
-          {loading && <p style={{ color: '#6b7280' }}>Loading…</p>}
+        <div style={{ ...insetPanelStyle, marginTop: '0.85rem', fontSize: '0.875rem' }}>
+          {loading && <p style={sectionCopyStyle}>Loading…</p>}
           {!loading && (
             <form onSubmit={(e) => { void handleSubmit(e); }}>
               {availableStatuses && availableStatuses.length > 0 ? (
                 <div>
-                  <p style={{ margin: '0 0 0.5rem', color: '#374151', fontWeight: 500 }}>
+                  <p style={{ margin: '0 0 0.6rem', color: '#0f172a', fontWeight: 700 }}>
                     Hold Statuses
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                     {availableStatuses.map((s) => (
                       <label
                         key={s.id}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}
+                        style={checkboxChipStyle(selected.includes(s.id))}
                       >
                         <input
                           type="checkbox"
                           checked={selected.includes(s.id)}
                           onChange={() => toggleStatus(s.id)}
                           disabled={saving}
+                          style={{ accentColor: '#1d4ed8' }}
                         />
                         {s.name}
                       </label>
@@ -122,19 +117,19 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
                   </div>
                 </div>
               ) : (
-                <p style={{ color: '#6b7280' }}>
+                <p style={sectionCopyStyle}>
                   No workflow statuses available yet. Sync the board first.
                 </p>
               )}
-              {error && <p style={{ color: 'red', margin: '0 0 0.5rem' }}>{error}</p>}
+              {error && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{error}</p></div>}
               {saved && (
-                <p style={{ color: 'green', margin: '0 0 0.5rem' }}>Hold definition saved.</p>
+                <div style={{ ...noticeStyle('success'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>Hold definition saved.</p></div>
               )}
               {availableStatuses && availableStatuses.length > 0 && (
                 <button
                   type="submit"
                   disabled={saving}
-                  style={{ fontSize: '0.875rem', padding: '0.375rem 0.75rem', cursor: 'pointer' }}
+                  style={buttonStyle('secondary', saving)}
                 >
                   {saving ? 'Saving…' : 'Save Hold Definition'}
                 </button>

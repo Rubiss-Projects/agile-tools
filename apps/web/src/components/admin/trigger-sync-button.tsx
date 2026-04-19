@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { buttonStyle, tonePillStyle } from '@/components/app/chrome';
 
 export function TriggerSyncButton({ scopeId }: { scopeId: string }) {
   const router = useRouter();
@@ -33,14 +34,12 @@ export function TriggerSyncButton({ scopeId }: { scopeId: string }) {
   }
 
   return (
-    <div style={{ marginTop: '0.5rem' }}>
-      <button type="button" onClick={() => { void handleTrigger(); }} disabled={loading}>
+    <div style={{ marginTop: '0.9rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <button type="button" onClick={() => { void handleTrigger(); }} disabled={loading} style={buttonStyle('primary', loading)}>
         {loading ? 'Triggering…' : 'Trigger Manual Sync'}
       </button>
       {result && (
-        <span
-          style={{ marginLeft: '0.75rem', color: result.ok ? 'green' : result.message.includes('already') ? '#b45309' : 'red' }}
-        >
+        <span style={tonePillStyle(result.ok ? 'positive' : result.message.includes('already') ? 'warning' : 'danger')}>
           {result.message}
         </span>
       )}

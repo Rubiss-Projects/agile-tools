@@ -1,19 +1,53 @@
-import { redirect } from 'next/navigation';
 import { getPrismaClient, listJiraConnections, listFlowScopes } from '@agile-tools/db';
 import { getWorkspaceContext } from '@/server/auth';
 import { mapConnection } from '@/app/api/v1/admin/jira-connections/_lib';
 import { mapScope } from '@/app/api/v1/admin/scopes/_lib';
 import { JiraConnectionForm, ValidateConnectionButton } from '@/components/admin/jira-connection-form';
 import { FlowScopeForm } from '@/components/admin/flow-scope-form';
+import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
+import {
+  codeStyle,
+  eyebrowStyle,
+  heroCardStyle,
+  heroCopyStyle,
+  heroTitleStyle,
+  itemCardStyle,
+  linkStyle,
+  listStyle,
+  pageShellStyle,
+  sectionCardStyle,
+  sectionCopyStyle,
+  sectionHeaderRowStyle,
+  sectionStackStyle,
+  sectionTitleStyle,
+  statCardStyle,
+  statGridStyle,
+  statLabelStyle,
+  statValueStyle,
+  tonePillStyle,
+} from '@/components/app/chrome';
 
 export default async function AdminJiraPage() {
   const ctx = await getWorkspaceContext();
 
-  if (!ctx) redirect('/');
+  if (!ctx) {
+    return (
+      <AuthRequiredPanel
+        title="Jira setup requires a workspace session"
+        description="The admin area is guarded by the workspace session cookie. In local development you can seed a demo workspace and continue directly into the setup flow."
+        nextPath="/admin/jira"
+      />
+    );
+  }
+
   if (ctx.role !== 'admin') {
     return (
-      <main style={{ padding: '2rem' }}>
-        <p style={{ color: 'red' }}>Access denied. Administrator access is required.</p>
+      <main style={pageShellStyle}>
+        <section style={sectionCardStyle}>
+          <p style={{ ...eyebrowStyle, color: '#991b1b' }}>Access Control</p>
+          <h1 style={{ ...heroTitleStyle, fontSize: '2rem' }}>Administrator access required</h1>
+          <p style={heroCopyStyle}>This workspace page is limited to administrators because it can modify Jira connections and scope configuration.</p>
+        </section>
       </main>
     );
   }
@@ -42,41 +76,77 @@ export default async function AdminJiraPage() {
     needs_attention: 'red',
   };
 
-  return (
-    <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1>Jira Setup</h1>
+  const connectionTone = (status: string) => {
+    if (status === 'healthy') return 'positive';
+    if (status === 'stale') return 'warning';
+    if (status === 'unhealthy') return 'danger';
+    if (status === 'validating') return 'info';
+    return 'neutral';
+  };
 
-      {/* ── Connections ─────────────────────────────────────────────── */}
-      <section>
-        <h2>Connections</h2>
+  const scopeTone = (status: string) => {
+    if (status === 'active') return 'positive';
+    if (status === 'paused') return 'warning';
+    if (status === 'needs_attention') return 'danger';
+    return 'neutral';
+  };
+
+  return (
+    <main style={pageShellStyle}>
+      <section style={heroCardStyle}>
+        <p style={eyebrowStyle}>Workspace Admin</p>
+        <h1 style={heroTitleStyle}>Jira setup</h1>
+        <p style={heroCopyStyle}>
+          Manage Jira connections, validate access, and define the flow scopes that feed analytics and forecasting.
+        </p>
+        <div style={statGridStyle}>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Connections</p>
+            <p style={statValueStyle}>{connectionSummaries.length}</p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Flow Scopes</p>
+            <p style={statValueStyle}>{scopeSummaries.length}</p>
+          </article>
+          <article style={statCardStyle}>
+            <p style={statLabelStyle}>Workspace</p>
+            <p style={{ ...statValueStyle, fontSize: '1rem' }}>
+              <span style={codeStyle}>{ctx.workspaceId}</span>
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <div style={sectionStackStyle}>
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderRowStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Connections</h2>
+              <p style={sectionCopyStyle}>Each connection stores the Jira base URL and PAT used for discovery and sync.</p>
+            </div>
+          </div>
         {connectionSummaries.length === 0 ? (
-          <p>No Jira connections configured yet.</p>
+          <p style={sectionCopyStyle}>No Jira connections configured yet.</p>
         ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
+          <ul style={listStyle}>
             {connectionSummaries.map((conn) => (
               <li
                 key={conn.id}
-                style={{
-                  padding: '0.75rem',
-                  marginBottom: '0.5rem',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '4px',
-                }}
+                style={itemCardStyle}
               >
-                <strong>{conn.displayName ?? conn.baseUrl}</strong>
-                <span
-                  style={{
-                    marginLeft: '0.75rem',
-                    color: healthBadgeColor[conn.healthStatus] ?? '#6b7280',
-                    fontWeight: 600,
-                  }}
-                >
-                  {conn.healthStatus}
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '1rem', color: '#0f172a' }}>
+                      {conn.displayName ?? conn.baseUrl}
+                    </strong>
+                    <p style={{ margin: '0.45rem 0 0', color: '#475569', fontSize: '0.92rem' }}>{conn.baseUrl}</p>
+                  </div>
+                  <span style={tonePillStyle(connectionTone(conn.healthStatus))}>{conn.healthStatus}</span>
+                </div>
                 {conn.lastErrorCode && (
-                  <span style={{ marginLeft: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
-                    (error: {conn.lastErrorCode})
-                  </span>
+                  <p style={{ margin: '0.75rem 0 0', color: '#92400e', fontSize: '0.84rem' }}>
+                    Last error: <span style={codeStyle}>{conn.lastErrorCode}</span>
+                  </p>
                 )}
                 <div style={{ marginTop: '0.5rem' }}>
                   <ValidateConnectionButton connectionId={conn.id} />
@@ -87,44 +157,34 @@ export default async function AdminJiraPage() {
         )}
 
         <JiraConnectionForm />
-      </section>
+        </section>
 
-      {/* ── Flow Scopes ──────────────────────────────────────────────── */}
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Flow Scopes</h2>
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderRowStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Flow scopes</h2>
+              <p style={sectionCopyStyle}>Scopes define the board, issue types, start states, and done states used to build projections.</p>
+            </div>
+          </div>
         {scopeSummaries.length === 0 ? (
-          <p>No flow scopes configured yet.</p>
+          <p style={sectionCopyStyle}>No flow scopes configured yet.</p>
         ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
+          <ul style={listStyle}>
             {scopeSummaries.map((scope) => (
               <li
                 key={scope.id}
-                style={{
-                  padding: '0.75rem',
-                  marginBottom: '0.5rem',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
+                style={{ ...itemCardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}
               >
-                <span>
-                  <strong>{scope.boardName ?? `Board ${scope.boardId}`}</strong>
-                  <span
-                    style={{
-                      marginLeft: '0.75rem',
-                      color: scopeStatusColor[scope.status] ?? '#6b7280',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {scope.status}
-                  </span>
-                  <span style={{ marginLeft: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
-                    — every {scope.syncIntervalMinutes} min
-                  </span>
-                </span>
-                <a href={`/scopes/${scope.id}`} style={{ textDecoration: 'none', color: '#1d4ed8' }}>
+                <div>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong style={{ color: '#0f172a' }}>{scope.boardName ?? `Board ${scope.boardId}`}</strong>
+                    <span style={tonePillStyle(scopeTone(scope.status))}>{scope.status}</span>
+                  </div>
+                  <p style={{ margin: '0.45rem 0 0', color: '#475569', fontSize: '0.92rem' }}>
+                    Board {scope.boardId} · every {scope.syncIntervalMinutes} minutes
+                  </p>
+                </div>
+                <a href={`/scopes/${scope.id}`} style={linkStyle}>
                   View →
                 </a>
               </li>
@@ -136,11 +196,12 @@ export default async function AdminJiraPage() {
           <FlowScopeForm connections={connectionSummaries} />
         )}
         {connectionSummaries.length === 0 && (
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+          <p style={sectionCopyStyle}>
             Add a Jira connection before creating a flow scope.
           </p>
         )}
-      </section>
+        </section>
+      </div>
     </main>
   );
 }

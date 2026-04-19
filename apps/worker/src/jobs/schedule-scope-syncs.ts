@@ -20,6 +20,8 @@ const DISPATCH_QUEUE_NAME = 'scope:sync-dispatch';
 export async function registerScopeSyncDispatch(db: PrismaClient): Promise<void> {
   const boss = getQueue();
 
+  await boss.createQueue(DISPATCH_QUEUE_NAME);
+
   await boss.work<Record<string, never>>(
     DISPATCH_QUEUE_NAME,
     { batchSize: 1 },

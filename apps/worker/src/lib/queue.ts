@@ -27,6 +27,11 @@ export async function initQueue(databaseUrl: string): Promise<PgBoss> {
   });
 
   await _boss.start();
+
+  for (const queueName of Object.values(QUEUE_NAMES)) {
+    await _boss.createQueue(queueName);
+  }
+
   return _boss;
 }
 

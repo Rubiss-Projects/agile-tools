@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { appBodyStyle } from '@/components/app/chrome';
 
 export const metadata: Metadata = {
   title: 'Agile Tools — Kanban Flow Forecasting',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body style={appBodyStyle}>{children}</body>
     </html>
   );
 }
