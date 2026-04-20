@@ -1,6 +1,17 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig } from 'vitest/config';
 
+import { createWorkspacePackageAliases } from '../support/workspace-package-aliases';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../..');
+
 export default defineConfig({
+  resolve: {
+    alias: createWorkspacePackageAliases(repoRoot),
+  },
   test: {
     include: [
       'tests/integration/**/*.{test,spec}.{ts,tsx}',

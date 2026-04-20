@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vitest/config';
 
+import { createWorkspacePackageAliases } from './tests/support/workspace-package-aliases';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextDir = path.resolve(__dirname, 'apps/web/node_modules/next');
 
@@ -11,10 +13,17 @@ export default defineConfig({
     jsx: 'automatic',
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'apps/web/src'),
-      'next/navigation': path.join(nextDir, 'navigation.js'),
-    },
+    alias: [
+      ...createWorkspacePackageAliases(__dirname),
+      {
+        find: '@',
+        replacement: path.resolve(__dirname, 'apps/web/src'),
+      },
+      {
+        find: 'next/navigation',
+        replacement: path.join(nextDir, 'navigation.js'),
+      },
+    ],
   },
   test: {
     // Unit tests live alongside source files (*.test.ts, *.spec.ts)
