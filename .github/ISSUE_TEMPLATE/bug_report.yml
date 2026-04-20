@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a reproducible defect in Agile Tools.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report.
+
+        Please search existing issues and discussions first, and do not include secrets, Jira PATs, or other sensitive data.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project is affected?
+      options:
+        - Web UI
+        - Worker and jobs
+        - Jira sync
+        - Flow analytics
+        - Forecasting
+        - Database and migrations
+        - Docker and deployment
+        - CI and release automation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behavior
+      description: What is happening now?
+      placeholder: Describe the bug clearly and concretely.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal reproduction.
+      placeholder: |
+        1. Go to ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Share the versions and runtime details that matter.
+      placeholder: |
+        OS:
+        Node.js:
+        pnpm:
+        Docker:
+        Browser:
+        Jira version:
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or extra context
+      description: Paste relevant output or add screenshots when helpful.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and discussions first.
+          required: true
+        - label: I removed or redacted secrets and sensitive data.
+          required: true

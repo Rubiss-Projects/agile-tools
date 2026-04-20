@@ -1,6 +1,6 @@
 # Agile Tools — Kanban Flow Forecasting
 
-An internal web application for kanban teams. Connects to a self-hosted Jira Data Center instance via a service-account PAT, synchronizes issue data on a local PostgreSQL database, and serves flow visibility, aging analysis, and story-count Monte Carlo forecasts entirely from local read models.
+A self-hosted web application for kanban teams. Connects to a self-hosted Jira Data Center instance via a service-account PAT, synchronizes issue data on a local PostgreSQL database, and serves flow visibility, aging analysis, and story-count Monte Carlo forecasts entirely from local read models.
 
 ## Features
 
@@ -191,6 +191,13 @@ pnpm test:perf
 # Build all packages
 pnpm build
 ```
+
+## Community
+
+- See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, validation, and pull request expectations.
+- See [`SUPPORT.md`](SUPPORT.md) for question routing and support expectations.
+- See [`SECURITY.md`](SECURITY.md) for responsible vulnerability reporting.
+- See [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for collaboration standards.
 
 ## Operator Workflow
 

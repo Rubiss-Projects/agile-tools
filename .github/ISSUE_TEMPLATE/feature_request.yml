@@ -1,0 +1,65 @@
+name: Feature request
+description: Propose a product or engineering improvement for Agile Tools.
+title: "[Feature]: "
+labels:
+  - enhancement
+  - feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement.
+
+        For broad ideas or early design discussion, GitHub Discussions is often the best starting point.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project would this affect?
+      options:
+        - Web UI
+        - Worker and jobs
+        - Jira sync
+        - Flow analytics
+        - Forecasting
+        - Database and migrations
+        - Docker and deployment
+        - CI and release automation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem are you trying to solve?
+      placeholder: Describe the workflow, pain point, or missing capability.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What do you want the project to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds or other approaches you have considered.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add examples, screenshots, mockups, or links if helpful.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and discussions first.
+          required: true
+        - label: I am open to refining scope based on maintainers' feedback.
+          required: false
