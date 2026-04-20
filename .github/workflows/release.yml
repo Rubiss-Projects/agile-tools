@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing semver tag to publish, for example v0.2.0 or v0.2.0-rc.1
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_DESCRIPTION: Kanban flow forecasting runtime image for the Agile Tools web and worker services
+
+jobs:
+  publish:
+    name: Publish image and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Resolve release target
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tags must match vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease." >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          prerelease=false
+          latest=true
+
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+            latest=false
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.vars.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Ensure tag is on default branch history
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${DEFAULT_BRANCH}:${DEFAULT_BRANCH}"
+
+          if ! git merge-base --is-ancestor HEAD "${DEFAULT_BRANCH}"; then
+            echo "Release tags must point to a commit contained in ${DEFAULT_BRANCH}." >&2
+            exit 1
+          fi
+
+      - name: Capture release commit
+        id: git
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.vars.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.vars.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ steps.vars.outputs.tag }},enable=${{ !startsWith(steps.vars.outputs.tag, 'v0.') && steps.vars.outputs.prerelease != 'true' }}
+            type=raw,value=latest,enable=${{ steps.vars.outputs.latest == 'true' }}
+            type=sha
+          labels: |
+            org.opencontainers.image.title=Agile Tools
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.git.outputs.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+          annotations: |
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+
+      - name: Build and push container image
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          pull: true
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Create GitHub release if needed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.vars.outputs.tag }}
+          VERSION: ${{ steps.vars.outputs.version }}
+          PRERELEASE: ${{ steps.vars.outputs.prerelease }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists; skipping creation."
+            exit 0
+          fi
+
+          notes=$(cat <<EOF
+          Container image:
+
+          - ${IMAGE}:${VERSION}
+          - ${IMAGE}@${DIGEST}
+          EOF
+          )
+
+          args=(release create "$TAG" --verify-tag --generate-notes --notes "$notes")
+
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease --latest=false)
+          fi
+
+          gh "${args[@]}"

@@ -134,6 +134,33 @@ docker compose --profile runtime up --build -d
 
 The `bootstrap` role runs Prisma migrations and pg-boss schema migrations from the same image artifact. The image also supports an `all` command for running both processes in one container, but that is a convenience mode rather than the recommended production shape.
 
+## Releases
+
+The repository includes a tag-driven release workflow that publishes the runtime image to GitHub Container Registry and creates a GitHub Release with generated notes.
+
+### Release source of truth
+
+- Push a semver tag to publish a release: `vX.Y.Z` for stable releases or `vX.Y.Z-rc.1` for prereleases
+- Cut release tags from a green commit that is already contained in the default branch history
+- The workflow publishes `ghcr.io/<owner>/<repo>` tags for the release version and digest
+- Stable releases also receive `latest` and `X.Y`, and stable releases starting at `v1.0.0` also receive the `X` tag
+- You can also run the workflow manually from the Actions tab for an existing tag
+
+### Cut a release
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+For prereleases, use a semver prerelease suffix such as `v0.1.0-rc.1`.
+
+### Required GitHub settings
+
+- The workflow uses the repository `GITHUB_TOKEN` to push to `ghcr.io`, so GitHub Actions package publishing must be allowed for the repository or organization
+- If a package with the same `ghcr.io/<owner>/<repo>` name was previously pushed outside Actions and is not linked to this repository, connect it to the repository or recreate it so the workflow token can write to it
+- The release workflow currently publishes a `linux/amd64` image, which matches the runtime shape validated in this repository
+
 ## Developer Commands
 
 ```bash
