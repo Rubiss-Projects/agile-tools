@@ -141,6 +141,7 @@ jobs:
       PORT: '3000'
       APP_BASE_URL: http://127.0.0.1:3000
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+      ALLOW_LOOPBACK_HTTP_BYPASS: 'true'
       ENCRYPTION_KEY: ci-encryption-key-32-characters-000000
       SESSION_SECRET: ci-session-secret-32-characters-00000
       DEFAULT_SYNC_INTERVAL_MINUTES: '10'

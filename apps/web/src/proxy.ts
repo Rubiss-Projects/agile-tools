@@ -5,12 +5,16 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
 }
 
+function isLoopbackBypassEnabled(): boolean {
+  return process.env['ALLOW_LOOPBACK_HTTP_BYPASS'] === 'true';
+}
+
 export function proxy(request: NextRequest): Response {
   if (process.env['NODE_ENV'] !== 'production') {
     return NextResponse.next();
   }
 
-  if (isLoopbackHost(request.nextUrl.hostname)) {
+  if (isLoopbackBypassEnabled() && isLoopbackHost(request.nextUrl.hostname)) {
     return NextResponse.next();
   }
 

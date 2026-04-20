@@ -30,8 +30,27 @@ describe('proxy', () => {
     expect(response.headers.get('location')).toBe('https://agile.example.com/admin/jira');
   });
 
-  it('passes loopback traffic through in production', () => {
+  it('redirects loopback traffic in production when bypass is disabled', () => {
     process.env = { ...process.env, NODE_ENV: 'production' };
+
+    const response = proxy(new NextRequest('http://127.0.0.1:3000/admin/jira'));
+    const location = response.headers.get('location');
+
+    expect(response.status).toBe(308);
+    expect(location).not.toBeNull();
+
+    const redirectUrl = new URL(location!);
+    expect(redirectUrl.protocol).toBe('https:');
+    expect(redirectUrl.pathname).toBe('/admin/jira');
+    expect(redirectUrl.port).toBe('3000');
+  });
+
+  it('passes loopback traffic through in production when bypass is enabled', () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: 'production',
+      ALLOW_LOOPBACK_HTTP_BYPASS: 'true',
+    };
 
     const response = proxy(new NextRequest('http://127.0.0.1:3000/admin/jira'));
 
