@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   COMPOSE_CI_APP_BASE_URL: 'http://127.0.0.1:3000'
   COMPOSE_CI_ENCRYPTION_KEY: 'ci-encryption-key-32-characters-000000'
   COMPOSE_CI_SESSION_SECRET: 'ci-session-secret-32-characters-00000'
@@ -89,8 +89,11 @@ jobs:
       - name: Start PostgreSQL
         run: docker compose up -d postgres --wait
 
+      - name: Build bootstrap image
+        run: docker compose --profile bootstrap build bootstrap
+
       - name: Bootstrap database and queue state
-        run: docker compose --profile bootstrap run --rm --build bootstrap
+        run: docker compose --profile bootstrap run --rm bootstrap
 
       - name: Start runtime stack
         run: docker compose --profile runtime up --build --wait --wait-timeout 180 -d

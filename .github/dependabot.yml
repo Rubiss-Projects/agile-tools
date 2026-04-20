@@ -79,6 +79,10 @@ updates:
       separator: "-"
     commit-message:
       prefix: "build(deps)"
+    ignore:
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"
     groups:
       docker-base-images:
         patterns:

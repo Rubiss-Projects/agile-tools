@@ -4,7 +4,7 @@ This quickstart describes the intended developer workflow once implementation be
 
 ## Prerequisites
 
-- Node.js 22 LTS
+- Node.js 24 LTS
 - pnpm 10+
 - Docker or another local PostgreSQL runtime
 - Access to a self-hosted Jira Data Center instance on version 8.14 or later
