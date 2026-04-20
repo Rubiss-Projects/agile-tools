@@ -125,12 +125,10 @@ export async function* streamBoardIssues(
     const page = await fetchBoardIssues(client, boardId, { ...options, startAt, maxResults: pageSize });
     total = page.total;
 
-    let yielded = 0;
     for (const issue of page.issues) {
       if (!seen.has(issue.id)) {
         seen.add(issue.id);
         yield issue;
-        yielded++;
       }
     }
 

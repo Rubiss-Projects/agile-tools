@@ -59,12 +59,6 @@ export default async function ScopePage({
     disabled: '#6b7280',
   };
 
-  const scopeStatusColor: Record<string, string> = {
-    active: 'green',
-    paused: '#b45309',
-    needs_attention: 'red',
-  };
-
   const connectionTone = connectionHealth === 'healthy'
     ? 'positive'
     : connectionHealth === 'stale'

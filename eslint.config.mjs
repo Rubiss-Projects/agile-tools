@@ -36,8 +36,17 @@ export default [
     },
     rules: {
       ...tsPlugin.configs['recommended-type-checked'].rules,
+      'no-undef': 'off',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  {
+    files: ['**/*.test.ts', '**/*.test.tsx', 'tests/**/*.ts', 'tests/**/*.tsx'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
     },
   },
   {
@@ -70,11 +79,12 @@ export default [
   },
   {
     ignores: [
-      '.next/**',
-      'dist/**',
+      '**/.next/**',
+      '**/dist/**',
       'node_modules/**',
       'coverage/**',
       'playwright-report/**',
+      'apps/web/next-env.d.ts',
     ],
   },
 ];

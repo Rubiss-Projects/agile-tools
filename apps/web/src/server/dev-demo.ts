@@ -269,7 +269,7 @@ function buildActiveDemoItems(syncFinishedAt: Date) {
         eventType: event.eventType,
         fromStatusId: event.fromStatusId,
         toStatusId: event.toStatusId,
-        changedFieldId: event.changedFieldId,
+        changedFieldId: event.changedFieldId ?? null,
         changedAt: daysAgo(event.daysAgo, event.hour ?? 11),
       })),
     },
@@ -285,6 +285,35 @@ function buildActiveDemoItems(syncFinishedAt: Date) {
   }));
 }
 
+type LocalDemoLifecycleEventSpec = {
+  eventType: 'status_change' | 'field_change' | 'reopened' | 'completed';
+  fromStatusId: string;
+  toStatusId: string;
+  daysAgo: number;
+  changedFieldId?: string | null;
+  hour?: number;
+};
+
+type LocalDemoHoldPeriodSpec = {
+  source: 'status' | 'blocked_field';
+  sourceValue: string;
+  startedDaysAgo: number;
+  startedHour?: number;
+  endedDaysAgo?: number | null;
+  endedHour?: number;
+};
+
+type LocalDemoActiveItemSpec = {
+  issueKey: string;
+  summary: string;
+  currentStatusId: string;
+  currentColumn: string;
+  createdDaysAgo: number;
+  startedDaysAgo: number;
+  lifecycleEvents: LocalDemoLifecycleEventSpec[];
+  holdPeriods: LocalDemoHoldPeriodSpec[];
+};
+
 const COMPLETED_STORY_THEMES = [
   'Refine blocked-item highlighting',
   'Improve sync telemetry',
@@ -294,7 +323,7 @@ const COMPLETED_STORY_THEMES = [
   'Harden throughput projections',
 ];
 
-const ACTIVE_ITEM_SPECS = [
+const ACTIVE_ITEM_SPECS: LocalDemoActiveItemSpec[] = [
   {
     issueKey: 'AG-201',
     summary: 'Tune aging thresholds for the payment intake lane',
@@ -366,4 +395,4 @@ const ACTIVE_ITEM_SPECS = [
       { source: 'status', sourceValue: 'blocked', startedDaysAgo: 11 },
     ],
   },
-] as const;
+];

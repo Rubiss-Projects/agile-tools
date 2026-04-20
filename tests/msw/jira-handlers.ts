@@ -51,6 +51,11 @@ const issues = {
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
 export const jiraHandlers = [
+  // PAT validation — return the authenticated identity first
+  http.get(`${JIRA_BASE}/rest/api/2/myself`, () =>
+    HttpResponse.json({ accountId: 'test-user-account' }),
+  ),
+
   // PAT validation — return server info
   http.get(`${JIRA_BASE}/rest/api/2/serverInfo`, () =>
     HttpResponse.json({ version: '8.14.0', baseUrl: JIRA_BASE }),
@@ -101,6 +106,10 @@ export const jiraHandlers = [
 
 /** Override for an unhealthy Jira instance (401). */
 export const jiraUnauthorisedHandlers = [
+  http.get(`${JIRA_BASE}/rest/api/2/myself`, () =>
+    HttpResponse.json({ message: 'Unauthorized' }, { status: 401 }),
+  ),
+
   http.get(`${JIRA_BASE}/rest/api/2/serverInfo`, () =>
     HttpResponse.json({ message: 'Unauthorized' }, { status: 401 }),
   ),

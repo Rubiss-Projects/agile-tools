@@ -61,21 +61,6 @@ export default async function AdminJiraPage() {
   const connectionSummaries = connections.map(mapConnection);
   const scopeSummaries = scopes.map(mapScope);
 
-  const healthBadgeColor: Record<string, string> = {
-    healthy: 'green',
-    unhealthy: 'red',
-    stale: '#b45309',
-    validating: '#1d4ed8',
-    draft: '#6b7280',
-    disabled: '#6b7280',
-  };
-
-  const scopeStatusColor: Record<string, string> = {
-    active: 'green',
-    paused: '#b45309',
-    needs_attention: 'red',
-  };
-
   const connectionTone = (status: string) => {
     if (status === 'healthy') return 'positive';
     if (status === 'stale') return 'warning';
