@@ -1,22 +1,17 @@
-/* global Buffer */
 import { cookies } from 'next/headers';
 import { logger } from '@agile-tools/shared';
 import { ResponseError } from './errors';
-
-export type WorkspaceRole = 'admin' | 'member';
-
-export interface WorkspaceContext {
-  userId: string;
-  workspaceId: string;
-  role: WorkspaceRole;
-}
+import {
+  parseWorkspaceContextCookie,
+  serializeWorkspaceContext,
+  type WorkspaceContext,
+  type WorkspaceRole,
+} from './session-cookie';
 
 // Session cookie name — must match the value set by the auth middleware.
 export const SESSION_COOKIE_NAME = 'agile_session';
 
-export function serializeWorkspaceContext(context: WorkspaceContext): string {
-  return Buffer.from(JSON.stringify(context), 'utf8').toString('base64');
-}
+export { serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
 
 /**
  * Parse the opaque session cookie and return the workspace context, or null
@@ -33,14 +28,7 @@ export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
   if (!sessionCookie?.value) return null;
 
   try {
-    // Decode the base64-encoded JSON session payload.
-    // In production: verify a signed JWT or look up an opaque token in the DB.
-    const payload = JSON.parse(
-      Buffer.from(sessionCookie.value, 'base64').toString('utf8'),
-    ) as unknown;
-
-    if (!isValidPayload(payload)) return null;
-    return payload;
+    return parseWorkspaceContextCookie(sessionCookie.value);
   } catch (err) {
     logger.warn('Failed to parse session cookie', {
       error: err instanceof Error ? err.message : String(err),
@@ -75,14 +63,4 @@ export async function requireAdminContext(): Promise<WorkspaceContext> {
     );
   }
   return ctx;
-}
-
-function isValidPayload(value: unknown): value is WorkspaceContext {
-  if (typeof value !== 'object' || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj['userId'] === 'string' &&
-    typeof obj['workspaceId'] === 'string' &&
-    (obj['role'] === 'admin' || obj['role'] === 'member')
-  );
 }

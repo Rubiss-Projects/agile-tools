@@ -3,6 +3,7 @@ import { getPrismaClient, createSyncRun, listSyncRuns, getActiveSyncRun } from '
 import { logger } from '@agile-tools/shared';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { enqueueScopeSyncJob } from '@/server/queue';
 import { requireScope, mapSyncRun } from '../../_lib';
 
@@ -12,6 +13,13 @@ export async function POST(
 ): Promise<Response> {
   try {
     const ctx = await requireAdminContext();
+    assertTrustedMutationRequest(_req);
+    enforceRateLimit(_req, {
+      bucket: 'admin-syncs:trigger',
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      max: 10,
+      windowMs: 5 * 60_000,
+    });
     const { scopeId } = await params;
 
     await requireScope(ctx.workspaceId, scopeId);

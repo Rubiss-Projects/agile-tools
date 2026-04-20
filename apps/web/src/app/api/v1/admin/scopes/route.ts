@@ -5,12 +5,20 @@ import { CreateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api'
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../jira-connections/_lib';
 import { mapScope } from './_lib';
 
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const ctx = await requireAdminContext();
+    assertTrustedMutationRequest(req);
+    enforceRateLimit(req, {
+      bucket: 'admin-scopes:create',
+      identifier: `${ctx.workspaceId}:${ctx.userId}`,
+      max: 20,
+      windowMs: 5 * 60_000,
+    });
 
     const body: unknown = await req.json().catch(() => null);
     const parsed = CreateFlowScopeRequestSchema.safeParse(body);

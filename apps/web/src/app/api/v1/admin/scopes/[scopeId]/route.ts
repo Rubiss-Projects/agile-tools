@@ -5,6 +5,7 @@ import { UpdateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api'
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../jira-connections/_lib';
 import { mapScope, requireScope } from '../_lib';
 
@@ -14,6 +15,13 @@ export async function PUT(
 ): Promise<Response> {
   try {
     const ctx = await requireAdminContext();
+    assertTrustedMutationRequest(req);
+    enforceRateLimit(req, {
+      bucket: 'admin-scopes:update',
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      max: 20,
+      windowMs: 5 * 60_000,
+    });
     const { scopeId } = await params;
 
     await requireScope(ctx.workspaceId, scopeId);

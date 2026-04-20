@@ -1,4 +1,5 @@
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
+import { DemoBootstrapForm } from './demo-bootstrap-form';
 
 interface AuthRequiredPanelProps {
   title?: string;
@@ -11,8 +12,6 @@ export function AuthRequiredPanel({
   description = 'This page expects the workspace session cookie used by the app.',
   nextPath = getLocalDemoDefaultPath(),
 }: AuthRequiredPanelProps) {
-  const bootstrapHref = `/api/dev/bootstrap?${new URLSearchParams({ next: nextPath }).toString()}`;
-
   return (
     <main
       style={{
@@ -40,19 +39,10 @@ export function AuthRequiredPanel({
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
           {isLocalDemoEnabled() && (
-            <a
-              href={bootstrapHref}
-              style={{
-                padding: '0.7rem 1rem',
-                borderRadius: '9999px',
-                background: '#0f172a',
-                color: 'white',
-                textDecoration: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Seed local demo workspace and continue →
-            </a>
+            <DemoBootstrapForm
+              label="Seed local demo workspace and continue →"
+              nextPath={nextPath}
+            />
           )}
           <a
             href="/"

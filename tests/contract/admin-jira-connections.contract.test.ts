@@ -24,6 +24,7 @@ import {
 } from '@agile-tools/shared/contracts/api';
 import { startPostgres, stopPostgres } from '../integration/support/postgres';
 import { jiraHandlers, jiraUnauthorisedHandlers } from '../msw/jira-handlers';
+import { serializeWorkspaceContext } from '../../apps/web/src/server/session-cookie';
 
 // ─── Mock Next.js server-only modules ─────────────────────────────────────────
 
@@ -57,6 +58,7 @@ const { GET: getBoardDetail } = await import(
 
 const JIRA_BASE = 'https://jira.example.internal';
 const TEST_ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+const TEST_SESSION_SECRET = 'contract-session-secret-1234567890';
 const TEST_PAT = 'test-jira-pat';
 
 // ─── MSW Server ───────────────────────────────────────────────────────────────
@@ -86,10 +88,12 @@ function makeCookieStore(cookieValue: string | null) {
 function makeRequest(url: string, method = 'GET', body?: unknown): NextRequest {
   return new NextRequest(url, {
     method,
-    ...(body !== undefined && {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
+    headers: {
+      Origin: 'http://localhost',
+      Referer: 'http://localhost/admin/jira',
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
 
@@ -100,6 +104,7 @@ beforeAll(async () => {
   const pg = await startPostgres();
   process.env['DATABASE_URL'] = pg.connectionUrl;
   process.env['ENCRYPTION_KEY'] = TEST_ENCRYPTION_KEY;
+  process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
   process.env['NODE_ENV'] = 'test';
   resetConfig();
   await disconnectPrisma();
@@ -128,12 +133,8 @@ beforeAll(async () => {
   connectionId = conn.id;
 
   // Build session cookie payloads.
-  adminCookieValue = Buffer.from(
-    JSON.stringify({ userId: 'u-1', workspaceId, role: 'admin' }),
-  ).toString('base64');
-  memberCookieValue = Buffer.from(
-    JSON.stringify({ userId: 'u-2', workspaceId, role: 'member' }),
-  ).toString('base64');
+  adminCookieValue = serializeWorkspaceContext({ userId: 'u-1', workspaceId, role: 'admin' });
+  memberCookieValue = serializeWorkspaceContext({ userId: 'u-2', workspaceId, role: 'member' });
 });
 
 afterAll(async () => {

@@ -1,14 +1,12 @@
 import { getPrismaClient, listFlowScopes, listJiraConnections } from '@agile-tools/db';
 import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
+import { DemoBootstrapForm } from '@/components/app/demo-bootstrap-form';
 
 export default async function HomePage() {
   const ctx = await getWorkspaceContext();
 
   if (!ctx) {
-    const bootstrapToScope = `/api/dev/bootstrap?${new URLSearchParams({ next: getLocalDemoDefaultPath() }).toString()}`;
-    const bootstrapToAdmin = `/api/dev/bootstrap?${new URLSearchParams({ next: '/admin/jira' }).toString()}`;
-
     return (
       <main style={{ padding: '3rem 1.5rem', maxWidth: '960px', margin: '0 auto', fontFamily: 'sans-serif' }}>
         <section
@@ -29,35 +27,17 @@ export default async function HomePage() {
 
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
             {isLocalDemoEnabled() && (
-              <a
-                href={bootstrapToScope}
-                style={{
-                  padding: '0.8rem 1rem',
-                  borderRadius: '9999px',
-                  background: '#0f172a',
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 600,
-                }}
-              >
-                Open seeded demo scope →
-              </a>
+              <DemoBootstrapForm
+                label="Open seeded demo scope →"
+                nextPath={getLocalDemoDefaultPath()}
+              />
             )}
             {isLocalDemoEnabled() && (
-              <a
-                href={bootstrapToAdmin}
-                style={{
-                  padding: '0.8rem 1rem',
-                  borderRadius: '9999px',
-                  background: 'white',
-                  color: '#0f172a',
-                  border: '1px solid #cbd5e1',
-                  textDecoration: 'none',
-                  fontWeight: 600,
-                }}
-              >
-                Seed demo and open Jira setup
-              </a>
+              <DemoBootstrapForm
+                label="Seed demo and open Jira setup"
+                nextPath="/admin/jira"
+                variant="secondary"
+              />
             )}
           </div>
         </section>
@@ -146,20 +126,11 @@ export default async function HomePage() {
             Open Jira setup
           </a>
           {isLocalDemoEnabled() && (
-            <a
-              href={`/api/dev/bootstrap?${new URLSearchParams({ next: getLocalDemoDefaultPath() }).toString()}`}
-              style={{
-                padding: '0.8rem 1rem',
-                borderRadius: '9999px',
-                border: '1px solid #cbd5e1',
-                color: '#0f172a',
-                textDecoration: 'none',
-                fontWeight: 600,
-                background: 'white',
-              }}
-            >
-              Reset local demo data
-            </a>
+            <DemoBootstrapForm
+              label="Reset local demo data"
+              nextPath={getLocalDemoDefaultPath()}
+              variant="secondary"
+            />
           )}
         </div>
       </section>

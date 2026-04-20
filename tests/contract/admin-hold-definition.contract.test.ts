@@ -8,6 +8,7 @@ import {
   ProblemSchema,
 } from '@agile-tools/shared/contracts/api';
 import { startPostgres, stopPostgres } from '../integration/support/postgres';
+import { serializeWorkspaceContext } from '../../apps/web/src/server/session-cookie';
 
 vi.mock('next/headers', () => ({
   cookies: vi.fn(),
@@ -19,6 +20,7 @@ const { GET: getHoldDefinition, PUT: putHoldDefinition } = await import(
 );
 
 const TEST_ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+const TEST_SESSION_SECRET = 'contract-session-secret-1234567890';
 
 let workspaceId: string;
 let scopeId: string;
@@ -38,10 +40,12 @@ function makeCookieStore(cookieValue: string | null) {
 function makeRequest(url: string, method = 'GET', body?: unknown): NextRequest {
   return new NextRequest(url, {
     method,
-    ...(body !== undefined && {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
+    headers: {
+      Origin: 'http://localhost',
+      Referer: 'http://localhost/scopes',
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
 
@@ -49,6 +53,7 @@ beforeAll(async () => {
   const pg = await startPostgres();
   process.env['DATABASE_URL'] = pg.connectionUrl;
   process.env['ENCRYPTION_KEY'] = TEST_ENCRYPTION_KEY;
+  process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
   process.env['NODE_ENV'] = 'test';
   resetConfig();
   await disconnectPrisma();
@@ -83,9 +88,7 @@ beforeAll(async () => {
   });
   scopeId = scope.id;
 
-  adminCookieValue = Buffer.from(
-    JSON.stringify({ userId: 'u-1', workspaceId, role: 'admin' }),
-  ).toString('base64');
+  adminCookieValue = serializeWorkspaceContext({ userId: 'u-1', workspaceId, role: 'admin' });
 });
 
 beforeEach(async () => {

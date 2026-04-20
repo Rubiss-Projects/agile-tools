@@ -3,16 +3,24 @@ import { getPrismaClient, updateConnectionHealth } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../_lib';
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> },
 ): Promise<Response> {
   const { connectionId } = await params;
 
   try {
     const ctx = await requireAdminContext();
+    assertTrustedMutationRequest(req);
+    enforceRateLimit(req, {
+      bucket: 'admin-jira-connections:validate',
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${connectionId}`,
+      max: 12,
+      windowMs: 5 * 60_000,
+    });
     const conn = await requireJiraConnection(ctx.workspaceId, connectionId);
     const prisma = getPrismaClient();
 

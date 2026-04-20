@@ -19,12 +19,17 @@ import { test, expect, type Page } from '@playwright/test';
 import { PrismaClient } from '@agile-tools/db';
 import { encryptSecret } from '@agile-tools/shared';
 import type { FlowAnalyticsResponse, WorkItemDetail } from '@agile-tools/shared/contracts/api';
+import { serializeWorkspaceContext } from '../../apps/web/src/server/session-cookie';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
 const ENCRYPTION_KEY =
   process.env['ENCRYPTION_KEY'] ?? 'test-encryption-key-32-chars-ok!';
+const SESSION_SECRET =
+  process.env['SESSION_SECRET'] ?? 'playwright-session-secret-1234567890';
 const JIRA_BASE = 'https://jira.example.internal';
+
+process.env['SESSION_SECRET'] = SESSION_SECRET;
 
 let db: PrismaClient;
 let workspaceId: string;
@@ -186,9 +191,11 @@ test.beforeAll(async () => {
     },
   });
 
-  adminCookie = Buffer.from(
-    JSON.stringify({ userId: 'e2e-flow-user', workspaceId, role: 'admin' }),
-  ).toString('base64');
+  adminCookie = serializeWorkspaceContext({
+    userId: 'e2e-flow-user',
+    workspaceId,
+    role: 'admin',
+  });
 });
 
 test.afterAll(async () => {

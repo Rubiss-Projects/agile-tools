@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+process.env['SESSION_SECRET'] ??= 'playwright-session-secret-1234567890';
+
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: false,

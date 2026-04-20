@@ -4,11 +4,19 @@ import { getConfig, encryptSecret, logger } from '@agile-tools/shared';
 import { CreateJiraConnectionRequestSchema } from '@agile-tools/shared/contracts/api';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { mapConnection } from './_lib';
 
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const ctx = await requireAdminContext();
+    assertTrustedMutationRequest(req);
+    enforceRateLimit(req, {
+      bucket: 'admin-jira-connections:create',
+      identifier: `${ctx.workspaceId}:${ctx.userId}`,
+      max: 10,
+      windowMs: 5 * 60_000,
+    });
 
     const body: unknown = await req.json().catch(() => null);
     const parsed = CreateJiraConnectionRequestSchema.safeParse(body);

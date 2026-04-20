@@ -26,6 +26,7 @@ import {
 } from '@agile-tools/analytics';
 import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { shapeForecastResponse } from '@/server/views/forecast-response';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -36,6 +37,13 @@ export async function POST(
 ): Promise<Response> {
   try {
     const ctx = await requireWorkspaceContext();
+    assertTrustedMutationRequest(req);
+    enforceRateLimit(req, {
+      bucket: 'scope-forecasts:run',
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      max: 30,
+      windowMs: 5 * 60_000,
+    });
     const { scopeId } = await params;
     const db = getPrismaClient();
 

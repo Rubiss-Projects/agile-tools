@@ -1,0 +1,41 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { NextRequest } from 'next/server';
+
+import { proxy } from './proxy';
+
+const ORIGINAL_ENV = { ...process.env };
+
+describe('proxy', () => {
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it('redirects forwarded http traffic to https in production', () => {
+    process.env = { ...process.env, NODE_ENV: 'production' };
+
+    const response = proxy(
+      new NextRequest('http://internal.example.com/admin/jira', {
+        headers: {
+          'x-forwarded-proto': 'http',
+          'x-forwarded-host': 'agile.example.com',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('https://agile.example.com/admin/jira');
+  });
+
+  it('passes requests through outside production', () => {
+    process.env = { ...process.env, NODE_ENV: 'development' };
+
+    const response = proxy(new NextRequest('http://localhost:3000/admin/jira'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+  });
+});
