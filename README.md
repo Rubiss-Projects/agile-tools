@@ -57,6 +57,12 @@ DEFAULT_SYNC_INTERVAL_MINUTES=10
 LOG_LEVEL=debug
 ```
 
+Optional for local production-mode smoke tests or CI-only loopback access:
+
+```bash
+ALLOW_LOOPBACK_HTTP_BYPASS=true
+```
+
 ### 3. Start PostgreSQL
 
 ```bash
