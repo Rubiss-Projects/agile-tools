@@ -64,7 +64,7 @@ jobs:
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ steps.vars.outputs.tag }}
           fetch-depth: 0
