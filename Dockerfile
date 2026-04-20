@@ -68,7 +68,8 @@ COPY --chown=node:node --from=build /workspace/packages/shared/dist ./packages/s
 
 COPY --chown=node:node --from=build /workspace/docker ./docker
 
-RUN chmod +x /app/docker/run.sh
+RUN sed -i 's/\r$//' /app/docker/run.sh \
+    && chmod +x /app/docker/run.sh
 
 USER node
 
