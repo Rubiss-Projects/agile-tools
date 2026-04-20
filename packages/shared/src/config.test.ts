@@ -18,6 +18,9 @@ describe('getConfig', () => {
   it('returns defaults for optional values', () => {
     process.env['DATABASE_URL'] = 'postgresql://localhost:5432/agile_tools';
     process.env['ENCRYPTION_KEY'] = '12345678901234567890123456789012';
+    delete process.env['LOG_LEVEL'];
+    delete process.env['PORT'];
+    delete process.env['DEFAULT_SYNC_INTERVAL_MINUTES'];
 
     const config = getConfig();
 

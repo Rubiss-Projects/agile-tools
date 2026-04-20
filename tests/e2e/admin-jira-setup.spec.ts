@@ -14,7 +14,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@agile-tools/db';
 import { encryptSecret } from '@agile-tools/shared';
 
 // ─── DB seeding helpers ───────────────────────────────────────────────────────

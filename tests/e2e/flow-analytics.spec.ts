@@ -16,7 +16,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@agile-tools/db';
 import { encryptSecret } from '@agile-tools/shared';
 import type { FlowAnalyticsResponse, WorkItemDetail } from '@agile-tools/shared/contracts/api';
 
@@ -252,7 +252,7 @@ test('scope page shows flow analytics section after data loads', async ({ page }
   await expect(page.getByRole('heading', { name: /^Flow analytics$/i, level: 2 })).toBeVisible();
 
   // The scatter plot renders once the client-side fetch resolves.
-  await expect(page.locator('[aria-label="Aging scatter plot"]')).toBeVisible({
+  await expect(page.getByRole('img', { name: 'Aging scatter plot' })).toBeVisible({
     timeout: 10_000,
   });
 });
@@ -264,7 +264,7 @@ test('flow filter panel renders with timeframe picker and toggles', async ({ pag
   await mockFlowApi(page);
 
   await page.goto(`/scopes/${scopeId}`);
-  await page.waitForSelector('[aria-label="Aging scatter plot"]', { timeout: 10_000 });
+  await page.waitForSelector('svg[aria-label="Aging scatter plot"]', { timeout: 10_000 });
 
   // Timeframe picker.
   await expect(page.locator('[aria-label="Historical timeframe"]')).toBeVisible();
@@ -284,7 +284,7 @@ test('work item detail drawer opens when an item is selected', async ({ page }) 
   await mockItemDetailApi(page);
 
   await page.goto(`/scopes/${scopeId}`);
-  await page.waitForSelector('[aria-label="Aging scatter plot"]', { timeout: 10_000 });
+  await page.waitForSelector('svg[aria-label="Aging scatter plot"]', { timeout: 10_000 });
 
   // The drawer should not be visible initially.
   await expect(page.locator('[role="dialog"]')).not.toBeVisible();

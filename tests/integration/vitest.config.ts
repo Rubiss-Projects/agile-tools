@@ -14,8 +14,7 @@ export default defineConfig({
     // Run integration tests sequentially to avoid port conflicts between
     // Testcontainer instances started in the same process.
     pool: 'forks',
-    poolOptions: {
-      forks: { singleFork: true },
-    },
+    maxWorkers: 1,
+    isolate: false,
   },
 });

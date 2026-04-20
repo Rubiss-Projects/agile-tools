@@ -1,4 +1,4 @@
-import PgBoss from 'pg-boss';
+import { PgBoss } from 'pg-boss';
 import { logger } from '@agile-tools/shared';
 
 // Queue names used throughout the worker — centralised to avoid magic strings.
@@ -9,6 +9,10 @@ export const QUEUE_NAMES = {
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
+const COMPLETED_JOB_RETENTION_SECONDS = 24 * 60 * 60;
+const JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;
+const JOB_EXPIRY_SECONDS = 60 * 60;
+
 let _boss: PgBoss | undefined;
 
 export async function initQueue(databaseUrl: string): Promise<PgBoss> {
@@ -16,10 +20,6 @@ export async function initQueue(databaseUrl: string): Promise<PgBoss> {
 
   _boss = new PgBoss({
     connectionString: databaseUrl,
-    // Keep completed jobs for 1 day for observability.
-    deleteAfterDays: 1,
-    // Retain failed jobs for 7 days so operators can inspect errors.
-    retentionDays: 7,
   });
 
   _boss.on('error', (err: Error) => {
@@ -29,7 +29,12 @@ export async function initQueue(databaseUrl: string): Promise<PgBoss> {
   await _boss.start();
 
   for (const queueName of Object.values(QUEUE_NAMES)) {
-    await _boss.createQueue(queueName);
+    await _boss.createQueue(queueName, {
+      // Keep completed jobs for 1 day for observability.
+      deleteAfterSeconds: COMPLETED_JOB_RETENTION_SECONDS,
+      // Retain queued and retried jobs for 7 days for investigation.
+      retentionSeconds: JOB_RETENTION_SECONDS,
+    });
   }
 
   return _boss;
@@ -77,7 +82,7 @@ export async function unscheduleScopeSync(scopeId: string): Promise<void> {
  * Enqueue a manual sync for a scope. The job is deduplicated by scopeId so
  * concurrent manual requests don't stack up.
  */
-export async function enqueueScopeSync(
+export function enqueueScopeSync(
   scopeId: string,
   requestedBy: string,
 ): Promise<string | null> {
@@ -89,7 +94,7 @@ export async function enqueueScopeSync(
       // Deduplication key: only one manual sync per scope in the queue at a time.
       singletonKey: scopeId,
       retryLimit: 1,
-      expireInMinutes: 60,
+      expireInSeconds: JOB_EXPIRY_SECONDS,
     },
   );
 }

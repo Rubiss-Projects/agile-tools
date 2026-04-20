@@ -18,7 +18,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@agile-tools/db';
 import { encryptSecret } from '@agile-tools/shared';
 import type { ThroughputResponse } from '@agile-tools/shared/contracts/api';
 import type { ForecastResponse } from '@agile-tools/shared/contracts/forecast';

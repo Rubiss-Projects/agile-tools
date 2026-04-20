@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@agile-tools/db';
 import { createSyncRun } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
-import type PgBoss from 'pg-boss';
+import type { PgBoss } from 'pg-boss';
 import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
 
 const DISPATCH_QUEUE_NAME = 'scope:sync-dispatch';
@@ -83,7 +83,7 @@ async function maybeDispatchScopeSync(
     {
       singletonKey: scopeId, // extra guard: only one pending job per scope in the queue
       retryLimit: 1,
-      expireInMinutes: 60,
+      expireInSeconds: 60 * 60,
     },
   );
 

@@ -10,8 +10,7 @@ export default defineConfig({
     hookTimeout: 180_000,
     // Single-fork: Testcontainer instances are expensive; run sequentially.
     pool: 'forks',
-    poolOptions: {
-      forks: { singleFork: true },
-    },
+    maxWorkers: 1,
+    isolate: false,
   },
 });

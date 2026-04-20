@@ -2,7 +2,7 @@ import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
 import { getPrismaClient, createSyncRun } from '@agile-tools/db';
 import type { PrismaClient } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
-import type PgBoss from 'pg-boss';
+import type { Job } from 'pg-boss';
 import { runScopeSync } from '../sync/run-scope-sync.js';
 import { registerScopeSyncDispatch } from './schedule-scope-syncs.js';
 
@@ -35,7 +35,7 @@ export async function registerJobs(db: PrismaClient): Promise<void> {
   logger.info('All jobs registered');
 }
 
-async function handleScopeSync(jobs: PgBoss.Job<ScopeSyncJobData>[]): Promise<void> {
+async function handleScopeSync(jobs: Job<ScopeSyncJobData>[]): Promise<void> {
   const db = getPrismaClient();
 
   for (const job of jobs) {
