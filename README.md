@@ -13,7 +13,7 @@ A self-hosted web application for kanban teams. Connects to a self-hosted Jira D
 
 | Requirement | Version |
 |---|---|
-| Node.js | 22 LTS |
+| Node.js | 24 LTS |
 | pnpm | 10+ |
 | Docker | any recent version |
 | Jira Data Center | 8.14+ |

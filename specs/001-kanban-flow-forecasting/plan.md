@@ -11,7 +11,7 @@ Build a self-hosted internal web application for kanban teams as a TypeScript mo
 
 ## Technical Context
 
-**Language/Version**: TypeScript 5.x on Node.js 22 LTS  
+**Language/Version**: TypeScript 5.x on Node.js 24 LTS  
 **Primary Dependencies**: Next.js 16, React 19, Prisma, PostgreSQL 16, pg-boss, Zod, @nivo/scatterplot, @nivo/line, p-retry, p-limit  
 **Storage**: PostgreSQL 16 for connection metadata, sync history, normalized Jira data, analytics projections, and forecast cache  
 **Testing**: Vitest, Playwright, MSW, Testcontainers  

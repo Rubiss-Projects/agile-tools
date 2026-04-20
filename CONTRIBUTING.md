@@ -23,7 +23,7 @@ This repository is a pnpm workspace monorepo for a self-hosted Jira Data Center 
 
 ## Tooling Requirements
 
-- Node.js 22 LTS
+- Node.js 24 LTS
 - pnpm 10+
 - Docker for local PostgreSQL and integration or performance test flows
 
