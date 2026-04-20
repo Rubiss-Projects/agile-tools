@@ -5,11 +5,13 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./contracts/*": {
       "types": "./dist/contracts/*.d.ts",
-      "import": "./dist/contracts/*.js"
+      "import": "./dist/contracts/*.js",
+      "default": "./dist/contracts/*.js"
     }
   },
   "scripts": {

@@ -177,6 +177,7 @@ test.beforeAll(async () => {
       summary: 'Normal work item',
       issueTypeId: 'story',
       issueTypeName: 'Story',
+      projectId: 'FLOW',
       currentStatusId: '10',
       currentColumn: 'In Progress',
       directUrl: `${JIRA_BASE}/browse/FLOW-1`,
@@ -248,7 +249,7 @@ test('scope page shows flow analytics section after data loads', async ({ page }
   await page.goto(`/scopes/${scopeId}`);
 
   // The Flow Analytics heading is rendered server-side once filterOptions are available.
-  await expect(page.getByRole('heading', { name: 'Flow Analytics' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Flow analytics$/i, level: 2 })).toBeVisible();
 
   // The scatter plot renders once the client-side fetch resolves.
   await expect(page.locator('[aria-label="Aging scatter plot"]')).toBeVisible({
@@ -296,16 +297,18 @@ test('work item detail drawer opens when an item is selected', async ({ page }) 
   //
   // For a lighter assertion: verify the drawer appears when navigated to the
   // mock item URL directly (API-level integration).
-  const detailRes = await page.request.get(
-    `/api/v1/scopes/${scopeId}/items/${MOCK_WORK_ITEM_ID}`,
-    {
-      headers: {
-        Cookie: `agile_session=${adminCookie}`,
-      },
+  const detailResponse = await page.evaluate(
+    async ({ currentScopeId, workItemId }) => {
+      const res = await fetch(`/api/v1/scopes/${currentScopeId}/items/${workItemId}`);
+      return {
+        ok: res.ok,
+        body: (await res.json()) as WorkItemDetail,
+      };
     },
+    { currentScopeId: scopeId, workItemId: MOCK_WORK_ITEM_ID },
   );
-  expect(detailRes.ok()).toBe(true);
-  const detail = (await detailRes.json()) as WorkItemDetail;
+  expect(detailResponse.ok).toBe(true);
+  const detail = detailResponse.body;
   expect(detail.issueKey).toBe(MOCK_ISSUE_KEY);
   expect(detail.summary).toBe('Normal work item');
 });

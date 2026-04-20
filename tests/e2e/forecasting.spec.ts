@@ -249,8 +249,8 @@ test('forecast page loads and renders throughput chart', async ({ page }) => {
   await page.goto(`/scopes/${scopeId}/forecast`);
 
   // Page heading is visible immediately.
-  await expect(page.getByRole('heading', { name: 'Forecast' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Historical Throughput' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Forecast', exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Historical throughput$/i, level: 2 })).toBeVisible();
 
   // Chart renders once the mocked throughput fetch resolves.
   await expect(page.locator('[aria-label="Daily throughput chart"]')).toBeVisible({
@@ -308,13 +308,18 @@ test('when forecast returns completion dates table with LOW_SAMPLE_SIZE warning'
   await page.getByRole('button', { name: 'Run Forecast' }).click();
 
   // Results table appears.
-  await expect(page.locator('[aria-label="Forecast results"]')).toBeVisible({ timeout: 10_000 });
+  const forecastResults = page.locator('[aria-label="Forecast results"]');
+  await expect(forecastResults).toBeVisible({ timeout: 10_000 });
 
   // "Completion Date" column header is present (when forecast).
-  await expect(page.getByText('Completion Date')).toBeVisible();
+  await expect(
+    forecastResults.locator('article').first().getByText('Completion date', { exact: true }),
+  ).toBeVisible();
 
   // At least one result row with a confidence percentage.
-  await expect(page.getByText('50%')).toBeVisible();
+  await expect(
+    forecastResults.locator('article').first().getByText('50%', { exact: true }),
+  ).toBeVisible();
 
   // LOW_SAMPLE_SIZE warning is displayed.
   await expect(page.getByText(/Only 15 completed stories/)).toBeVisible();
@@ -344,8 +349,11 @@ test('how_many forecast returns story count table', async ({ page }) => {
   await page.getByRole('button', { name: 'Run Forecast' }).click();
 
   // Results table shows "Stories Completed" column header.
-  await expect(page.locator('[aria-label="Forecast results"]')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('Stories Completed')).toBeVisible();
+  const forecastResults = page.locator('[aria-label="Forecast results"]');
+  await expect(forecastResults).toBeVisible({ timeout: 10_000 });
+  await expect(
+    forecastResults.locator('article').first().getByText('Stories completed', { exact: true }),
+  ).toBeVisible();
 
   // One result row should render "12 stories" (from MOCK_HOW_MANY_RESPONSE at 50%).
   await expect(page.getByText('12 stories')).toBeVisible();

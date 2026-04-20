@@ -176,6 +176,17 @@ test('scope detail page shows board name, sync status, and no error warnings', a
   await expect(page.getByText('⚠ Warnings')).not.toBeVisible();
 
   // Configuration section shows correct values.
-  await expect(page.getByText('42')).toBeVisible(); // Board ID
-  await expect(page.getByText('UTC')).toBeVisible(); // Timezone
+  const configurationSection = page.locator('section').filter({
+    has: page.getByRole('heading', { name: 'Configuration', exact: true }),
+  });
+
+  const boardIdCard = configurationSection.locator('article').filter({
+    has: page.getByText('Board ID', { exact: true }),
+  });
+  await expect(boardIdCard.getByText('42', { exact: true })).toBeVisible();
+
+  const timezoneCard = configurationSection.locator('article').filter({
+    has: page.getByText('Timezone', { exact: true }),
+  });
+  await expect(timezoneCard.getByText('UTC', { exact: true })).toBeVisible();
 });

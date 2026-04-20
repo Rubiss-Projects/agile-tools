@@ -1,0 +1,260 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+  merge_group:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run unit and component tests
+        run: pnpm test
+
+      - name: Build workspace
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agile_tools
+          PORT: '3000'
+          APP_BASE_URL: http://127.0.0.1:3000
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          ENCRYPTION_KEY: ci-encryption-key-32-characters-000000
+          SESSION_SECRET: ci-session-secret-32-characters-00000
+          DEFAULT_SYNC_INTERVAL_MINUTES: '10'
+          LOG_LEVEL: warn
+        run: pnpm build
+
+  contract-tests:
+    name: Contract Tests
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - name: Run contract tests
+        run: pnpm test:contract
+
+  integration-tests:
+    name: Integration Tests
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - name: Run integration tests
+        run: pnpm test:integration
+
+  e2e-tests:
+    name: End-to-End Tests
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agile_tools
+      PORT: '3000'
+      APP_BASE_URL: http://127.0.0.1:3000
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+      ENCRYPTION_KEY: ci-encryption-key-32-characters-000000
+      SESSION_SECRET: ci-session-secret-32-characters-00000
+      DEFAULT_SYNC_INTERVAL_MINUTES: '10'
+      LOG_LEVEL: warn
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agile_tools
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agile_tools"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - name: Apply database migrations
+        run: pnpm --filter @agile-tools/db exec prisma migrate deploy
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start web application
+        run: |
+          pnpm --filter @agile-tools/web start > /tmp/agile-tools-web.log 2>&1 &
+          echo $! > /tmp/agile-tools-web.pid
+
+      - name: Wait for web application
+        run: |
+          for attempt in {1..60}; do
+            if curl --silent --fail "$PLAYWRIGHT_BASE_URL" > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Web application did not become ready in time."
+          cat /tmp/agile-tools-web.log
+          exit 1
+
+      - name: Run Playwright tests
+        run: pnpm test:e2e
+
+      - name: Stop web application
+        if: always()
+        run: |
+          if [ -f /tmp/agile-tools-web.pid ]; then
+            kill "$(cat /tmp/agile-tools-web.pid)" || true
+          fi
+
+      - name: Upload Playwright artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            /tmp/agile-tools-web.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  performance-tests:
+    name: Performance Benchmarks
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - name: Run performance benchmarks
+        run: pnpm test:perf
