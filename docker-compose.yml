@@ -1,3 +1,15 @@
+x-agile-tools-runtime: &agile-tools-runtime
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: agile-tools:local
+  env_file:
+    - .env
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -15,6 +27,37 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  web:
+    <<: *agile-tools-runtime
+    profiles: ['runtime']
+    command: ['web']
+    environment:
+      AGILE_TOOLS_ROLE: web
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agile_tools
+      HOSTNAME: 0.0.0.0
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
+  bootstrap:
+    <<: *agile-tools-runtime
+    profiles: ['bootstrap']
+    command: ['bootstrap']
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agile_tools
+      NODE_ENV: production
+    restart: 'no'
+
+  worker:
+    <<: *agile-tools-runtime
+    profiles: ['runtime']
+    command: ['worker']
+    environment:
+      AGILE_TOOLS_ROLE: worker
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/agile_tools
+      NODE_ENV: production
 
 volumes:
   postgres_data:

@@ -3,8 +3,8 @@ import { logger } from '@agile-tools/shared';
 
 // Queue names used throughout the worker — centralised to avoid magic strings.
 export const QUEUE_NAMES = {
-  SCOPE_SYNC: 'scope:sync',
-  PROJECTION_REBUILD: 'scope:rebuild-projections',
+  SCOPE_SYNC: 'scope-sync',
+  PROJECTION_REBUILD: 'scope-rebuild-projections',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -60,7 +60,7 @@ export async function closeQueue(): Promise<void> {
  */
 export async function scheduleScopeSync(scopeId: string, intervalMinutes: number): Promise<void> {
   const boss = getQueue();
-  const scheduleId = `${QUEUE_NAMES.SCOPE_SYNC}:${scopeId}`;
+  const scheduleId = `${QUEUE_NAMES.SCOPE_SYNC}-${scopeId}`;
 
   await boss.schedule(scheduleId, `*/${intervalMinutes} * * * *`, { scopeId });
   logger.debug('Scheduled scope sync', { scopeId, intervalMinutes });
@@ -72,7 +72,7 @@ export async function scheduleScopeSync(scopeId: string, intervalMinutes: number
  */
 export async function unscheduleScopeSync(scopeId: string): Promise<void> {
   const boss = getQueue();
-  const scheduleId = `${QUEUE_NAMES.SCOPE_SYNC}:${scopeId}`;
+  const scheduleId = `${QUEUE_NAMES.SCOPE_SYNC}-${scopeId}`;
 
   await boss.unschedule(scheduleId);
   logger.debug('Unscheduled scope sync', { scopeId });

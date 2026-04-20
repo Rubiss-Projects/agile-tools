@@ -83,6 +83,57 @@ pnpm --filter @agile-tools/worker dev
 
 Open `http://localhost:3000` and navigate to **Admin → Jira Connections** to configure the first connection.
 
+## Docker Runtime
+
+The repository now ships a single multi-stage Docker image that contains both runtime roles:
+
+- `web` for the Next.js UI and HTTP API
+- `worker` for scheduled sync and projection jobs
+
+This is the recommended compromise for this monorepo: build one image artifact, then run separate containers for the web and worker roles. That stays aligned with Docker's one-service-per-container guidance while still keeping artifact management simple.
+
+### Build the image
+
+```bash
+docker build -t agile-tools:local .
+```
+
+### Run the web role
+
+```bash
+docker run --rm -p 3000:3000 --env-file .env \
+	-e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/agile_tools \
+	agile-tools:local web
+```
+
+### Run the worker role
+
+```bash
+docker run --rm --env-file .env \
+	-e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/agile_tools \
+	agile-tools:local worker
+```
+
+### Bootstrap database and queue state
+
+```bash
+docker run --rm --env-file .env \
+	-e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/agile_tools \
+	agile-tools:local bootstrap
+```
+
+### Run the full runtime stack with Compose
+
+The root compose file keeps `postgres` as the default local dependency and exposes a one-off bootstrap job plus the application runtime containers behind profiles:
+
+```bash
+docker compose up -d postgres
+docker compose --profile bootstrap run --rm bootstrap
+docker compose --profile runtime up --build -d
+```
+
+The `bootstrap` role runs Prisma migrations and pg-boss schema migrations from the same image artifact. The image also supports an `all` command for running both processes in one container, but that is a convenience mode rather than the recommended production shape.
+
 ## Developer Commands
 
 ```bash

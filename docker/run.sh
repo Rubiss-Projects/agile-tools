@@ -1,0 +1,82 @@
+#!/bin/sh
+set -eu
+
+role="${1:-${AGILE_TOOLS_ROLE:-web}}"
+
+if [ "$#" -gt 0 ]; then
+  shift
+fi
+
+write_role() {
+  printf '%s\n' "$1" > /tmp/agile-tools-role
+}
+
+bootstrap_runtime() {
+  /app/node_modules/.pnpm/node_modules/.bin/prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma
+  PGBOSS_DATABASE_URL="$DATABASE_URL" /app/node_modules/.pnpm/node_modules/.bin/pg-boss migrate
+}
+
+start_web() {
+  cd /app/apps/web
+  exec ./node_modules/.bin/next start "$@"
+}
+
+start_worker() {
+  cd /app/apps/worker
+  exec node dist/index.js "$@"
+}
+
+start_all() {
+  cd /app/apps/worker
+  node dist/index.js "$@" &
+  worker_pid=$!
+
+  cd /app/apps/web
+  ./node_modules/.bin/next start &
+  web_pid=$!
+
+  shutdown() {
+    kill -TERM "$worker_pid" "$web_pid" 2>/dev/null || true
+  }
+
+  trap shutdown INT TERM
+
+  while kill -0 "$worker_pid" 2>/dev/null && kill -0 "$web_pid" 2>/dev/null; do
+    sleep 1
+  done
+
+  if kill -0 "$worker_pid" 2>/dev/null; then
+    wait "$web_pid"
+    status=$?
+  else
+    wait "$worker_pid"
+    status=$?
+  fi
+
+  shutdown
+  wait "$worker_pid" 2>/dev/null || true
+  wait "$web_pid" 2>/dev/null || true
+  exit "$status"
+}
+
+case "$role" in
+  web)
+    write_role web
+    start_web "$@"
+    ;;
+  worker)
+    write_role worker
+    start_worker "$@"
+    ;;
+  bootstrap)
+    write_role bootstrap
+    bootstrap_runtime
+    ;;
+  all)
+    write_role all
+    start_all "$@"
+    ;;
+  *)
+    exec "$role" "$@"
+    ;;
+esac

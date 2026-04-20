@@ -4,13 +4,13 @@ import { logger } from '@agile-tools/shared';
 import type { PgBoss } from 'pg-boss';
 import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
 
-const DISPATCH_QUEUE_NAME = 'scope:sync-dispatch';
+const DISPATCH_QUEUE_NAME = 'scope-sync-dispatch';
 
 /**
  * Register the scope sync dispatch job and its 1-minute recurring cron schedule.
  *
  * Every minute, the dispatch handler inspects all active scopes and enqueues a
- * `scope:sync` job for any scope whose last sync run started more than
+ * `scope-sync` job for any scope whose last sync run started more than
  * `syncIntervalMinutes` ago (or that has never synced).
  *
  * This approach avoids the pg-boss limitation where `schedule(name, cron, …)` uses
