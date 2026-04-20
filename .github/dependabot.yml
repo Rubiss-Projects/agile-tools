@@ -1,0 +1,101 @@
+version: 2
+
+updates:
+  # Keep the pnpm workspace current while avoiding duplicate PRs per package.
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/apps/*"
+      - "/packages/*"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "05:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 8
+    versioning-strategy: "increase-if-necessary"
+    pull-request-branch-name:
+      separator: "-"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    groups:
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+        group-by: "dependency-name"
+      production-major:
+        dependency-type: "production"
+        update-types:
+          - "major"
+        patterns:
+          - "*"
+        group-by: "dependency-name"
+      development-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+        group-by: "dependency-name"
+      development-major:
+        dependency-type: "development"
+        update-types:
+          - "major"
+        patterns:
+          - "*"
+        group-by: "dependency-name"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "05:00"
+      timezone: "UTC"
+    pull-request-branch-name:
+      separator: "-"
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "05:15"
+      timezone: "UTC"
+    pull-request-branch-name:
+      separator: "-"
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      docker-base-images:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "05:30"
+      timezone: "UTC"
+    pull-request-branch-name:
+      separator: "-"
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      compose-images:
+        patterns:
+          - "*"
