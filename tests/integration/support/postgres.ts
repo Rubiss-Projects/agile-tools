@@ -32,7 +32,14 @@ export async function startPostgres(): Promise<PostgresInstance> {
       POSTGRES_DB: database,
     })
     .withExposedPorts(PG_PORT)
-    .withWaitStrategy(Wait.forLogMessage('database system is ready to accept connections'))
+    // The official Postgres image can emit an early readiness log during
+    // initialization before the final server is reachable on the mapped port.
+    .withWaitStrategy(
+      Wait.forAll([
+        Wait.forListeningPorts(),
+        Wait.forLogMessage('database system is ready to accept connections', 2),
+      ]).withStartupTimeout(120_000),
+    )
     .start();
 
   const port = container.getMappedPort(PG_PORT);
