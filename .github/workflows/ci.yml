@@ -74,8 +74,9 @@ jobs:
           set -euo pipefail
 
           docker run --rm --platform "${{ matrix.platform }}" --entrypoint sh "${{ matrix.image_tag }}" -lc '
-            set -euo pipefail
-            find /app -type f \( -name "schema-engine-*" -o -name "libquery_engine-*.so.node" \) | sort > /tmp/prisma-engines.txt
+            set -eu
+            find /app -type f \( -name "schema-engine-*" -o -name "libquery_engine-*.so.node" \) > /tmp/prisma-engines.raw
+            sort /tmp/prisma-engines.raw > /tmp/prisma-engines.txt
             cat /tmp/prisma-engines.txt
             grep -q "/${{ matrix.expected_schema_engine }}$" /tmp/prisma-engines.txt
             grep -q "/${{ matrix.expected_query_engine }}$" /tmp/prisma-engines.txt
