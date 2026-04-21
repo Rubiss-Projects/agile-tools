@@ -5,6 +5,7 @@ A self-hosted web application for kanban teams. Connects to a self-hosted Jira D
 ## Features
 
 - **Jira sync** — scheduled and manual synchronization of board issues, lifecycle events, and hold periods
+- **Admin configuration** — create and edit Jira connections plus board/flow scope mappings from the admin UI
 - **Current flow view** — scatter plot of active work items with percentile-based aging zones and on-hold classification
 - **Work-item detail** — per-item lifecycle timeline and hold period breakdown
 - **Monte Carlo forecasting** — story-count "when will we finish?" and "how many by a date?" simulations backed by local throughput history

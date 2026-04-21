@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@agile-tools/db';
-import { createSyncRun } from '@agile-tools/db';
+import { acquireScopeSyncLock, createSyncRun, updateSyncRun } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import type { PgBoss } from 'pg-boss';
 import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
@@ -58,39 +58,60 @@ async function maybeDispatchScopeSync(
   intervalMinutes: number,
   now: number,
 ): Promise<void> {
-  // Skip if a sync is already queued or running for this scope.
-  const activeSyncRun = await db.syncRun.findFirst({
-    where: { scopeId, status: { in: ['queued', 'running'] } },
+  const syncRun = await db.$transaction(async (tx) => {
+    await acquireScopeSyncLock(tx, scopeId);
+
+    const activeSyncRun = await tx.syncRun.findFirst({
+      where: { scopeId, status: { in: ['queued', 'running'] } },
+    });
+    if (activeSyncRun) return null;
+
+    const lastStartedRun = await tx.syncRun.findFirst({
+      where: {
+        scopeId,
+        startedAt: { not: null },
+      },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const isDue = !lastStartedRun || now - lastStartedRun.startedAt!.getTime() >= intervalMs;
+    if (!isDue) return null;
+
+    return createSyncRun(tx, { scopeId, trigger: 'scheduled' });
   });
-  if (activeSyncRun) return;
+  if (!syncRun) return;
 
-  // Find the most recent SyncRun (any status) to determine the next due time.
-  const lastRun = await db.syncRun.findFirst({
-    where: { scopeId },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  const intervalMs = intervalMinutes * 60 * 1000;
-  const isDue = !lastRun || now - lastRun.createdAt.getTime() >= intervalMs;
-  if (!isDue) return;
-
-  // Pre-create the SyncRun so the job handler reuses its ID (consistent with manual sync flow).
-  const syncRun = await createSyncRun(db, { scopeId, trigger: 'scheduled' });
-
-  const jobId = await boss.send(
-    QUEUE_NAMES.SCOPE_SYNC,
-    { scopeId, syncRunId: syncRun.id, trigger: 'scheduled' },
-    {
-      singletonKey: scopeId, // extra guard: only one pending job per scope in the queue
-      retryLimit: 1,
-      expireInSeconds: 60 * 60,
-    },
-  );
+  let jobId: string | null;
+  try {
+    jobId = await boss.send(
+      QUEUE_NAMES.SCOPE_SYNC,
+      { scopeId, syncRunId: syncRun.id, trigger: 'scheduled' },
+      {
+        singletonKey: scopeId, // extra guard: only one pending job per scope in the queue
+        retryLimit: 1,
+        expireInSeconds: 60 * 60,
+      },
+    );
+  } catch (err) {
+    await updateSyncRun(db, syncRun.id, {
+      status: 'canceled',
+      finishedAt: new Date(),
+      errorCode: 'SYNC_ENQUEUE_FAILED',
+      errorSummary: err instanceof Error ? err.message.slice(0, 500) : String(err),
+    });
+    throw err;
+  }
 
   if (jobId) {
     logger.info('Dispatched scheduled scope sync', { scopeId, syncRunId: syncRun.id });
   } else {
-    // singletonKey deduplication prevented a second job from being inserted.
-    logger.debug('Scope sync job already queued (singletonKey dedup)', { scopeId });
+    await updateSyncRun(db, syncRun.id, {
+      status: 'canceled',
+      finishedAt: new Date(),
+      errorCode: 'SYNC_ENQUEUE_DEDUPED',
+      errorSummary: 'pg-boss did not enqueue the scheduled scope sync job.',
+    });
+    logger.debug('Scope sync job already queued (singletonKey dedup)', { scopeId, syncRunId: syncRun.id });
   }
 }

@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient, type SyncRun, type SyncRunTrigger, type SyncRunStatus } from '@prisma/client';
 
+type SyncRunClient = PrismaClient | Prisma.TransactionClient;
+
 export interface CreateSyncRunInput {
   scopeId: string;
   trigger: SyncRunTrigger;
@@ -7,7 +9,7 @@ export interface CreateSyncRunInput {
 }
 
 export async function createSyncRun(
-  client: PrismaClient,
+  client: SyncRunClient,
   input: CreateSyncRunInput,
 ): Promise<SyncRun> {
   return client.syncRun.create({
@@ -24,7 +26,7 @@ export async function createSyncRun(
  * Returns null if not found or if the run does not belong to the workspace.
  */
 export async function getSyncRun(
-  client: PrismaClient,
+  client: SyncRunClient,
   workspaceId: string,
   syncRunId: string,
 ): Promise<SyncRun | null> {
@@ -37,7 +39,7 @@ export async function getSyncRun(
 }
 
 export async function listSyncRuns(
-  client: PrismaClient,
+  client: SyncRunClient,
   workspaceId: string,
   scopeId: string,
   limit = 50,
@@ -66,7 +68,7 @@ export interface UpdateSyncRunInput {
  * explicit null values clear the column.
  */
 export async function updateSyncRun(
-  client: PrismaClient,
+  client: SyncRunClient,
   syncRunId: string,
   input: UpdateSyncRunInput,
 ): Promise<SyncRun> {
@@ -87,7 +89,7 @@ export async function updateSyncRun(
  * Used to pin analytics projections to a stable snapshot.
  */
 export async function getLastSucceededSyncRun(
-  client: PrismaClient,
+  client: SyncRunClient,
   workspaceId: string,
   scopeId: string,
 ): Promise<SyncRun | null> {
@@ -108,7 +110,7 @@ export async function getLastSucceededSyncRun(
  * Returns null if no matching succeeded sync run exists for this scope/workspace.
  */
 export async function getSyncRunByDataVersion(
-  client: PrismaClient,
+  client: SyncRunClient,
   workspaceId: string,
   scopeId: string,
   dataVersion: string,
@@ -128,7 +130,7 @@ export async function getSyncRunByDataVersion(
  * Used to detect active syncs before enqueuing a new manual run.
  */
 export async function getActiveSyncRun(
-  client: PrismaClient,
+  client: SyncRunClient,
   workspaceId: string,
   scopeId: string,
 ): Promise<SyncRun | null> {
@@ -140,4 +142,11 @@ export async function getActiveSyncRun(
     },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+export async function acquireScopeSyncLock(
+  client: Prisma.TransactionClient,
+  scopeId: string,
+): Promise<void> {
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${scopeId}))`;
 }

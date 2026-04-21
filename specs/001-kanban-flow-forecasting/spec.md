@@ -35,6 +35,7 @@ As a delivery manager for a kanban team, I want our workspace administrator to c
 
 1. **Given** a workspace administrator has a service-account PAT for the team's self-hosted Jira instance, **When** they configure that board connection and the sync completes, **Then** the system shows a flow view built from the board's current and recent story data.
 2. **Given** a configured self-hosted Jira board has changed since the last sync, **When** the scheduled background sync runs or an authorized user triggers a manual refresh, **Then** the flow view reflects updated stories, statuses, and ages.
+3. **Given** an existing Jira connection or flow scope needs to change, **When** an administrator edits the connection base URL, display name, PAT, board, or flow boundaries, **Then** the system saves the updated configuration without exposing the PAT, requires re-validation after connection credential changes, and either queues a follow-up sync for boundary changes or returns an explicit conflict if another sync is already active.
 
 ---
 
@@ -102,6 +103,8 @@ As a delivery manager, I want completed-story throughput and Monte Carlo forecas
 - **FR-018**: The system MUST present completed-story throughput for the selected historical window so users can interpret the dataset underlying the forecast.
 - **FR-019**: The system MUST rely on the existing workspace authentication context to distinguish administrators from general users and restrict connection, scope, and hold-definition management to administrators.
 - **FR-020**: The system MUST reject unauthenticated or unauthorized requests with explicit authentication or permission errors.
+- **FR-021**: The system MUST allow an authorized administrator to edit an existing Jira connection's display name, base URL, and PAT rotation, and MUST reset connection validation state whenever the base URL or PAT changes.
+- **FR-022**: The system MUST allow an authorized administrator to edit an existing flow scope, including switching to a different Jira connection or board, and MUST queue a follow-up sync through the existing manual-sync pipeline when board identity or flow boundaries change unless a sync is already queued or running, in which case the update MUST fail with an explicit conflict.
 
 ### Key Entities *(include if feature involves data)*
 

@@ -78,6 +78,48 @@ describe('JiraConnectionForm', () => {
     expect(await screen.findByText(/pat is invalid/i)).toBeVisible();
     expect(refreshSpy).not.toHaveBeenCalled();
   });
+
+  it('updates a connection without requiring PAT rotation', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: '11111111-1111-4111-8111-111111111111',
+        baseUrl: 'https://jira.example.internal',
+        displayName: 'Renamed Jira',
+        healthStatus: 'healthy',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <JiraConnectionForm
+        initialConnection={{
+          id: '11111111-1111-4111-8111-111111111111',
+          baseUrl: 'https://jira.example.internal',
+          displayName: 'Team Jira',
+          healthStatus: 'healthy',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit connection/i }));
+    await user.clear(screen.getByRole('textbox', { name: /display name/i }));
+    await user.type(screen.getByRole('textbox', { name: /display name/i }), 'Renamed Jira');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await screen.findByText(/connection updated/i);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/jira-connections/11111111-1111-4111-8111-111111111111',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toContain('"displayName":"Renamed Jira"');
+    expect(fetchMock.mock.calls[0]?.[1]?.body).not.toContain('"pat"');
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ValidateConnectionButton', () => {

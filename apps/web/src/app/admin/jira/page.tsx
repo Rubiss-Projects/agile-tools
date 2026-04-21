@@ -137,6 +137,10 @@ export default async function AdminJiraPage() {
                 <div style={{ marginTop: '0.5rem' }}>
                   <ValidateConnectionButton connectionId={conn.id} />
                 </div>
+                <JiraConnectionForm
+                  key={`connection-${conn.id}-${conn.baseUrl}-${conn.displayName ?? ''}-${conn.healthStatus}`}
+                  initialConnection={conn}
+                />
               </li>
             ))}
           </ul>
@@ -173,6 +177,13 @@ export default async function AdminJiraPage() {
                 <a href={`/scopes/${scope.id}`} style={linkStyle}>
                   View →
                 </a>
+                <div style={{ width: '100%' }}>
+                  <FlowScopeForm
+                    key={`scope-${scope.id}-${scope.connectionId}-${scope.boardId}-${scope.timezone}-${scope.syncIntervalMinutes}`}
+                    connections={connectionSummaries}
+                    initialScope={scope}
+                  />
+                </div>
               </li>
             ))}
           </ul>

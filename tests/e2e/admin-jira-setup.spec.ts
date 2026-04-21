@@ -127,7 +127,7 @@ test('admin/jira page shows seeded connection name and health status', async ({ 
   await page.goto('/admin/jira');
 
   // The connection name must appear.
-  await expect(page.getByText('E2E Jira Connection')).toBeVisible();
+  await expect(page.getByText('E2E Jira Connection').first()).toBeVisible();
 
   // The health status badge must be visible.
   await expect(page.getByText('healthy')).toBeVisible();
@@ -162,7 +162,103 @@ test('clicking Validate button sends POST to validate endpoint', async ({ page }
   await validateBtn.click();
 
   // The route intercept verifies the call happened; just confirm no error state.
-  await expect(page.getByText('E2E Jira Connection')).toBeVisible();
+  await expect(page.getByText('E2E Jira Connection').first()).toBeVisible();
+});
+
+test('editing a Jira connection sends a PUT request with rotated credentials', async ({ page }) => {
+  await setAdminSession(page);
+
+  let requestBody: Record<string, unknown> | null = null;
+  await page.route(`**/api/v1/admin/jira-connections/${connectionId}`, async (route) => {
+    requestBody = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: connectionId,
+        baseUrl: 'https://jira-edited.example.internal',
+        displayName: 'Edited Jira Connection',
+        healthStatus: 'draft',
+      }),
+    });
+  });
+
+  await page.goto('/admin/jira');
+  await page.getByRole('button', { name: /edit connection/i }).first().click();
+  await page.getByRole('textbox', { name: /jira base url/i }).first().fill('https://jira-edited.example.internal');
+  await page.getByRole('textbox', { name: /display name/i }).first().fill('Edited Jira Connection');
+  await page.getByLabel(/replace personal access token/i).fill('rotated-pat');
+  await page.getByRole('button', { name: /save changes/i }).click();
+
+  await expect(page.getByText(/connection updated/i)).toBeVisible();
+  expect(requestBody).toMatchObject({
+    baseUrl: 'https://jira-edited.example.internal',
+    displayName: 'Edited Jira Connection',
+    pat: 'rotated-pat',
+  });
+});
+
+test('editing a flow scope sends a PUT request and keeps the admin on the setup screen', async ({
+  page,
+}) => {
+  await setAdminSession(page);
+
+  let scopeRequestBody: Record<string, unknown> | null = null;
+  await page.route(`**/api/v1/admin/jira-connections/${connectionId}/discovery/boards`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        boards: [{ boardId: 42, boardName: 'E2E Kanban Board' }],
+      }),
+    });
+  });
+  await page.route(`**/api/v1/admin/jira-connections/${connectionId}/discovery/boards/42`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        boardId: 42,
+        boardName: 'E2E Kanban Board',
+        columns: [{ name: 'Doing', statusIds: ['10'] }],
+        statuses: [{ id: '10', name: 'In Progress' }],
+        completionStatuses: [{ id: '30', name: 'Done' }],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      }),
+    });
+  });
+  await page.route(`**/api/v1/admin/scopes/${scopeId}`, async (route) => {
+    scopeRequestBody = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: scopeId,
+        connectionId,
+        boardId: 42,
+        boardName: 'E2E Kanban Board',
+        timezone: 'UTC',
+        includedIssueTypeIds: ['story'],
+        startStatusIds: ['10'],
+        doneStatusIds: ['30'],
+        syncIntervalMinutes: 15,
+        status: 'active',
+      }),
+    });
+  });
+
+  await page.goto('/admin/jira');
+  await page.getByRole('button', { name: /edit flow scope/i }).first().click();
+  await page.getByRole('spinbutton', { name: /sync interval/i }).first().waitFor();
+  await page.getByRole('spinbutton', { name: /sync interval/i }).first().fill('15');
+  await page.getByRole('button', { name: /save flow scope/i }).click();
+
+  await expect(page.getByText(/flow scope updated/i)).toBeVisible();
+  expect(scopeRequestBody).toMatchObject({
+    connectionId,
+    boardId: 42,
+    syncIntervalMinutes: 15,
+  });
 });
 
 // ─── Test: /scopes/:id renders scope detail ───────────────────────────────────

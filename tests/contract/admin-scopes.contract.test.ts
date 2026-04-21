@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import { setupServer } from 'msw/node';
+import { http, HttpResponse } from 'msw';
 import { NextRequest } from 'next/server';
 import { resetConfig, encryptSecret } from '@agile-tools/shared';
 import { getPrismaClient, disconnectPrisma } from '@agile-tools/db';
@@ -33,6 +34,7 @@ vi.mock('@/server/queue', () => ({
 // ─── Lazy imports after mocks ─────────────────────────────────────────────────
 
 const { cookies } = await import('next/headers');
+const { enqueueScopeSyncJob } = await import('@/server/queue');
 const { POST: createScope } = await import(
   '../../apps/web/src/app/api/v1/admin/scopes/route'
 );
@@ -139,9 +141,12 @@ afterAll(async () => {
   await stopPostgres();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.mocked(cookies).mockReturnValue(makeCookieStore(adminCookieValue) as never);
+  vi.mocked(enqueueScopeSyncJob).mockResolvedValue('test-job-id');
   mswServer.resetHandlers();
+  const db = getPrismaClient();
+  await db.syncRun.deleteMany({ where: { scopeId } });
 });
 
 // ─── POST /v1/admin/scopes ────────────────────────────────────────────────────
@@ -218,6 +223,9 @@ describe('PUT /v1/admin/scopes/:id', () => {
     const parsed = FlowScopeSchema.safeParse(body);
     expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
     expect(parsed.data?.syncIntervalMinutes).toBe(15);
+    const db = getPrismaClient();
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(0);
   });
 
   it('returns 404 when the scope does not exist', async () => {
@@ -228,6 +236,95 @@ describe('PUT /v1/admin/scopes/:id', () => {
     });
     const res = await updateScope(req, { params: Promise.resolve({ scopeId: missingId }) });
     expect(res.status).toBe(404);
+  });
+
+  it('queues a sync when board or flow boundaries change', async () => {
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      startStatusIds: ['2'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(200);
+
+    const db = getPrismaClient();
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('queued');
+    expect(syncRuns[0]?.trigger).toBe('manual');
+  });
+
+  it('returns 409 when a sync is already active for boundary-changing updates', async () => {
+    const db = getPrismaClient();
+    await db.syncRun.create({
+      data: {
+        scopeId,
+        trigger: 'manual',
+        status: 'queued',
+      },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      doneStatusIds: ['4'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(409);
+  });
+
+  it('updates flow boundaries without Jira availability when the board stays the same', async () => {
+    mswServer.use(
+      http.get(`${JIRA_BASE}/rest/agile/1.0/board/:boardId/project`, () =>
+        HttpResponse.json({ message: 'jira unavailable' }, { status: 503 }),
+      ),
+    );
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      doneStatusIds: ['4'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(200);
+
+    const body = FlowScopeSchema.parse(await res.json());
+    expect(body.doneStatusIds).toEqual(['4']);
+
+    const db = getPrismaClient();
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('queued');
+  });
+
+  it('rolls back boundary changes when the follow-up sync cannot be enqueued', async () => {
+    vi.mocked(enqueueScopeSyncJob).mockImplementationOnce(async () => {
+      const db = getPrismaClient();
+      await db.flowScope.update({
+        where: { id: scopeId },
+        data: { syncIntervalMinutes: 30 },
+      });
+
+      return null;
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      startStatusIds: ['2'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(503);
+
+    const db = getPrismaClient();
+    const scope = await db.flowScope.findUnique({ where: { id: scopeId } });
+    expect(scope?.startStatusIds).toEqual(['1']);
+    expect(scope?.syncIntervalMinutes).toBe(30);
+
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('canceled');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_ENQUEUE_FAILED');
   });
 });
 
@@ -249,13 +346,33 @@ describe('POST /v1/admin/scopes/:id/syncs', () => {
   });
 
   it('returns 409 when a sync is already active for this scope', async () => {
-    // The previous test created a queued run; a second trigger should conflict.
+    await triggerSync(
+      makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}/syncs`, 'POST'),
+      { params: Promise.resolve({ scopeId }) },
+    );
     const req = makeRequest(
       `http://localhost/api/v1/admin/scopes/${scopeId}/syncs`,
       'POST',
     );
     const res = await triggerSync(req, { params: Promise.resolve({ scopeId }) });
     expect(res.status).toBe(409);
+  });
+
+  it('returns 503 and cancels the sync run when queue insertion fails', async () => {
+    vi.mocked(enqueueScopeSyncJob).mockResolvedValueOnce(null);
+
+    const req = makeRequest(
+      `http://localhost/api/v1/admin/scopes/${scopeId}/syncs`,
+      'POST',
+    );
+    const res = await triggerSync(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(503);
+
+    const db = getPrismaClient();
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('canceled');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_ENQUEUE_DEDUPED');
   });
 
   it('returns 404 when the scope does not exist', async () => {

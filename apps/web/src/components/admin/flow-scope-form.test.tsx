@@ -81,7 +81,6 @@ describe('FlowScopeForm', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /add flow scope/i }));
     await user.click(screen.getByRole('button', { name: /discover boards/i }));
     await screen.findByRole('option', { name: /payments board/i });
 
@@ -106,6 +105,88 @@ describe('FlowScopeForm', () => {
     expect(screen.getByRole('link', { name: /view scope/i })).toHaveAttribute(
       'href',
       '/scopes/11111111-1111-4111-8111-111111111111',
+    );
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the existing scope configuration and saves edits', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ boards: [{ boardId: 42, boardName: 'Payments Board' }] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          boardId: 42,
+          boardName: 'Payments Board',
+          columns: [{ name: 'Doing', statusIds: ['10'] }],
+          statuses: [{ id: '10', name: 'In Progress' }],
+          completionStatuses: [
+            { id: '10', name: 'In Progress' },
+            { id: '40', name: 'Closed' },
+          ],
+          issueTypes: [{ id: 'story', name: 'Story' }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            connectionId: '22222222-2222-4222-8222-222222222222',
+            boardId: 42,
+            boardName: 'Payments Board',
+            timezone: 'UTC',
+            includedIssueTypeIds: ['story'],
+            startStatusIds: ['10'],
+            doneStatusIds: ['40'],
+            syncIntervalMinutes: 15,
+            status: 'active',
+          },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FlowScopeForm
+        connections={[
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            baseUrl: 'https://jira.example.internal',
+            displayName: 'Team Jira',
+            healthStatus: 'healthy',
+          },
+        ]}
+        initialScope={{
+          id: '11111111-1111-4111-8111-111111111111',
+          connectionId: '22222222-2222-4222-8222-222222222222',
+          boardId: 42,
+          boardName: 'Payments Board',
+          timezone: 'UTC',
+          includedIssueTypeIds: ['story'],
+          startStatusIds: ['10'],
+          doneStatusIds: ['40'],
+          syncIntervalMinutes: 10,
+          status: 'active',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit flow scope/i }));
+    await screen.findByText(/start statuses/i);
+
+    const syncInterval = screen.getByRole('spinbutton', { name: /sync interval/i });
+    await user.clear(syncInterval);
+    await user.type(syncInterval, '15');
+    await user.click(screen.getByRole('button', { name: /save flow scope/i }));
+
+    expect(await screen.findByText(/flow scope updated/i)).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/scopes/11111111-1111-4111-8111-111111111111',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      }),
     );
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
