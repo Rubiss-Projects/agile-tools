@@ -39,12 +39,17 @@ describe('FlowScopeForm', () => {
         jsonResponse({
           boardId: 42,
           boardName: 'Payments Board',
-          columns: [{ name: 'Doing', statusIds: ['10'] }],
-          statuses: [{ id: '10', name: 'In Progress' }],
-          completionStatuses: [
+          columns: [{ name: 'Doing', statusIds: ['10', '30', '20'] }],
+          statuses: [
             { id: '10', name: 'In Progress' },
-            { id: '30', name: 'Done' },
+            { id: '30', name: 'Backlog' },
+            { id: '20', name: 'Done' },
+          ],
+          completionStatuses: [
             { id: '40', name: 'Closed' },
+            { id: '10', name: 'In Progress' },
+            { id: '20', name: 'Done' },
+            { id: '30', name: 'Backlog' },
           ],
           issueTypes: [{ id: 'story', name: 'Story' }],
         }),
@@ -95,6 +100,16 @@ describe('FlowScopeForm', () => {
     expect(doneFieldset).not.toBeNull();
     expect(issueTypeFieldset).not.toBeNull();
     expect(within(doneFieldset as HTMLFieldSetElement).getByText(/closed \(off-board\)/i)).toBeVisible();
+    expect(
+      within(startFieldset as HTMLFieldSetElement)
+        .getAllByRole('checkbox')
+        .map((checkbox) => checkbox.parentElement?.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['Backlog', 'Done', 'In Progress']);
+    expect(
+      within(doneFieldset as HTMLFieldSetElement)
+        .getAllByRole('checkbox')
+        .map((checkbox) => checkbox.parentElement?.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['Backlog', 'Closed (off-board)', 'Done', 'In Progress']);
 
     await user.click(within(startFieldset as HTMLFieldSetElement).getByRole('checkbox', { name: /in progress/i }));
     await user.click(within(doneFieldset as HTMLFieldSetElement).getByRole('checkbox', { name: /closed \(off-board\)/i }));
@@ -108,7 +123,6 @@ describe('FlowScopeForm', () => {
     );
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
-
   it('loads the existing scope configuration and saves edits', async () => {
     const user = userEvent.setup();
     const fetchMock = vi
