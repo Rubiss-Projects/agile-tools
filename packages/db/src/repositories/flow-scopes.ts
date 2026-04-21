@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient, type FlowScope } from '@prisma/client';
 import type { FlowScopeStatus } from '@prisma/client';
 
+type FlowScopeClient = PrismaClient | Prisma.TransactionClient;
+
 export interface CreateFlowScopeInput {
   connectionId: string;
   /** Jira board ID (numeric). Stored as string internally. */
@@ -26,7 +28,7 @@ function assertStatusSetsDisjoint(startStatusIds: string[], doneStatusIds: strin
 }
 
 export async function createFlowScope(
-  client: PrismaClient,
+  client: FlowScopeClient,
   workspaceId: string,
   input: CreateFlowScopeInput,
 ): Promise<FlowScope> {
@@ -47,7 +49,7 @@ export async function createFlowScope(
 }
 
 export async function getFlowScope(
-  client: PrismaClient,
+  client: FlowScopeClient,
   workspaceId: string,
   scopeId: string,
 ): Promise<FlowScope | null> {
@@ -57,7 +59,7 @@ export async function getFlowScope(
 }
 
 export async function listFlowScopes(
-  client: PrismaClient,
+  client: FlowScopeClient,
   workspaceId: string,
 ): Promise<FlowScope[]> {
   return client.flowScope.findMany({
@@ -71,7 +73,7 @@ export async function listFlowScopes(
  * Returns the updated record or null if the scope does not exist in the workspace.
  */
 export async function updateFlowScope(
-  client: PrismaClient,
+  client: FlowScopeClient,
   workspaceId: string,
   scopeId: string,
   input: UpdateFlowScopeInput,
@@ -105,7 +107,7 @@ export async function updateFlowScope(
  * Returns the updated record or null if not found.
  */
 export async function updateFlowScopeStatus(
-  client: PrismaClient,
+  client: FlowScopeClient,
   workspaceId: string,
   scopeId: string,
   status: FlowScopeStatus,
@@ -124,7 +126,7 @@ export async function updateFlowScopeStatus(
 }
 
 export async function deleteFlowScope(
-  client: PrismaClient,
+  client: FlowScopeClient,
   workspaceId: string,
   scopeId: string,
 ): Promise<boolean> {

@@ -25,6 +25,7 @@ import {
   statLabelStyle,
   statValueStyle,
   tonePillStyle,
+  palette,
 } from '@/components/app/chrome';
 
 export default async function AdminJiraPage() {
@@ -42,10 +43,10 @@ export default async function AdminJiraPage() {
   }
 
   if (ctx.role !== 'admin') {
-    return (
-      <main style={pageShellStyle}>
-        <section style={sectionCardStyle}>
-          <p style={{ ...eyebrowStyle, color: '#991b1b' }}>Access Control</p>
+      return (
+        <main style={pageShellStyle}>
+          <section style={sectionCardStyle}>
+          <p style={{ ...eyebrowStyle, color: palette.danger }}>Access Control</p>
           <h1 style={{ ...heroTitleStyle, fontSize: '2rem' }}>Administrator access required</h1>
           <p style={heroCopyStyle}>This workspace page is limited to administrators because it can modify Jira connections and scope configuration.</p>
         </section>
@@ -122,21 +123,25 @@ export default async function AdminJiraPage() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                   <div>
-                    <strong style={{ display: 'block', fontSize: '1rem', color: '#0f172a' }}>
+                    <strong style={{ display: 'block', fontSize: '1rem', color: palette.ink }}>
                       {conn.displayName ?? conn.baseUrl}
                     </strong>
-                    <p style={{ margin: '0.45rem 0 0', color: '#475569', fontSize: '0.92rem' }}>{conn.baseUrl}</p>
+                    <p style={{ margin: '0.45rem 0 0', color: palette.muted, fontSize: '0.92rem' }}>{conn.baseUrl}</p>
                   </div>
                   <span style={tonePillStyle(connectionTone(conn.healthStatus))}>{conn.healthStatus}</span>
                 </div>
                 {conn.lastErrorCode && (
-                  <p style={{ margin: '0.75rem 0 0', color: '#92400e', fontSize: '0.84rem' }}>
+                  <p style={{ margin: '0.75rem 0 0', color: palette.warning, fontSize: '0.84rem' }}>
                     Last error: <span style={codeStyle}>{conn.lastErrorCode}</span>
                   </p>
                 )}
                 <div style={{ marginTop: '0.5rem' }}>
                   <ValidateConnectionButton connectionId={conn.id} />
                 </div>
+                <JiraConnectionForm
+                  key={`connection-${conn.id}-${conn.baseUrl}-${conn.displayName ?? ''}-${conn.healthStatus}`}
+                  initialConnection={conn}
+                />
               </li>
             ))}
           </ul>
@@ -163,16 +168,23 @@ export default async function AdminJiraPage() {
               >
                 <div>
                   <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <strong style={{ color: '#0f172a' }}>{scope.boardName ?? `Board ${scope.boardId}`}</strong>
+                    <strong style={{ color: palette.ink }}>{scope.boardName ?? `Board ${scope.boardId}`}</strong>
                     <span style={tonePillStyle(scopeTone(scope.status))}>{scope.status}</span>
                   </div>
-                  <p style={{ margin: '0.45rem 0 0', color: '#475569', fontSize: '0.92rem' }}>
+                  <p style={{ margin: '0.45rem 0 0', color: palette.muted, fontSize: '0.92rem' }}>
                     Board {scope.boardId} · every {scope.syncIntervalMinutes} minutes
                   </p>
                 </div>
                 <a href={`/scopes/${scope.id}`} style={linkStyle}>
                   View →
                 </a>
+                <div style={{ width: '100%' }}>
+                  <FlowScopeForm
+                    key={`scope-${scope.id}-${scope.connectionId}-${scope.boardId}-${scope.timezone}-${scope.syncIntervalMinutes}`}
+                    connections={connectionSummaries}
+                    initialScope={scope}
+                  />
+                </div>
               </li>
             ))}
           </ul>

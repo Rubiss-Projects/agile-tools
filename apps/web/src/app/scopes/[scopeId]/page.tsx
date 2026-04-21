@@ -25,6 +25,7 @@ import {
   tonePillStyle,
   linkStyle,
   insetPanelStyle,
+  palette,
 } from '@/components/app/chrome';
 
 export default async function ScopePage({
@@ -52,12 +53,12 @@ export default async function ScopePage({
   const { scope, connectionHealth, lastSync, filterOptions, warnings } = summary;
 
   const healthColor: Record<string, string> = {
-    healthy: 'green',
-    unhealthy: 'red',
-    stale: '#b45309',
-    validating: '#1d4ed8',
-    draft: '#6b7280',
-    disabled: '#6b7280',
+    healthy: palette.positive,
+    unhealthy: palette.danger,
+    stale: palette.warning,
+    validating: palette.accentStrong,
+    draft: palette.soft,
+    disabled: palette.soft,
   };
 
   const connectionTone = connectionHealth === 'healthy'
@@ -88,7 +89,7 @@ export default async function ScopePage({
             <p style={heroCopyStyle}>
               Track active work, sync health, and aging signals for this board snapshot.
             </p>
-            <p style={{ margin: '0.9rem 0 0', color: '#475569', fontSize: '0.92rem' }}>
+            <p style={{ margin: '0.9rem 0 0', color: palette.muted, fontSize: '0.92rem' }}>
               Scope ID <span style={codeStyle}>{scope.id}</span>
             </p>
           </div>
@@ -98,7 +99,7 @@ export default async function ScopePage({
         <div style={statGridStyle}>
           <article style={statCardStyle}>
             <p style={statLabelStyle}>Connection Health</p>
-            <p style={{ ...statValueStyle, color: healthColor[connectionHealth] ?? '#0f172a' }}>{connectionHealth}</p>
+            <p style={{ ...statValueStyle, color: healthColor[connectionHealth] ?? palette.ink }}>{connectionHealth}</p>
           </article>
           <article style={statCardStyle}>
             <p style={statLabelStyle}>Last Sync</p>
@@ -141,22 +142,22 @@ export default async function ScopePage({
         {lastSync ? (
           <div style={{ display: 'grid', gap: '0.85rem' }}>
             <div style={insetPanelStyle}>
-              <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
+              <p style={{ margin: 0, color: palette.muted, fontSize: '0.9rem' }}>
                 Last sync{' '}
                 <strong
                   style={{
                     color:
                       lastSync.status === 'succeeded'
-                        ? 'green'
+                        ? palette.positive
                         : lastSync.status === 'failed'
-                          ? 'red'
-                          : '#1d4ed8',
+                          ? palette.danger
+                          : palette.accentStrong,
                   }}
                 >
                   {lastSync.status}
                 </strong>
                 {lastSync.finishedAt && (
-                  <span style={{ marginLeft: '0.45rem', color: '#64748b' }}>
+                  <span style={{ marginLeft: '0.45rem', color: palette.soft }}>
                     finished {new Date(lastSync.finishedAt).toLocaleString()}
                   </span>
                 )}
@@ -164,13 +165,13 @@ export default async function ScopePage({
             </div>
             {lastSync.dataVersion && (
               <div style={insetPanelStyle}>
-                <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
+                <p style={{ margin: 0, color: palette.muted, fontSize: '0.9rem' }}>
                   Data version <span style={codeStyle}>{lastSync.dataVersion}</span>
                 </p>
               </div>
             )}
             {lastSync.errorCode && (
-              <p style={{ margin: 0, color: 'red', fontSize: '0.875rem' }}>
+              <p style={{ margin: 0, color: palette.danger, fontSize: '0.875rem' }}>
                 Error: {lastSync.errorCode}
                 {lastSync.errorSummary && ` — ${lastSync.errorSummary}`}
               </p>

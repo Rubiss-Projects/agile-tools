@@ -1,6 +1,6 @@
 'use client';
 
-import { checkboxChipStyle, fieldLabelStyle, insetPanelStyle, selectStyle } from '@/components/app/chrome';
+import { checkboxChipStyle, fieldLabelStyle, insetPanelStyle, selectStyle, selectionControlStyle } from '@/components/app/chrome';
 
 /** Active filter state passed around between FlowFiltersPanel and consumers. */
 export interface FlowFilters {
@@ -90,7 +90,7 @@ export function FlowFiltersPanel({
                     onChange({ ...filters, issueTypeIds: toggle(filters.issueTypeIds, t.id) })
                   }
                   disabled={disabled}
-                  style={{ accentColor: '#1d4ed8' }}
+                  style={selectionControlStyle}
                   aria-label={`Filter by ${t.name}`}
                 />
                 {t.name}
@@ -117,7 +117,7 @@ export function FlowFiltersPanel({
                     onChange({ ...filters, statusIds: toggle(filters.statusIds, s.id) })
                   }
                   disabled={disabled}
-                  style={{ accentColor: '#1d4ed8' }}
+                  style={selectionControlStyle}
                   aria-label={`Filter by status ${s.name}`}
                 />
                 {s.name}
@@ -135,7 +135,7 @@ export function FlowFiltersPanel({
             checked={filters.agingOnly}
             onChange={(e) => onChange({ ...filters, agingOnly: e.target.checked })}
             disabled={disabled}
-            style={{ accentColor: '#1d4ed8' }}
+            style={selectionControlStyle}
           />
           Aging only
         </label>
@@ -145,7 +145,7 @@ export function FlowFiltersPanel({
             checked={filters.onHoldOnly}
             onChange={(e) => onChange({ ...filters, onHoldOnly: e.target.checked })}
             disabled={disabled}
-            style={{ accentColor: '#1d4ed8' }}
+            style={selectionControlStyle}
           />
           On-hold only
         </label>

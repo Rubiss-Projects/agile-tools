@@ -15,39 +15,74 @@ import {
   tonePillStyle,
 } from '@/components/app/chrome';
 
-// ─── Create Connection Form ───────────────────────────────────────────────────
+interface JiraConnectionFormProps {
+  initialConnection?: JiraConnection;
+}
 
-export function JiraConnectionForm() {
+interface SubmitResult {
+  connection: JiraConnection;
+  requiresValidation: boolean;
+}
+
+export function JiraConnectionForm({ initialConnection }: JiraConnectionFormProps) {
   const router = useRouter();
-  const [baseUrl, setBaseUrl] = useState('');
+  const isEditMode = initialConnection !== undefined;
+  const [expanded, setExpanded] = useState(!isEditMode);
+  const [baseUrl, setBaseUrl] = useState(initialConnection?.baseUrl ?? '');
   const [pat, setPat] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState(initialConnection?.displayName ?? '');
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<JiraConnection | null>(null);
+  const [result, setResult] = useState<SubmitResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  function resetEditState() {
+    setBaseUrl(initialConnection?.baseUrl ?? '');
+    setPat('');
+    setDisplayName(initialConnection?.displayName ?? '');
+    setError(null);
+    setResult(null);
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const trimmedBaseUrl = baseUrl.trim();
+    const trimmedPat = pat.trim();
+    const trimmedDisplayName = displayName.trim();
+    const shouldRotatePat = trimmedPat.length > 0;
+    const requiresValidation =
+      isEditMode &&
+      (trimmedBaseUrl.replace(/\/$/, '') !== initialConnection.baseUrl || shouldRotatePat);
+
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/admin/jira-connections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseUrl,
-          pat,
-          ...(displayName.trim() && { displayName: displayName.trim() }),
-        }),
-      });
+      const res = await fetch(
+        isEditMode
+          ? `/api/v1/admin/jira-connections/${initialConnection.id}`
+          : '/api/v1/admin/jira-connections',
+        {
+          method: isEditMode ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            baseUrl: trimmedBaseUrl,
+            ...(!isEditMode || shouldRotatePat ? { pat: trimmedPat } : {}),
+            ...(!isEditMode
+              ? (trimmedDisplayName && { displayName: trimmedDisplayName })
+              : { displayName: trimmedDisplayName }),
+          }),
+        },
+      );
       const data: unknown = await res.json();
       if (!res.ok) {
-        setError((data as { message?: string }).message ?? 'Failed to create connection.');
+        setError((data as { message?: string }).message ?? `Failed to ${isEditMode ? 'update' : 'create'} connection.`);
       } else {
-        setCreated(data as JiraConnection);
-        setBaseUrl('');
+        const connection = data as JiraConnection;
+        setResult({ connection, requiresValidation });
+        if (!isEditMode) {
+          setBaseUrl('');
+          setDisplayName('');
+        }
         setPat('');
-        setDisplayName('');
         router.refresh();
       }
     } catch {
@@ -57,11 +92,23 @@ export function JiraConnectionForm() {
     }
   }
 
+  if (isEditMode && !expanded) {
+    return (
+      <button type="button" onClick={() => setExpanded(true)} style={{ ...buttonStyle('secondary'), marginTop: '0.75rem' }}>
+        Edit Connection
+      </button>
+    );
+  }
+
   return (
     <div style={{ ...insetPanelStyle, marginTop: '1rem' }}>
-      <h3 style={{ ...sectionTitleStyle, marginBottom: '0.35rem' }}>Add Jira Connection</h3>
+      <h3 style={{ ...sectionTitleStyle, marginBottom: '0.35rem' }}>
+        {isEditMode ? 'Edit Jira Connection' : 'Add Jira Connection'}
+      </h3>
       <p style={{ ...sectionCopyStyle, marginBottom: '1rem' }}>
-        Store the Jira base URL and PAT used for board discovery and scheduled syncs.
+        {isEditMode
+          ? 'Update the Jira base URL, display name, or rotate the PAT for this connection.'
+          : 'Store the Jira base URL and PAT used for board discovery and scheduled syncs.'}
       </p>
       <form onSubmit={(e) => { void handleSubmit(e); }}>
         <div style={{ marginBottom: '0.75rem' }}>
@@ -80,15 +127,20 @@ export function JiraConnectionForm() {
         </div>
         <div style={{ marginBottom: '0.75rem' }}>
           <label>
-            <span style={fieldLabelStyle}>Personal Access Token</span>
+            <span style={fieldLabelStyle}>
+              {isEditMode ? 'Replace Personal Access Token' : 'Personal Access Token'}
+            </span>
             <input
               type="password"
               value={pat}
               onChange={(e) => setPat(e.target.value)}
-              required
+              required={!isEditMode}
               style={inputStyle}
             />
           </label>
+          {isEditMode && (
+            <p style={helperTextStyle}>Leave blank to keep the current PAT. Changing the PAT requires re-validation.</p>
+          )}
         </div>
         <div style={{ marginBottom: '0.75rem' }}>
           <label>
@@ -104,23 +156,42 @@ export function JiraConnectionForm() {
           <p style={helperTextStyle}>Optional label used to distinguish multiple Jira instances in the workspace.</p>
         </div>
         {error && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{error}</p></div>}
-        <button type="submit" disabled={submitting} style={buttonStyle('primary', submitting)}>
-          {submitting ? 'Creating…' : 'Create Connection'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="submit" disabled={submitting} style={buttonStyle('primary', submitting)}>
+            {submitting ? (isEditMode ? 'Saving…' : 'Creating…') : (isEditMode ? 'Save Changes' : 'Create Connection')}
+          </button>
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={() => {
+                resetEditState();
+                setExpanded(false);
+              }}
+              style={buttonStyle('secondary')}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
-      {created && (
+      {result && (
         <div style={{ ...noticeStyle('success'), marginTop: '0.85rem' }}>
-          <strong>✓ Connection created</strong>: {created.displayName ?? created.baseUrl}
+          <strong>{isEditMode ? '✓ Connection updated' : '✓ Connection created'}</strong>
+          {': '}
+          {result.connection.displayName ?? result.connection.baseUrl}
+          {isEditMode && result.requiresValidation && (
+            <p style={{ margin: '0.5rem 0 0', color: '#166534', fontSize: '0.9rem' }}>
+              Validate the connection again before relying on sync results.
+            </p>
+          )}
           <div style={{ marginTop: '0.5rem' }}>
-            <ValidateConnectionButton connectionId={created.id} />
+            <ValidateConnectionButton connectionId={result.connection.id} />
           </div>
         </div>
       )}
     </div>
   );
 }
-
-// ─── Validate Connection Button ───────────────────────────────────────────────
 
 export function ValidateConnectionButton({ connectionId }: { connectionId: string }) {
   const router = useRouter();

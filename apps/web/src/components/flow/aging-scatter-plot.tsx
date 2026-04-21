@@ -7,23 +7,21 @@ import type {
 } from '@nivo/scatterplot';
 import type { ScatterDatum, FlowAnalyticsViewModel } from '@/server/views/flow-analytics';
 import type { AgingModel } from '@agile-tools/shared/contracts/api';
-
-const ZONE_COLORS: Record<string, string> = {
-  normal: '#22c55e',
-  watch: '#f59e0b',
-  aging: '#ef4444',
-};
+import { palette } from '@/components/app/chrome';
 
 /** Render dashed vertical reference lines at the p50, p70, and p85 thresholds. */
-function createThresholdLayer(agingModel: AgingModel) {
+function createThresholdLayer(
+  agingModel: AgingModel,
+  colors: { positive: string; warning: string; danger: string },
+) {
   return function ThresholdLines({
     xScale,
     innerHeight,
   }: ScatterPlotLayerProps<ScatterDatum>) {
     const thresholds = [
-      { value: agingModel.p50, label: 'p50', color: '#22c55e' },
-      { value: agingModel.p70, label: 'p70', color: '#f59e0b' },
-      { value: agingModel.p85, label: 'p85', color: '#ef4444' },
+      { value: agingModel.p50, label: 'p50', color: colors.positive },
+      { value: agingModel.p70, label: 'p70', color: colors.warning },
+      { value: agingModel.p85, label: 'p85', color: colors.danger },
     ].filter((t) => t.value > 0);
 
     if (thresholds.length === 0) return null;
@@ -70,9 +68,25 @@ export function AgingScatterPlot({
 }: AgingScatterPlotProps) {
   const { series, agingModel } = viewModel;
   const isEmpty = series.every((s) => s.data.length === 0);
+  const colors = {
+    positive: palette.chartPositive,
+    warning: palette.chartWarning,
+    danger: palette.chartDanger,
+    neutral: palette.chartNeutral,
+    hold: palette.chartHold,
+    text: palette.text,
+    soft: palette.soft,
+    line: palette.line,
+    panel: palette.panelStrong,
+  };
+  const zoneColors: Record<string, string> = {
+    normal: colors.positive,
+    watch: colors.warning,
+    aging: colors.danger,
+  };
 
   // Recreated on every render; fine because agingModel only changes on new data loads.
-  const thresholdLayer = createThresholdLayer(agingModel);
+  const thresholdLayer = createThresholdLayer(agingModel, colors);
 
   if (isEmpty) {
     return (
@@ -82,9 +96,9 @@ export function AgingScatterPlot({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#6b7280',
+          color: palette.soft,
           fontSize: '0.875rem',
-          border: '1px dashed #e5e7eb',
+          border: `1px dashed ${palette.lineStrong}`,
           borderRadius: '4px',
         }}
       >
@@ -107,9 +121,45 @@ export function AgingScatterPlot({
         }}
         axisLeft={null}
         enableGridY={false}
-        colors={({ serieId }: { serieId: string | number }) =>
-          ZONE_COLORS[String(serieId)] ?? '#94a3b8'
-        }
+        theme={{
+          text: {
+            fill: colors.soft,
+            fontSize: 12,
+          },
+          axis: {
+            domain: {
+              line: {
+                stroke: colors.line,
+              },
+            },
+            ticks: {
+              line: {
+                stroke: colors.line,
+              },
+              text: {
+                fill: colors.soft,
+              },
+            },
+            legend: {
+              text: {
+                fill: colors.soft,
+              },
+            },
+          },
+          grid: {
+            line: {
+              stroke: colors.line,
+            },
+          },
+          crosshair: {
+            line: {
+              stroke: colors.soft,
+              strokeWidth: 1,
+              strokeOpacity: 0.5,
+            },
+          },
+        }}
+        colors={({ serieId }: { serieId: string | number }) => zoneColors[String(serieId)] ?? colors.neutral}
         nodeSize={10}
         useMesh={true}
         layers={[
@@ -126,24 +176,25 @@ export function AgingScatterPlot({
           return (
             <div
               style={{
-                background: 'white',
-                border: '1px solid #e5e7eb',
+                background: colors.panel,
+                border: `1px solid ${colors.line}`,
                 borderRadius: '4px',
                 padding: '0.5rem 0.75rem',
                 fontSize: '0.8125rem',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                boxShadow: palette.shadowSoft,
                 maxWidth: '18rem',
+                color: colors.text,
               }}
             >
               <strong>{d.issueKey}</strong>
               <br />
-              <span style={{ color: '#374151' }}>{d.summary}</span>
+              <span style={{ color: colors.text }}>{d.summary}</span>
               <br />
-              <span style={{ color: '#6b7280' }}>
+              <span style={{ color: colors.soft }}>
                 Age: {node.xValue.toFixed(1)}d
               </span>
               {d.onHoldNow && (
-                <span style={{ marginLeft: '0.5rem', color: '#6366f1' }}>● On hold</span>
+                <span style={{ marginLeft: '0.5rem', color: colors.hold }}>● On hold</span>
               )}
             </div>
           );

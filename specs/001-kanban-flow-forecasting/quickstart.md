@@ -80,9 +80,16 @@ pnpm --filter @agile-tools/worker dev
 2. Create a Jira connection with the self-hosted base URL and service-account PAT.
 3. Validate the connection and confirm the instance health is `healthy`.
 4. Discover boards and choose the target kanban board.
-5. Define the flow scope by selecting included issue types and explicit start and done statuses. Done statuses may include terminal workflow states that are not visible as board columns when Jira exposes them through the project status API.
+5. Define the flow scope by selecting included issue types and explicit start and done statuses. Done statuses may include terminal workflow states that are not visible as board columns, such as `Closed`.
 6. Trigger the first manual sync and wait for projection rebuild to finish.
 7. If User Story 2 is implemented, configure the hold definition by mapping one or more hold statuses and, if needed, a blocked field.
+
+## Update Existing Jira Configuration
+
+1. Open **Admin → Jira Connections**.
+2. Use **Edit Connection** to change the display name or base URL, or rotate the PAT. If the base URL or PAT changes, validate the connection again before relying on sync health.
+3. Use **Edit Flow Scope** to change the connection, board, issue-type mapping, start/done statuses, timezone, or sync cadence.
+4. Boundary changes to the flow scope automatically queue a follow-up sync. If a sync is already queued or running, wait for it to finish before saving a boundary-changing edit.
 
 ## Validate The Primary User Journeys
 

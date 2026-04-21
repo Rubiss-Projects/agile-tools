@@ -1,11 +1,10 @@
 import { type NextRequest } from 'next/server';
-import { getPrismaClient, createSyncRun, listSyncRuns, getActiveSyncRun } from '@agile-tools/db';
+import { getPrismaClient, listSyncRuns } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
-import { enqueueScopeSyncJob } from '@/server/queue';
-import { requireScope, mapSyncRun } from '../../_lib';
+import { requireScope, mapSyncRun, queueManualScopeSync } from '../../_lib';
 
 export async function POST(
   _req: NextRequest,
@@ -24,46 +23,25 @@ export async function POST(
 
     await requireScope(ctx.workspaceId, scopeId);
 
-    const prisma = getPrismaClient();
-
-    // Guard against duplicate active syncs.
-    const activeRun = await getActiveSyncRun(prisma, ctx.workspaceId, scopeId);
-    if (activeRun) {
+    const queueResult = await queueManualScopeSync(ctx.workspaceId, scopeId, ctx.userId);
+    if (queueResult.status === 'active') {
       return Response.json(
         {
           code: 'SYNC_IN_PROGRESS',
           message: 'A sync is already queued or running for this scope.',
-          syncRunId: activeRun.id,
+          syncRunId: queueResult.syncRun.id,
         },
         { status: 409 },
       );
     }
-
-    const syncRun = await createSyncRun(prisma, {
-      scopeId,
-      trigger: 'manual',
-      requestedBy: ctx.userId,
-    });
-
-    // Best-effort: enqueue the pg-boss job. If this fails we still return the
-    // queued SyncRun row so the operator knows a run was created; the worker
-    // can be triggered again or will pick it up via scheduled sweep.
-    try {
-      await enqueueScopeSyncJob({
-        scopeId,
-        syncRunId: syncRun.id,
-        requestedBy: ctx.userId,
-        trigger: 'manual',
-      });
-    } catch (enqueueErr) {
-      logger.warn('Failed to enqueue scope sync job; SyncRun row created but job may not fire', {
-        syncRunId: syncRun.id,
-        scopeId,
-        error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
-      });
+    if (queueResult.status === 'failed') {
+      return Response.json(
+        { code: 'SYNC_ENQUEUE_FAILED', message: queueResult.message },
+        { status: 503 },
+      );
     }
 
-    return Response.json(mapSyncRun(syncRun), { status: 202 });
+    return Response.json(mapSyncRun(queueResult.syncRun), { status: 202 });
   } catch (err) {
     if (err instanceof ResponseError) return err.response;
     logger.error('Failed to trigger manual sync', {

@@ -1,10 +1,19 @@
 import { Prisma, type PrismaClient, type JiraConnection } from '@prisma/client';
 import type { ConnectionHealthStatus } from '@prisma/client';
 
+type JiraConnectionClient = PrismaClient | Prisma.TransactionClient;
+
 export interface CreateJiraConnectionInput {
   baseUrl: string;
   encryptedSecretRef: string;
   displayName?: string;
+}
+
+export interface UpdateJiraConnectionInput {
+  baseUrl: string;
+  displayName?: string | null;
+  encryptedSecretRef?: string;
+  resetValidationState?: boolean;
 }
 
 export interface UpdateConnectionHealthInput {
@@ -16,7 +25,7 @@ export interface UpdateConnectionHealthInput {
 }
 
 export async function createJiraConnection(
-  client: PrismaClient,
+  client: JiraConnectionClient,
   workspaceId: string,
   input: CreateJiraConnectionInput,
 ): Promise<JiraConnection> {
@@ -32,7 +41,7 @@ export async function createJiraConnection(
 }
 
 export async function getJiraConnection(
-  client: PrismaClient,
+  client: JiraConnectionClient,
   workspaceId: string,
   connectionId: string,
 ): Promise<JiraConnection | null> {
@@ -42,7 +51,7 @@ export async function getJiraConnection(
 }
 
 export async function listJiraConnections(
-  client: PrismaClient,
+  client: JiraConnectionClient,
   workspaceId: string,
 ): Promise<JiraConnection[]> {
   return client.jiraConnection.findMany({
@@ -56,7 +65,7 @@ export async function listJiraConnections(
  * Returns the updated record or null if the connection does not exist in the workspace.
  */
 export async function updateConnectionHealth(
-  client: PrismaClient,
+  client: JiraConnectionClient,
   workspaceId: string,
   connectionId: string,
   update: UpdateConnectionHealthInput,
@@ -81,8 +90,46 @@ export async function updateConnectionHealth(
   }
 }
 
+export async function updateJiraConnection(
+  client: JiraConnectionClient,
+  workspaceId: string,
+  connectionId: string,
+  input: UpdateJiraConnectionInput,
+): Promise<JiraConnection | null> {
+  const data: Prisma.JiraConnectionUpdateInput = {
+    baseUrl: input.baseUrl,
+  };
+
+  if (input.displayName !== undefined) {
+    data.displayName = input.displayName;
+  }
+
+  if (input.encryptedSecretRef !== undefined) {
+    data.encryptedSecretRef = input.encryptedSecretRef;
+  }
+
+  if (input.resetValidationState) {
+    data.healthStatus = 'draft';
+    data.lastValidatedAt = null;
+    data.lastHealthyAt = null;
+    data.lastErrorCode = null;
+  }
+
+  try {
+    return await client.jiraConnection.update({
+      where: { workspaceId_id: { workspaceId, id: connectionId } },
+      data,
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      return null;
+    }
+    throw err;
+  }
+}
+
 export async function deleteJiraConnection(
-  client: PrismaClient,
+  client: JiraConnectionClient,
   workspaceId: string,
   connectionId: string,
 ): Promise<boolean> {

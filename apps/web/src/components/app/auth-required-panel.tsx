@@ -1,6 +1,14 @@
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
 import { LocalBootstrapForm } from './demo-bootstrap-form';
+import {
+  buttonStyle,
+  eyebrowStyle,
+  heroCopyStyle,
+  heroTitleStyle,
+  pageShellStyle,
+  sectionCardStyle,
+} from './chrome';
 
 interface AuthRequiredPanelProps {
   title?: string;
@@ -23,27 +31,13 @@ export function AuthRequiredPanel({
   const demoBootstrapEnabled = showDemoBootstrap && isLocalDemoEnabled();
 
   return (
-    <main
-      style={{
-        padding: '3rem 1.5rem',
-        maxWidth: '720px',
-        margin: '0 auto',
-        fontFamily: 'sans-serif',
-      }}
-    >
-      <div
-        style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: '16px',
-          padding: '1.5rem',
-          background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-        }}
-      >
-        <p style={{ margin: '0 0 0.5rem', fontSize: '0.75rem', letterSpacing: '0.08em', color: '#64748b', textTransform: 'uppercase' }}>
+    <main style={{ ...pageShellStyle, maxWidth: '760px' }}>
+      <div style={sectionCardStyle}>
+        <p style={{ ...eyebrowStyle, marginBottom: '0.5rem' }}>
           Agile Tools
         </p>
-        <h1 style={{ margin: 0, fontSize: '1.75rem' }}>{title}</h1>
-        <p style={{ margin: '0.75rem 0 0', color: '#475569', lineHeight: 1.6 }}>
+        <h1 style={{ ...heroTitleStyle, marginTop: 0, fontSize: 'clamp(2rem, 5vw, 2.6rem)' }}>{title}</h1>
+        <p style={{ ...heroCopyStyle, marginTop: '0.75rem' }}>
           {description}
         </p>
 
@@ -66,12 +60,10 @@ export function AuthRequiredPanel({
           <a
             href="/"
             style={{
-              padding: '0.7rem 1rem',
-              borderRadius: '9999px',
-              border: '1px solid #cbd5e1',
-              color: '#0f172a',
+              ...buttonStyle('secondary'),
+              display: 'inline-flex',
+              alignItems: 'center',
               textDecoration: 'none',
-              fontWeight: 600,
             }}
           >
             Open home

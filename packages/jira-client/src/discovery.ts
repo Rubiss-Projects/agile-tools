@@ -64,6 +64,16 @@ interface JiraField {
   schema?: { type: string; custom?: string };
 }
 
+const namedValueCollator = new Intl.Collator('en', {
+  sensitivity: 'base',
+});
+
+function sortNamedValues(values: Iterable<NamedValue>): NamedValue[] {
+  return Array.from(values).sort(
+    (left, right) => namedValueCollator.compare(left.name, right.name) || left.id.localeCompare(right.id),
+  );
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -123,13 +133,14 @@ export async function getBoardDetail(
 
   // Filter statuses to those that appear in the board columns
   const boardStatusIds = new Set(columns.flatMap((c) => c.statusIds));
-  const statuses: NamedValue[] = allStatuses
-    .filter((s) => boardStatusIds.has(s.id))
-    .map((s) => ({ id: s.id, name: s.name }));
-
-  const completionStatusesMap = new Map<string, string>(
-    statuses.map((status) => [status.id, status.name]),
+  const statuses = sortNamedValues(
+    allStatuses
+      .filter((s) => boardStatusIds.has(s.id))
+      .map((s) => ({ id: s.id, name: s.name })),
   );
+
+  const boardAndFallbackStatusEntries = allStatuses.map((status) => [status.id, status.name] as const);
+  let completionStatusesMap: Map<string, string>;
 
   // Narrow issue types and completion statuses to those active in the board's projects when possible.
   let issueTypes: NamedValue[] = allIssueTypes.map((t) => ({ id: t.id, name: t.name }));
@@ -141,6 +152,7 @@ export async function getBoardDetail(
     );
 
     const issueTypesMap = new Map<string, string>();
+    const projectCompletionStatusesMap = new Map<string, string>();
 
     for (const result of projectStatusResults) {
       if (result.status !== 'fulfilled') continue;
@@ -149,14 +161,25 @@ export async function getBoardDetail(
         issueTypesMap.set(issueType.id, issueType.name);
 
         for (const status of issueType.statuses) {
-          completionStatusesMap.set(status.id, status.name);
+          projectCompletionStatusesMap.set(status.id, status.name);
         }
       }
     }
 
     if (issueTypesMap.size > 0) {
-      issueTypes = Array.from(issueTypesMap, ([id, name]) => ({ id, name }));
+      issueTypes = sortNamedValues(Array.from(issueTypesMap, ([id, name]) => ({ id, name })));
     }
+
+    if (projectCompletionStatusesMap.size > 0) {
+      completionStatusesMap = new Map<string, string>(statuses.map((status) => [status.id, status.name]));
+      for (const [id, name] of projectCompletionStatusesMap) {
+        completionStatusesMap.set(id, name);
+      }
+    } else {
+      completionStatusesMap = new Map<string, string>(boardAndFallbackStatusEntries);
+    }
+  } else {
+    completionStatusesMap = new Map<string, string>(boardAndFallbackStatusEntries);
   }
 
   // Candidate blocked/flagged fields: select list, checkbox, or radio fields
@@ -171,7 +194,9 @@ export async function getBoardDetail(
     boardName: config.name,
     columns,
     statuses,
-    completionStatuses: Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
+    completionStatuses: sortNamedValues(
+      Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
+    ),
     issueTypes,
     blockedFields: blockedFields.length > 0 ? blockedFields : undefined,
   };

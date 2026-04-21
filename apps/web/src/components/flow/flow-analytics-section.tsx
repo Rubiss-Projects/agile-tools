@@ -7,7 +7,7 @@ import { FlowFiltersPanel } from './flow-filters';
 import type { FlowFilters, FilterOptions } from './flow-filters';
 import { AgingScatterPlot } from './aging-scatter-plot';
 import { WorkItemDetailDrawer } from './work-item-detail-drawer';
-import { codeStyle, insetPanelStyle, noticeStyle, tonePillStyle } from '@/components/app/chrome';
+import { codeStyle, insetPanelStyle, noticeStyle, palette, tonePillStyle } from '@/components/app/chrome';
 
 interface FlowAnalyticsSectionProps {
   scopeId: string;
@@ -80,11 +80,11 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
     <div>
       {/* Aging model summary */}
       {response && (
-        <div style={{ ...insetPanelStyle, marginBottom: '0.85rem', fontSize: '0.85rem', color: '#475569' }}>
+        <div style={{ ...insetPanelStyle, marginBottom: '0.85rem', fontSize: '0.85rem', color: palette.muted }}>
           {response.agingModel.sampleSize > 0 ? (
             <span>
               Thresholds (p50 / p70 / p85):{' '}
-              <strong style={{ color: '#0f172a' }}>
+              <strong style={{ color: palette.ink }}>
                 {response.agingModel.p50.toFixed(1)}d / {response.agingModel.p70.toFixed(1)}d / {response.agingModel.p85.toFixed(1)}d
               </strong>{' '}from {response.agingModel.sampleSize} completed stories
               <span style={{ marginLeft: '0.55rem' }}>
@@ -95,7 +95,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
             <span>No aging thresholds yet (sync more data)</span>
           )}
           {response.agingModel.lowConfidenceReason && (
-            <span style={{ marginLeft: '0.5rem', color: '#b45309' }}>
+            <span style={{ marginLeft: '0.5rem', color: palette.warning }}>
               ⚠ {response.agingModel.lowConfidenceReason}
             </span>
           )}
@@ -131,16 +131,16 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(255,255,255,0.7)',
+              background: palette.panel,
               zIndex: 1,
-              borderRadius: '4px',
+              borderRadius: '20px',
             }}
           >
-            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Loading…</span>
+            <span style={{ color: palette.soft, fontSize: '0.875rem' }}>Loading…</span>
           </div>
         )}
         {error && (
-          <p style={{ color: 'red', fontSize: '0.875rem', margin: 0 }}>{error}</p>
+          <p style={{ color: palette.danger, fontSize: '0.875rem', margin: 0 }}>{error}</p>
         )}
         {viewModel && !error && (
           <AgingScatterPlot
@@ -149,16 +149,16 @@ export function FlowAnalyticsSection({ scopeId, filterOptions }: FlowAnalyticsSe
           />
         )}
         {!viewModel && !loading && !error && (
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>No data available.</p>
+          <p style={{ color: palette.soft, fontSize: '0.875rem' }}>No data available.</p>
         )}
       </div>
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.75rem', fontSize: '0.75rem', flexWrap: 'wrap' }}>
         {[
-          { color: '#22c55e', label: 'Normal (≤ p50)' },
-          { color: '#f59e0b', label: 'Watch (p50–p85)' },
-          { color: '#ef4444', label: 'Aging (> p85)' },
+          { color: palette.chartPositive, label: 'Normal (≤ p50)' },
+          { color: palette.chartWarning, label: 'Watch (p50–p85)' },
+          { color: palette.chartDanger, label: 'Aging (> p85)' },
         ].map((item) => (
           <span key={item.label} style={{ ...tonePillStyle('neutral'), gap: '0.45rem' }}>
             <span
