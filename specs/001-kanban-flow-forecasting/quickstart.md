@@ -80,7 +80,7 @@ pnpm --filter @agile-tools/worker dev
 2. Create a Jira connection with the self-hosted base URL and service-account PAT.
 3. Validate the connection and confirm the instance health is `healthy`.
 4. Discover boards and choose the target kanban board.
-5. Define the flow scope by selecting included issue types and explicit start and done statuses. Done statuses may include terminal workflow states that are not visible as board columns when Jira exposes them through the project status API.
+5. Define the flow scope by selecting included issue types and explicit start and done statuses. Done statuses may include terminal workflow states that are not visible as board columns, such as `Closed`.
 6. Trigger the first manual sync and wait for projection rebuild to finish.
 7. If User Story 2 is implemented, configure the hold definition by mapping one or more hold statuses and, if needed, a blocked field.
 

@@ -64,6 +64,14 @@ interface JiraField {
   schema?: { type: string; custom?: string };
 }
 
+function sortNamedValues(values: Iterable<NamedValue>): NamedValue[] {
+  return Array.from(values).sort(
+    (left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -123,12 +131,14 @@ export async function getBoardDetail(
 
   // Filter statuses to those that appear in the board columns
   const boardStatusIds = new Set(columns.flatMap((c) => c.statusIds));
-  const statuses: NamedValue[] = allStatuses
-    .filter((s) => boardStatusIds.has(s.id))
-    .map((s) => ({ id: s.id, name: s.name }));
+  const statuses = sortNamedValues(
+    allStatuses
+      .filter((s) => boardStatusIds.has(s.id))
+      .map((s) => ({ id: s.id, name: s.name })),
+  );
 
   const completionStatusesMap = new Map<string, string>(
-    statuses.map((status) => [status.id, status.name]),
+    allStatuses.map((status) => [status.id, status.name]),
   );
 
   // Narrow issue types and completion statuses to those active in the board's projects when possible.
@@ -171,7 +181,9 @@ export async function getBoardDetail(
     boardName: config.name,
     columns,
     statuses,
-    completionStatuses: Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
+    completionStatuses: sortNamedValues(
+      Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
+    ),
     issueTypes,
     blockedFields: blockedFields.length > 0 ? blockedFields : undefined,
   };

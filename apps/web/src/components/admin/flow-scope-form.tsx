@@ -7,6 +7,7 @@ import type {
   FlowScope,
   BoardSummary,
   BoardDiscoveryDetail,
+  NamedValue,
 } from '@agile-tools/shared/contracts/api';
 import {
   buttonStyle,
@@ -32,6 +33,16 @@ interface Props {
 interface SubmitResult {
   scope: FlowScope;
   syncQueued: boolean;
+}
+
+const namedValueCollator = new Intl.Collator('en', {
+  sensitivity: 'base',
+});
+
+function sortNamedValues(values: NamedValue[]): NamedValue[] {
+  return [...values].sort(
+    (left, right) => namedValueCollator.compare(left.name, right.name) || left.id.localeCompare(right.id),
+  );
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {
@@ -327,7 +338,10 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     includedIssueTypeIds.length > 0 &&
     (inspectedBoardMatchesSelection || canSubmitWithSavedConfig);
 
-  const completionStatuses = boardDetail?.completionStatuses ?? boardDetail?.statuses ?? [];
+  const startStatuses = sortNamedValues(boardDetail?.statuses ?? []);
+  const completionStatuses = sortNamedValues(
+    boardDetail?.completionStatuses ?? boardDetail?.statuses ?? [],
+  );
   const boardStatusIds = new Set(boardDetail?.statuses.map((status) => status.id) ?? []);
 
   return (
@@ -405,7 +419,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
                   <strong>Start Statuses</strong> — when work begins
                 </legend>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
-                  {boardDetail.statuses.map((status) => (
+                  {startStatuses.map((status) => (
                     <label key={status.id} style={checkboxChipStyle(startStatusIds.includes(status.id))}>
                       <input
                         type="checkbox"
