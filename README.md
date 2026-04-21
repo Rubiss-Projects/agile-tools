@@ -192,7 +192,8 @@ For prereleases, use a semver prerelease suffix such as `v0.1.0-rc.1`.
 
 - The workflow uses the repository `GITHUB_TOKEN` to push to `ghcr.io`, so GitHub Actions package publishing must be allowed for the repository or organization
 - If a package with the same `ghcr.io/<owner>/<repo>` name was previously pushed outside Actions and is not linked to this repository, connect it to the repository or recreate it so the workflow token can write to it
-- The release workflow currently publishes a `linux/amd64` image, which matches the runtime shape validated in this repository
+- The release workflow publishes a multi-architecture image for `linux/amd64` and `linux/arm64/v8`
+- CI validates that each published runtime shape bundles the matching Prisma schema and query engines instead of relying on runtime downloads
 
 ## Developer Commands
 

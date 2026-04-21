@@ -28,9 +28,23 @@ env:
 
 jobs:
   docker-build:
-    name: Docker Build
+    name: Docker Build (${{ matrix.platform_name }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            platform_name: amd64
+            image_tag: agile-tools:ci-amd64
+            expected_schema_engine: schema-engine-debian-openssl-3.0.x
+            expected_query_engine: libquery_engine-debian-openssl-3.0.x.so.node
+          - platform: linux/arm64/v8
+            platform_name: arm64
+            image_tag: agile-tools:ci-arm64
+            expected_schema_engine: schema-engine-linux-arm64-openssl-3.0.x
+            expected_query_engine: libquery_engine-linux-arm64-openssl-3.0.x.so.node
 
     steps:
       - &checkout-repository
@@ -48,9 +62,24 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64/v8
+          platforms: ${{ matrix.platform }}
           pull: true
           push: false
+          load: true
+          tags: ${{ matrix.image_tag }}
+
+      - name: Verify Prisma engines are bundled for runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker run --rm --platform "${{ matrix.platform }}" --entrypoint sh "${{ matrix.image_tag }}" -lc '
+            set -euo pipefail
+            find /app -type f \( -name "schema-engine-*" -o -name "libquery_engine-*.so.node" \) | sort > /tmp/prisma-engines.txt
+            cat /tmp/prisma-engines.txt
+            grep -q "/${{ matrix.expected_schema_engine }}$" /tmp/prisma-engines.txt
+            grep -q "/${{ matrix.expected_query_engine }}$" /tmp/prisma-engines.txt
+          '
 
   docker-compose-config:
     name: Docker Compose Config
