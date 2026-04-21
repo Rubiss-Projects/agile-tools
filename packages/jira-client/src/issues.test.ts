@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createJiraClient } from './client.js';
-import { fetchIssueChangelog } from './issues.js';
+import { fetchIssueChangelog, streamJqlIssues } from './issues.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -112,5 +112,105 @@ describe('fetchIssueChangelog', () => {
       'https://jira.example.internal/rest/api/2/issue/PROJ-1?expand=changelog&fields=summary',
       expect.any(Object),
     );
+  });
+});
+
+describe('streamJqlIssues', () => {
+  function makeIssue(id: string) {
+    return {
+      id,
+      key: `PROJ-${id}`,
+      fields: {
+        summary: `Issue ${id}`,
+        status: { id: '10001', name: 'Closed' },
+        issuetype: { id: '1', name: 'Story' },
+        project: { id: 'p1', key: 'PROJ' },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+  }
+
+  it('paginates through all pages and yields every issue', async () => {
+    const page1Issues = [makeIssue('1'), makeIssue('2')];
+    const page2Issues = [makeIssue('3')];
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ startAt: 0, maxResults: 2, total: 3, issues: page1Issues }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ startAt: 2, maxResults: 2, total: 3, issues: page2Issues }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://jira.example.internal', 'pat-123');
+    const results: string[] = [];
+    for await (const issue of streamJqlIssues(client, 'filter = 1001 AND status = "10001"', { maxResults: 2 })) {
+      results.push(issue.id);
+    }
+
+    expect(results).toEqual(['1', '2', '3']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstCallUrl = String(fetchMock.mock.calls[0]![0]);
+    expect(firstCallUrl).toContain('/rest/api/2/search');
+    expect(firstCallUrl).toContain('filter+%3D+1001');
+  });
+
+  it('de-duplicates issues that appear on multiple pages', async () => {
+    const issue1 = makeIssue('1');
+    const issue2 = makeIssue('2');
+    const issue3 = makeIssue('3');
+
+    // issue2 appears on both pages (live reordering edge case)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ startAt: 0, maxResults: 2, total: 3, issues: [issue1, issue2] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ startAt: 2, maxResults: 2, total: 3, issues: [issue2, issue3] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://jira.example.internal', 'pat-123');
+    const results: string[] = [];
+    for await (const issue of streamJqlIssues(client, 'project = PROJ', { maxResults: 2 })) {
+      results.push(issue.id);
+    }
+
+    expect(results).toEqual(['1', '2', '3']);
+  });
+
+  it('forwards the fields parameter when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ startAt: 0, maxResults: 50, total: 0, issues: [] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://jira.example.internal', 'pat-123');
+    const results: string[] = [];
+    for await (const issue of streamJqlIssues(client, 'project = PROJ', { fields: 'summary,status' })) {
+      results.push(issue.id);
+    }
+
+    expect(results).toEqual([]);
+    const calledUrl = String(fetchMock.mock.calls[0]![0]);
+    expect(calledUrl).toContain('fields=summary%2Cstatus');
   });
 });

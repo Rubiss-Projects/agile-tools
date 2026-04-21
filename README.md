@@ -160,6 +160,7 @@ The `bootstrap` role runs Prisma migrations and pg-boss schema migrations from t
 
 The local compose runtime defaults `ALLOW_LOOPBACK_HTTP_BYPASS=true` for the web container so `http://localhost:3000` works without an extra reverse proxy.
 It also defaults `ALLOW_LOCAL_BOOTSTRAP=true`, which enables a loopback-only local admin bootstrap action on the unauthenticated home and admin pages.
+If your environment depends on a custom npm registry, proxy, or relaxed TLS setting, the source-build compose path now forwards optional build-time variables such as `NPM_CONFIG_REGISTRY`, `COREPACK_NPM_REGISTRY`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `NODE_TLS_REJECT_UNAUTHORIZED` from the invoking shell. The build uses the repository's pinned `packageManager` field through Corepack. By default, Corepack uses `NPM_CONFIG_REGISTRY`, but you can set `COREPACK_NPM_REGISTRY` separately when package-manager downloads must come from a different Artifactory remote than normal package installs.
 
 The consumer compose file uses the same service layout and defaults, but it pulls the published image from GHCR instead of building from the local checkout.
 

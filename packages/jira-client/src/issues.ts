@@ -202,3 +202,63 @@ async function fetchIssueChangelogExpansion(
 
   return issue.changelog?.histories ?? [];
 }
+
+// ─── JQL issue search ─────────────────────────────────────────────────────────
+
+interface JiraSearchResponse {
+  startAt: number;
+  maxResults: number;
+  total: number;
+  issues: RawJiraIssue[];
+}
+
+export interface StreamJqlIssuesOptions {
+  /** Page size — Jira default is 50, max 100. */
+  maxResults?: number;
+  /**
+   * Comma-separated list of fields to include in the response.
+   * Omit to receive all fields.
+   */
+  fields?: string;
+}
+
+/**
+ * Async generator that yields every issue matching a JQL query across all pages.
+ *
+ * Uses the platform REST API (`/rest/api/2/search`) rather than the Agile board
+ * endpoint, so it returns issues regardless of whether their status is mapped to
+ * a board column. This is the correct path for fetching historically-completed
+ * issues that have already rolled off the board view.
+ *
+ * De-duplicates by issue ID to handle live-reordering between pages.
+ */
+export async function* streamJqlIssues(
+  client: JiraClient,
+  jql: string,
+  options: StreamJqlIssuesOptions = {},
+): AsyncGenerator<RawJiraIssue> {
+  const pageSize = options.maxResults ?? 50;
+  let startAt = 0;
+  let total = Infinity;
+  const seen = new Set<string>();
+
+  while (startAt < total) {
+    const params: Record<string, string | number> = { jql, startAt, maxResults: pageSize };
+    if (options.fields) {
+      params['fields'] = options.fields;
+    }
+
+    const page = await client.get<JiraSearchResponse>('/rest/api/2/search', { params });
+    total = page.total;
+
+    for (const issue of page.issues) {
+      if (!seen.has(issue.id)) {
+        seen.add(issue.id);
+        yield issue;
+      }
+    }
+
+    if (page.issues.length === 0 || page.issues.length < pageSize) break;
+    startAt += page.issues.length;
+  }
+}

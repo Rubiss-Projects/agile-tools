@@ -1,11 +1,14 @@
 import type { PrismaClient } from '@agile-tools/db';
+import { DEFAULT_COMPLETED_WINDOW_DAYS } from '@agile-tools/db';
 import { getConfig, decryptSecret, logger } from '@agile-tools/shared';
 import type { JiraClient } from '@agile-tools/jira-client';
 import {
   JiraClientError,
   createJiraClient,
   getBoardDetail,
+  getBoardFilterId,
   streamBoardIssues,
+  streamJqlIssues,
   fetchIssueChangelog,
 } from '@agile-tools/jira-client';
 import type { RawJiraIssue } from '@agile-tools/jira-client';
@@ -158,6 +161,40 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     }
     if (batch.length > 0) {
       await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
+      batch = [];
+    }
+
+    // Fetch historically-completed issues that match the board's saved filter but are
+    // no longer visible on the board (because done statuses are not mapped to columns).
+    // The board endpoint only returns issues whose status is mapped to a column, so
+    // without this second pass the aging threshold model has no completed samples.
+    if (scope.doneStatusIds.length > 0) {
+      const filterId = await getBoardFilterId(jiraClient, boardId);
+      if (filterId != null) {
+        const doneIdList = scope.doneStatusIds.map((id: string) => `"${id}"`).join(', ');
+        const completedJql =
+          `filter = ${filterId} AND status in (${doneIdList}) ` +
+          `AND updated >= -${DEFAULT_COMPLETED_WINDOW_DAYS}d`;
+
+        for await (const issue of streamJqlIssues(jiraClient, completedJql)) {
+          batch.push(issue);
+          if (batch.length >= BATCH_SIZE) {
+            await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
+            batch = [];
+          }
+        }
+        if (batch.length > 0) {
+          await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
+          batch = [];
+        }
+
+        logger.info('Completed-issue sync pass finished', { syncRunId, scopeId: scope.id });
+      } else {
+        logger.warn('Board has no saved filter; skipping completed-issue sync pass', {
+          syncRunId,
+          boardId,
+        });
+      }
     }
 
     // Backfill BoardSnapshot with project refs collected from issue data.
