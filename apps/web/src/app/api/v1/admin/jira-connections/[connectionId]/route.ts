@@ -38,7 +38,10 @@ export async function PUT(
     }
 
     const normalizedBaseUrl = parsed.data.baseUrl.replace(/\/$/, '');
-    const normalizedDisplayName = parsed.data.displayName?.trim() || null;
+    const normalizedDisplayName =
+      parsed.data.displayName === undefined
+        ? undefined
+        : parsed.data.displayName.trim() || null;
     const rotatedPat = parsed.data.pat;
     const shouldRotatePat = rotatedPat !== undefined;
     const shouldResetValidation = normalizedBaseUrl !== existingConnection.baseUrl || shouldRotatePat;
@@ -49,7 +52,7 @@ export async function PUT(
     const prisma = getPrismaClient();
     const updatedConnection = await updateJiraConnection(prisma, ctx.workspaceId, connectionId, {
       baseUrl: normalizedBaseUrl,
-      displayName: normalizedDisplayName,
+      ...(normalizedDisplayName !== undefined && { displayName: normalizedDisplayName }),
       ...(encryptedSecretRef !== undefined && { encryptedSecretRef }),
       resetValidationState: shouldResetValidation,
     });

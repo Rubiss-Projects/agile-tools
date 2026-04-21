@@ -262,6 +262,35 @@ describe('PUT /v1/admin/jira-connections/:id', () => {
     expect(parsed.data?.healthStatus).toBe('healthy');
   });
 
+  it('preserves the existing display name when it is omitted from the update payload', async () => {
+    const db = getPrismaClient();
+    await db.jiraConnection.update({
+      where: { id: connectionId },
+      data: {
+        baseUrl: JIRA_BASE,
+        displayName: 'Preserved Jira',
+        healthStatus: 'healthy',
+        lastValidatedAt: new Date('2026-04-19T12:00:00Z'),
+        lastHealthyAt: new Date('2026-04-19T12:00:00Z'),
+        lastErrorCode: null,
+      },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/jira-connections/${connectionId}`, 'PUT', {
+      baseUrl: JIRA_BASE,
+      pat: 'rotated-pat',
+    });
+    const res = await updateConnection(req, {
+      params: Promise.resolve({ connectionId }),
+    });
+    expect(res.status).toBe(200);
+    const body: unknown = await res.json();
+    const parsed = JiraConnectionSchema.safeParse(body);
+    expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
+    expect(parsed.data?.displayName).toBe('Preserved Jira');
+    expect(parsed.data?.healthStatus).toBe('draft');
+  });
+
   it('returns 404 when the connection does not exist', async () => {
     const missingId = '00000000-0000-0000-0000-000000000000';
     const req = makeRequest(`http://localhost/api/v1/admin/jira-connections/${missingId}`, 'PUT', {
