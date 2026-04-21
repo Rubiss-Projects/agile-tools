@@ -24,7 +24,7 @@ export function isLocalAdminBootstrapRequestAllowed(request: NextRequest): boole
   if (!isLocalAdminBootstrapAvailable()) return false;
   if (process.env['NODE_ENV'] !== 'production') return true;
 
-  return isLoopbackHost(getRequestHostname(request));
+  return isLoopbackHost(request.nextUrl.hostname);
 }
 
 export function getLocalAdminDefaultPath(): string {
@@ -60,17 +60,4 @@ export async function seedLocalAdminWorkspace(): Promise<{ workspaceId: string }
 
 function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.endsWith('.localhost');
-}
-
-function getRequestHostname(request: NextRequest): string {
-  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-  if (forwardedHost) {
-    try {
-      return new URL(`http://${forwardedHost}`).hostname;
-    } catch {
-      return '';
-    }
-  }
-
-  return request.nextUrl.hostname;
 }

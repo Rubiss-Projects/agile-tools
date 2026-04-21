@@ -1,9 +1,8 @@
 import { PgBoss } from 'pg-boss';
-import { logger, QUEUE_NAMES } from '@agile-tools/shared';
+import { logger, QUEUE_NAMES, type QueueName } from '@agile-tools/shared';
 
 export { QUEUE_NAMES };
-
-export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
+export type { QueueName };
 
 const COMPLETED_JOB_RETENTION_SECONDS = 24 * 60 * 60;
 const JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;
