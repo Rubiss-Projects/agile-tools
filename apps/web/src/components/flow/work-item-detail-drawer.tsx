@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WorkItemDetail } from '@agile-tools/shared/contracts/api';
 import { linkStyle, palette, sectionTitleStyle } from '@/components/app/chrome';
 
@@ -20,6 +20,8 @@ export function WorkItemDetailDrawer({
   const [detail, setDetail] = useState<WorkItemDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!workItemId) {
@@ -47,6 +49,28 @@ export function WorkItemDetailDrawer({
       });
   }, [scopeId, workItemId]);
 
+  useEffect(() => {
+    if (!workItemId) {
+      return;
+    }
+
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [onClose, workItemId]);
+
   if (!workItemId) return null;
 
   return (
@@ -63,7 +87,10 @@ export function WorkItemDetailDrawer({
     >
       <div
         role="dialog"
+        aria-modal="true"
         aria-label={`Work item detail: ${issueKey ?? workItemId}`}
+        ref={dialogRef}
+        tabIndex={-1}
         style={{
           width: 'min(26rem, 100vw)',
           height: '100%',

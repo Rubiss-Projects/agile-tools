@@ -72,7 +72,12 @@ function applyTheme(preference: ThemePreference): ResolvedTheme {
   document.documentElement.dataset.theme = resolved;
   document.documentElement.dataset.themePreference = preference;
   document.documentElement.style.colorScheme = resolved;
-  window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+  } catch {
+    // Ignore storage failures so the theme still applies for the current session.
+  }
 
   return resolved;
 }
