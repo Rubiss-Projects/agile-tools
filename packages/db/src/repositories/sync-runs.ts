@@ -148,5 +148,5 @@ export async function acquireScopeSyncLock(
   client: Prisma.TransactionClient,
   scopeId: string,
 ): Promise<void> {
-  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${scopeId}))`;
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${scopeId}, 0))`;
 }

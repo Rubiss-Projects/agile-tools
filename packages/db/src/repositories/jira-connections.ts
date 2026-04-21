@@ -98,8 +98,11 @@ export async function updateJiraConnection(
 ): Promise<JiraConnection | null> {
   const data: Prisma.JiraConnectionUpdateInput = {
     baseUrl: input.baseUrl,
-    displayName: input.displayName ?? null,
   };
+
+  if (input.displayName !== undefined) {
+    data.displayName = input.displayName;
+  }
 
   if (input.encryptedSecretRef !== undefined) {
     data.encryptedSecretRef = input.encryptedSecretRef;
