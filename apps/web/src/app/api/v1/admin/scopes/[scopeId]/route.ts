@@ -105,6 +105,54 @@ export async function PUT(
     }
 
     const prisma = getPrismaClient();
+    const preflightScope = await getFlowScope(prisma, ctx.workspaceId, scopeId);
+    if (!preflightScope) {
+      return Response.json(
+        { code: 'NOT_FOUND', message: 'Flow scope not found.' },
+        { status: 404 },
+      );
+    }
+
+    const preflightRequiresSync = hasBoundaryChanges(preflightScope, parsed.data);
+    if (preflightRequiresSync) {
+      const activeRun = await getActiveSyncRun(prisma, ctx.workspaceId, scopeId);
+      if (activeRun) {
+        return Response.json(
+          {
+            code: 'SYNC_IN_PROGRESS',
+            message: 'Wait for the active sync to finish before changing board or flow boundaries.',
+            syncRunId: activeRun.id,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    let prefetchedBoardName: string | null = null;
+    if (hasBoardSelectionChange(preflightScope, parsed.data)) {
+      const connection = await getJiraConnection(prisma, ctx.workspaceId, parsed.data.connectionId);
+      if (!connection) {
+        return Response.json(
+          { code: 'NOT_FOUND', message: 'Jira connection not found.' },
+          { status: 404 },
+        );
+      }
+
+      const client = createClientForConnection(connection);
+      try {
+        const boardDetail = await getBoardDetail(client, parsed.data.boardId);
+        prefetchedBoardName = boardDetail.boardName;
+      } catch (err) {
+        const jiraErr = normalizeJiraError(err);
+        return Response.json(
+          {
+            code: jiraErr?.code ?? 'JIRA_ERROR',
+            message: jiraErr?.message ?? 'Failed to fetch board details from Jira.',
+          },
+          { status: jiraErr?.statusCode === 404 ? 404 : 502 },
+        );
+      }
+    }
 
     const txResult = await prisma.$transaction(async (tx) => {
       await acquireScopeSyncLock(tx, scopeId);
@@ -130,20 +178,10 @@ export async function PUT(
         if (!connection) {
           return { kind: 'missing-connection' as const };
         }
-
-        const client = createClientForConnection(connection);
-        try {
-          const boardDetail = await getBoardDetail(client, parsed.data.boardId);
-          boardName = boardDetail.boardName;
-        } catch (err) {
-          const jiraErr = normalizeJiraError(err);
-          return {
-            kind: 'jira-error' as const,
-            code: jiraErr?.code ?? 'JIRA_ERROR',
-            message: jiraErr?.message ?? 'Failed to fetch board details from Jira.',
-            status: jiraErr?.statusCode === 404 ? 404 : 502,
-          };
+        if (prefetchedBoardName === null) {
+          return { kind: 'stale-board-selection' as const };
         }
+        boardName = prefetchedBoardName;
       }
 
       const updatedScopeInput = {
@@ -200,10 +238,13 @@ export async function PUT(
         { status: 404 },
       );
     }
-    if (txResult.kind === 'jira-error') {
+    if (txResult.kind === 'stale-board-selection') {
       return Response.json(
-        { code: txResult.code, message: txResult.message },
-        { status: txResult.status },
+        {
+          code: 'CONFLICT',
+          message: 'The flow scope changed while validating the target board. Retry the update.',
+        },
+        { status: 409 },
       );
     }
     if (txResult.kind === 'invalid') {
