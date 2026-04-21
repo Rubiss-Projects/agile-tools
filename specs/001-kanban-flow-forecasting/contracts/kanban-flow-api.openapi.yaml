@@ -39,6 +39,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/admin/jira-connections/{connectionId}:
+    put:
+      tags: [Admin Connections]
+      summary: Update a self-hosted Jira connection
+      parameters:
+        - $ref: '#/components/parameters/ConnectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJiraConnectionRequest'
+      responses:
+        '200':
+          description: Connection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JiraConnection'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/admin/jira-connections/{connectionId}/validate:
     post:
       tags: [Admin Connections]
@@ -118,6 +149,11 @@ paths:
     put:
       tags: [Admin Scopes]
       summary: Update scope boundaries, issue-type inclusion, or sync cadence
+      description: |
+        Updates the stored scope definition. If the Jira connection, board, timezone, included issue types,
+        start statuses, or done statuses change, the server queues a follow-up sync through the existing
+        manual-sync pipeline. If another sync is already queued or running for the scope, the update fails
+        with a conflict response instead of saving a boundary-changing edit.
       parameters:
         - $ref: '#/components/parameters/ScopeId'
       requestBody:
@@ -133,6 +169,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FlowScope'
+        '409':
+          description: Scope update requires a follow-up sync but a sync is already active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/admin/scopes/{scopeId}/hold-definition:
     put:
       tags: [Admin Scopes]
@@ -393,6 +435,19 @@ components:
         pat:
           type: string
           minLength: 1
+        displayName:
+          type: string
+    UpdateJiraConnectionRequest:
+      type: object
+      required: [baseUrl]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+        pat:
+          type: string
+          minLength: 1
+          description: Optional PAT replacement. Omit to keep the existing PAT.
         displayName:
           type: string
     JiraConnection:

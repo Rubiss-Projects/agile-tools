@@ -44,6 +44,9 @@ const { cookies } = await import('next/headers');
 const { POST: createConnection } = await import(
   '../../apps/web/src/app/api/v1/admin/jira-connections/route'
 );
+const { PUT: updateConnection } = await import(
+  '../../apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/route'
+);
 const { POST: validateConnection } = await import(
   '../../apps/web/src/app/api/v1/admin/jira-connections/[connectionId]/validate/route'
 );
@@ -193,6 +196,82 @@ describe('POST /v1/admin/jira-connections', () => {
     });
     const res = await createConnection(req);
     expect(res.status).toBe(403);
+  });
+});
+
+// ─── PUT /v1/admin/jira-connections/:id ────────────────────────────────────────
+
+describe('PUT /v1/admin/jira-connections/:id', () => {
+  it('returns 200 with a JiraConnection shape and resets validation state after base URL or PAT changes', async () => {
+    const db = getPrismaClient();
+    await db.jiraConnection.update({
+      where: { id: connectionId },
+      data: {
+        healthStatus: 'healthy',
+        lastValidatedAt: new Date('2026-04-19T12:00:00Z'),
+        lastHealthyAt: new Date('2026-04-19T12:00:00Z'),
+        lastErrorCode: 'JIRA_AUTH_ERROR',
+      },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/jira-connections/${connectionId}`, 'PUT', {
+      baseUrl: 'https://jira.updated.internal/',
+      displayName: 'Updated Jira',
+      pat: 'rotated-pat',
+    });
+    const res = await updateConnection(req, {
+      params: Promise.resolve({ connectionId }),
+    });
+    expect(res.status).toBe(200);
+    const body: unknown = await res.json();
+    const parsed = JiraConnectionSchema.safeParse(body);
+    expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
+    expect(parsed.data?.baseUrl).toBe('https://jira.updated.internal');
+    expect(parsed.data?.displayName).toBe('Updated Jira');
+    expect(parsed.data?.healthStatus).toBe('draft');
+    expect(parsed.data?.lastValidatedAt).toBeUndefined();
+    expect(parsed.data?.lastErrorCode).toBeUndefined();
+  });
+
+  it('returns 200 and preserves healthy state when only the display name changes', async () => {
+    const db = getPrismaClient();
+    await db.jiraConnection.update({
+      where: { id: connectionId },
+      data: {
+        baseUrl: JIRA_BASE,
+        displayName: 'Test Jira',
+        healthStatus: 'healthy',
+        lastValidatedAt: new Date('2026-04-19T12:00:00Z'),
+        lastHealthyAt: new Date('2026-04-19T12:00:00Z'),
+        lastErrorCode: null,
+      },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/jira-connections/${connectionId}`, 'PUT', {
+      baseUrl: JIRA_BASE,
+      displayName: 'Renamed Jira',
+    });
+    const res = await updateConnection(req, {
+      params: Promise.resolve({ connectionId }),
+    });
+    expect(res.status).toBe(200);
+    const body: unknown = await res.json();
+    const parsed = JiraConnectionSchema.safeParse(body);
+    expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
+    expect(parsed.data?.displayName).toBe('Renamed Jira');
+    expect(parsed.data?.healthStatus).toBe('healthy');
+  });
+
+  it('returns 404 when the connection does not exist', async () => {
+    const missingId = '00000000-0000-0000-0000-000000000000';
+    const req = makeRequest(`http://localhost/api/v1/admin/jira-connections/${missingId}`, 'PUT', {
+      baseUrl: JIRA_BASE,
+      displayName: 'Missing Jira',
+    });
+    const res = await updateConnection(req, {
+      params: Promise.resolve({ connectionId: missingId }),
+    });
+    expect(res.status).toBe(404);
   });
 });
 

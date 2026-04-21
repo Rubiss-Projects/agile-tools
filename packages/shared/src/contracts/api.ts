@@ -52,6 +52,14 @@ export const CreateJiraConnectionRequestSchema = z.object({
 });
 export type CreateJiraConnectionRequest = z.infer<typeof CreateJiraConnectionRequestSchema>;
 
+export const UpdateJiraConnectionRequestSchema = z.object({
+  baseUrl: z.string().url(),
+  /** Raw PAT replacement — optional so display-name-only edits do not force rotation. */
+  pat: z.string().min(1).optional(),
+  displayName: z.string().optional(),
+});
+export type UpdateJiraConnectionRequest = z.infer<typeof UpdateJiraConnectionRequestSchema>;
+
 export const JiraConnectionValidationSchema = z.object({
   connectionId: z.string().uuid(),
   healthStatus: z.enum(['healthy', 'unhealthy', 'stale']),

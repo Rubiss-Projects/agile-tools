@@ -2,8 +2,18 @@ import type {
   FlowScope as ApiFlowScope,
   SyncRun as ApiSyncRun,
 } from '@agile-tools/shared/contracts/api';
-import { getPrismaClient, getFlowScope, getSyncRun } from '@agile-tools/db';
+import {
+  acquireScopeSyncLock,
+  createSyncRun,
+  getActiveSyncRun,
+  getPrismaClient,
+  getFlowScope,
+  getSyncRun,
+  updateSyncRun,
+} from '@agile-tools/db';
+import { logger } from '@agile-tools/shared';
 import { ResponseError } from '@/server/errors';
+import { enqueueScopeSyncJob } from '@/server/queue';
 
 type DbFlowScope = NonNullable<Awaited<ReturnType<typeof getFlowScope>>>;
 type DbSyncRun = NonNullable<Awaited<ReturnType<typeof getSyncRun>>>;
@@ -64,4 +74,74 @@ export async function requireScope(
     );
   }
   return scope;
+}
+
+export async function queueManualScopeSync(
+  workspaceId: string,
+  scopeId: string,
+  requestedBy?: string,
+): Promise<
+  | { status: 'active'; syncRun: DbSyncRun }
+  | { status: 'queued'; syncRun: DbSyncRun }
+  | { status: 'failed'; message: string }
+> {
+  const prisma = getPrismaClient();
+  const queuedCandidate = await prisma.$transaction(async (tx) => {
+    await acquireScopeSyncLock(tx, scopeId);
+    const activeRun = await getActiveSyncRun(tx, workspaceId, scopeId);
+    if (activeRun) {
+      return { status: 'active' as const, syncRun: activeRun };
+    }
+
+    const syncRun = await createSyncRun(tx, {
+      scopeId,
+      trigger: 'manual',
+      ...(requestedBy !== undefined && { requestedBy }),
+    });
+
+    return { status: 'queued' as const, syncRun };
+  });
+
+  if (queuedCandidate.status === 'active') {
+    return queuedCandidate;
+  }
+
+  try {
+    const jobId = await enqueueScopeSyncJob({
+      scopeId,
+      syncRunId: queuedCandidate.syncRun.id,
+      trigger: 'manual',
+      ...(requestedBy !== undefined && { requestedBy }),
+    });
+    if (!jobId) {
+      await updateSyncRun(prisma, queuedCandidate.syncRun.id, {
+        status: 'canceled',
+        finishedAt: new Date(),
+        errorCode: 'SYNC_ENQUEUE_DEDUPED',
+        errorSummary: 'pg-boss did not enqueue the scope sync job.',
+      });
+      return {
+        status: 'failed',
+        message: 'Failed to queue the sync job. Please try again.',
+      };
+    }
+  } catch (enqueueErr) {
+    await updateSyncRun(prisma, queuedCandidate.syncRun.id, {
+      status: 'canceled',
+      finishedAt: new Date(),
+      errorCode: 'SYNC_ENQUEUE_FAILED',
+      errorSummary: enqueueErr instanceof Error ? enqueueErr.message.slice(0, 500) : String(enqueueErr),
+    });
+    logger.warn('Failed to enqueue scope sync job; canceled the pre-created SyncRun row', {
+      syncRunId: queuedCandidate.syncRun.id,
+      scopeId,
+      error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
+    });
+    return {
+      status: 'failed',
+      message: 'Failed to queue the sync job. Please try again.',
+    };
+  }
+
+  return queuedCandidate;
 }

@@ -84,6 +84,13 @@ pnpm --filter @agile-tools/worker dev
 6. Trigger the first manual sync and wait for projection rebuild to finish.
 7. If User Story 2 is implemented, configure the hold definition by mapping one or more hold statuses and, if needed, a blocked field.
 
+## Update Existing Jira Configuration
+
+1. Open **Admin → Jira Connections**.
+2. Use **Edit Connection** to change the display name or base URL, or rotate the PAT. If the base URL or PAT changes, validate the connection again before relying on sync health.
+3. Use **Edit Flow Scope** to change the connection, board, issue-type mapping, start/done statuses, timezone, or sync cadence.
+4. Boundary changes to the flow scope automatically queue a follow-up sync. If a sync is already queued or running, wait for it to finish before saving a boundary-changing edit.
+
 ## Validate The Primary User Journeys
 
 If validating only the MVP slice, stop after the Connection And Sync journey. The remaining sections describe the full post-MVP validation flow.
