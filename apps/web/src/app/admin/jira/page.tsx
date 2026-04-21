@@ -34,8 +34,9 @@ export default async function AdminJiraPage() {
     return (
       <AuthRequiredPanel
         title="Jira setup requires a workspace session"
-        description="The admin area is guarded by the workspace session cookie. In local development you can seed a demo workspace and continue directly into the setup flow."
-        nextPath="/admin/jira"
+        description="The admin area is guarded by the workspace session cookie. For local hosting you can create a local admin session and continue directly into the setup flow."
+        adminNextPath="/admin/jira"
+        showDemoBootstrap={false}
       />
     );
   }

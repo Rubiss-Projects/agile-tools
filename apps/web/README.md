@@ -31,8 +31,8 @@ forecasting.
   refreshes.
 - Route handlers under `src/app/api/` expose the contract consumed by the UI.
 - Manual sync requests are published to pg-boss from the web process.
-- Local development includes a dev-only bootstrap route that seeds a demo
-  workspace and sets the session cookie.
+- Local development includes built-in bootstrap actions that seed a demo
+  workspace or a local admin workspace and set the session cookie.
 
 ### Key dependencies
 
@@ -58,8 +58,12 @@ pnpm --filter @agile-tools/web lint
 - The app expects the root `.env` file to exist.
 - PostgreSQL must be running before pages that hit projections or queue-backed
   actions will work.
-- The default local entry point is the dev bootstrap flow at `/api/dev/bootstrap`
-  which seeds a sample workspace and redirects into a usable route.
+- In development, the landing page and auth-required panels expose the demo
+  bootstrap flow for a seeded sample workspace.
+- In production builds, including the published GHCR runtime image, the demo
+  bootstrap stays disabled.
+- Production-image local hosting can enable a loopback-only local admin
+  bootstrap flow with `ALLOW_LOCAL_BOOTSTRAP=true`.
 
 ## Development Considerations
 
@@ -69,6 +73,8 @@ pnpm --filter @agile-tools/web lint
   mapping logic inside page files.
 - Keep auth handling consistent with `src/server/auth.ts`; the current local
   flow uses a base64-encoded session cookie for workspace context.
+- Keep production local bootstrap behavior loopback-scoped so it does not turn
+  into a generic authentication bypass outside local hosting.
 - Queue publishers must ensure the target pg-boss queue exists before sending
   jobs.
 - If a page needs live Jira behavior, treat that as an explicit exception. The

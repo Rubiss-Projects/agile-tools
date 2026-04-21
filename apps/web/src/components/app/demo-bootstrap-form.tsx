@@ -1,14 +1,18 @@
-interface DemoBootstrapFormProps {
+type LocalBootstrapMode = 'admin' | 'demo';
+
+interface LocalBootstrapFormProps {
   label: string;
   nextPath: string;
+  mode?: LocalBootstrapMode;
   variant?: 'primary' | 'secondary';
 }
 
-export function DemoBootstrapForm({
+export function LocalBootstrapForm({
   label,
   nextPath,
+  mode = 'demo',
   variant = 'primary',
-}: DemoBootstrapFormProps) {
+}: LocalBootstrapFormProps) {
   const buttonStyle =
     variant === 'primary'
       ? {
@@ -31,11 +35,14 @@ export function DemoBootstrapForm({
         };
 
   return (
-    <form action="/api/dev/bootstrap" method="post" style={{ margin: 0 }}>
+    <form action="/api/local/bootstrap" method="post" style={{ margin: 0 }}>
       <input type="hidden" name="next" value={nextPath} />
+      <input type="hidden" name="mode" value={mode} />
       <button type="submit" style={buttonStyle}>
         {label}
       </button>
     </form>
   );
 }
+
+export { LocalBootstrapForm as DemoBootstrapForm };

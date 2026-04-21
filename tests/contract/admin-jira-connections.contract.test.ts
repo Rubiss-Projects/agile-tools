@@ -286,6 +286,7 @@ describe('GET /v1/admin/jira-connections/:id/discovery/boards/:boardId', () => {
     const parsed = BoardDiscoveryDetailSchema.safeParse(body);
     expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
     expect(parsed.data?.boardId).toBe(1);
+    expect(parsed.data?.completionStatuses?.some((status) => status.id === '4')).toBe(true);
   });
 
   it('returns 400 when boardId is not a positive integer', async () => {

@@ -57,10 +57,11 @@ DEFAULT_SYNC_INTERVAL_MINUTES=10
 LOG_LEVEL=debug
 ```
 
-Optional for local production-mode smoke tests or CI-only loopback access:
+Recommended when you run the production web container directly on `http://localhost` without TLS termination:
 
 ```bash
 ALLOW_LOOPBACK_HTTP_BYPASS=true
+ALLOW_LOCAL_BOOTSTRAP=true
 ```
 
 ### 3. Start PostgreSQL
@@ -104,15 +105,31 @@ This is the recommended compromise for this monorepo: build one image artifact, 
 docker build -t agile-tools:local .
 ```
 
-### Run the web role
+### Use the published GHCR image with consumer Compose
+
+If you are consuming a release image instead of building from source, use [docker-compose.consumer.yml](docker-compose.consumer.yml). It pulls `${AGILE_TOOLS_IMAGE:-ghcr.io/rubiss/agile-tools:latest}` directly from GitHub Container Registry with no local retag step.
+
+```bash
+docker compose -f docker-compose.consumer.yml up -d postgres
+docker compose -f docker-compose.consumer.yml --profile bootstrap run --rm bootstrap
+docker compose -f docker-compose.consumer.yml --profile runtime up -d
+```
+
+If you want to pin a specific release instead of following `latest`, set `AGILE_TOOLS_IMAGE` in your shell or `.env`, for example `ghcr.io/rubiss/agile-tools:v0.1.1`.
+
+The published image runs in production mode, so the dev demo bootstrap remains disabled there. For local image hosting, set `ALLOW_LOCAL_BOOTSTRAP=true` and use the built-in local admin bootstrap action from `/` or `/admin/jira`. The bootstrap flow is intended for loopback hosts such as `localhost` and `127.0.0.1`.
+
+### Run the web role from a local build
 
 ```bash
 docker run --rm -p 3000:3000 --env-file .env \
+	-e ALLOW_LOOPBACK_HTTP_BYPASS=true \
+	-e ALLOW_LOCAL_BOOTSTRAP=true \
 	-e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/agile_tools \
 	agile-tools:local web
 ```
 
-### Run the worker role
+### Run the worker role from a local build
 
 ```bash
 docker run --rm --env-file .env \
@@ -120,7 +137,7 @@ docker run --rm --env-file .env \
 	agile-tools:local worker
 ```
 
-### Bootstrap database and queue state
+### Bootstrap database and queue state from a local build
 
 ```bash
 docker run --rm --env-file .env \
@@ -128,7 +145,7 @@ docker run --rm --env-file .env \
 	agile-tools:local bootstrap
 ```
 
-### Run the full runtime stack with Compose
+### Run the full runtime stack with source-build Compose
 
 The root compose file keeps `postgres` as the default local dependency and exposes a one-off bootstrap job plus the application runtime containers behind profiles:
 
@@ -139,6 +156,15 @@ docker compose --profile runtime up --build -d
 ```
 
 The `bootstrap` role runs Prisma migrations and pg-boss schema migrations from the same image artifact. The image also supports an `all` command for running both processes in one container, but that is a convenience mode rather than the recommended production shape.
+
+The local compose runtime defaults `ALLOW_LOOPBACK_HTTP_BYPASS=true` for the web container so `http://localhost:3000` works without an extra reverse proxy.
+It also defaults `ALLOW_LOCAL_BOOTSTRAP=true`, which enables a loopback-only local admin bootstrap action on the unauthenticated home and admin pages.
+
+The consumer compose file uses the same service layout and defaults, but it pulls the published image from GHCR instead of building from the local checkout.
+
+Open `http://localhost:3000` and navigate to **Admin → Jira Connections** to configure the first connection.
+
+If you are running the production image locally and do not have an upstream workspace session provider, open `http://localhost:3000/admin/jira` and use **Create local admin session and continue**.
 
 ## Releases
 

@@ -47,6 +47,9 @@ pnpm --filter @agile-tools/jira-client typecheck
 - Use `fetchIssueChangelog()` for authoritative lifecycle history. Inline
   changelog expansions on issue search results are opportunistic and may be
   truncated.
+- `fetchIssueChangelog()` should prefer the dedicated changelog subresource, but
+  it may fall back to `GET /rest/api/2/issue/{issueIdOrKey}?expand=changelog`
+  for Jira Data Center deployments that do not expose the subresource.
 - Keep retry policy conservative. Jira is an external dependency and backoff
   behavior affects both correctness and operator trust.
 - Do not let database or application-specific business rules creep into this

@@ -1,8 +1,6 @@
 import { PgBoss } from 'pg-boss';
-import { getConfig, logger } from '@agile-tools/shared';
+import { getConfig, logger, QUEUE_NAMES } from '@agile-tools/shared';
 
-// Must match the queue name used by the worker.
-const SCOPE_SYNC_QUEUE = 'scope:sync';
 const COMPLETED_JOB_RETENTION_SECONDS = 24 * 60 * 60;
 const JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 const JOB_EXPIRY_SECONDS = 60 * 60;
@@ -22,7 +20,7 @@ async function getBoss(): Promise<PgBoss> {
   });
 
   await _boss.start();
-  await _boss.createQueue(SCOPE_SYNC_QUEUE, {
+  await _boss.createQueue(QUEUE_NAMES.SCOPE_SYNC, {
     deleteAfterSeconds: COMPLETED_JOB_RETENTION_SECONDS,
     retentionSeconds: JOB_RETENTION_SECONDS,
   });
@@ -44,7 +42,7 @@ export interface ScopeSyncJobData {
  */
 export async function enqueueScopeSyncJob(data: ScopeSyncJobData): Promise<string | null> {
   const boss = await getBoss();
-  return boss.send(SCOPE_SYNC_QUEUE, data, {
+  return boss.send(QUEUE_NAMES.SCOPE_SYNC, data, {
     singletonKey: data.scopeId,
     retryLimit: 1,
     expireInSeconds: JOB_EXPIRY_SECONDS,

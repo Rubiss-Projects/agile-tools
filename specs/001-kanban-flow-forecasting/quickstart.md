@@ -27,7 +27,6 @@ Create local environment files for the web and worker processes with at least th
 
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/agile_tools
-APP_BASE_URL=http://localhost:3000
 ENCRYPTION_KEY=replace-with-local-dev-key
 SESSION_SECRET=replace-with-local-dev-session-secret
 DEFAULT_SYNC_INTERVAL_MINUTES=10
@@ -35,6 +34,13 @@ LOG_LEVEL=debug
 ```
 
 Jira base URLs and PAT values are entered through the admin UI and stored as encrypted secrets or secret references rather than hard-coded in environment files.
+
+If you are exercising the production image directly on `http://localhost`, also set:
+
+```bash
+ALLOW_LOOPBACK_HTTP_BYPASS=true
+ALLOW_LOCAL_BOOTSTRAP=true
+```
 
 ## Bootstrap
 
@@ -74,7 +80,7 @@ pnpm --filter @agile-tools/worker dev
 2. Create a Jira connection with the self-hosted base URL and service-account PAT.
 3. Validate the connection and confirm the instance health is `healthy`.
 4. Discover boards and choose the target kanban board.
-5. Define the flow scope by selecting included issue types and explicit start and done statuses.
+5. Define the flow scope by selecting included issue types and explicit start and done statuses. Done statuses may include terminal workflow states that are not visible as board columns when Jira exposes them through the project status API.
 6. Trigger the first manual sync and wait for projection rebuild to finish.
 7. If User Story 2 is implemented, configure the hold definition by mapping one or more hold statuses and, if needed, a blocked field.
 

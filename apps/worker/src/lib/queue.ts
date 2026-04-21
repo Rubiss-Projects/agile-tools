@@ -1,11 +1,7 @@
 import { PgBoss } from 'pg-boss';
-import { logger } from '@agile-tools/shared';
+import { logger, QUEUE_NAMES } from '@agile-tools/shared';
 
-// Queue names used throughout the worker — centralised to avoid magic strings.
-export const QUEUE_NAMES = {
-  SCOPE_SYNC: 'scope-sync',
-  PROJECTION_REBUILD: 'scope-rebuild-projections',
-} as const;
+export { QUEUE_NAMES };
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 

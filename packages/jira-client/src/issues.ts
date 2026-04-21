@@ -1,4 +1,4 @@
-import type { JiraClient } from './client.js';
+import { JiraClientError, type JiraClient } from './client.js';
 
 // ─── Raw Jira API response shapes ────────────────────────────────────────────
 
@@ -59,6 +59,15 @@ interface JiraChangelogPageResponse {
   total: number;
   isLast?: boolean;
   values: ChangelogHistory[];
+}
+
+interface JiraIssueWithExpandedChangelog {
+  changelog?: {
+    startAt: number;
+    maxResults: number;
+    total: number;
+    histories: ChangelogHistory[];
+  };
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -147,6 +156,21 @@ export async function fetchIssueChangelog(
   client: JiraClient,
   issueIdOrKey: string,
 ): Promise<ChangelogHistory[]> {
+  try {
+    return await fetchIssueChangelogSubresource(client, issueIdOrKey);
+  } catch (error) {
+    if (!(error instanceof JiraClientError) || error.code !== 'not_found') {
+      throw error;
+    }
+
+    return fetchIssueChangelogExpansion(client, issueIdOrKey);
+  }
+}
+
+async function fetchIssueChangelogSubresource(
+  client: JiraClient,
+  issueIdOrKey: string,
+): Promise<ChangelogHistory[]> {
   const histories: ChangelogHistory[] = [];
   let startAt = 0;
   const maxResults = 100;
@@ -165,4 +189,16 @@ export async function fetchIssueChangelog(
   }
 
   return histories;
+}
+
+async function fetchIssueChangelogExpansion(
+  client: JiraClient,
+  issueIdOrKey: string,
+): Promise<ChangelogHistory[]> {
+  const issue = await client.get<JiraIssueWithExpandedChangelog>(
+    `/rest/api/2/issue/${issueIdOrKey}`,
+    { params: { expand: 'changelog', fields: 'summary' } },
+  );
+
+  return issue.changelog?.histories ?? [];
 }

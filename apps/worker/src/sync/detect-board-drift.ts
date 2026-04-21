@@ -27,9 +27,12 @@ export function detectBoardDrift(
   boardDetail: BoardDiscoveryDetail,
 ): DriftReport | null {
   const boardStatusIds = new Set(boardDetail.columns.flatMap((col) => col.statusIds));
+  const completionStatusIds = new Set(
+    (boardDetail.completionStatuses ?? boardDetail.statuses).map((status) => status.id),
+  );
 
   const missingStartStatuses = scope.startStatusIds.filter((id) => !boardStatusIds.has(id));
-  const missingDoneStatuses = scope.doneStatusIds.filter((id) => !boardStatusIds.has(id));
+  const missingDoneStatuses = scope.doneStatusIds.filter((id) => !completionStatusIds.has(id));
 
   if (missingStartStatuses.length > 0 || missingDoneStatuses.length > 0) {
     return { missingStartStatuses, missingDoneStatuses };

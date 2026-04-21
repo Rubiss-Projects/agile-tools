@@ -173,6 +173,9 @@ export function FlowScopeForm({ connections }: Props) {
     doneStatusIds.length > 0 &&
     includedIssueTypeIds.length > 0;
 
+  const completionStatuses = boardDetail?.completionStatuses ?? boardDetail?.statuses ?? [];
+  const boardStatusIds = new Set(boardDetail?.statuses.map((status) => status.id) ?? []);
+
   return (
     <div style={{ ...insetPanelStyle, marginTop: '1rem' }}>
       <h3 style={{ ...sectionTitleStyle, marginBottom: '0.35rem' }}>Create Flow Scope</h3>
@@ -257,8 +260,11 @@ export function FlowScopeForm({ connections }: Props) {
             <legend>
               <strong>Done Statuses</strong> — when work completes
             </legend>
+            <p style={{ ...helperTextStyle, margin: '0.5rem 0 0' }}>
+              Completion statuses can include workflow states that are not currently shown as board columns.
+            </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
-              {boardDetail.statuses.map((s) => (
+              {completionStatuses.map((s) => (
                 <label key={s.id} style={checkboxChipStyle(doneStatusIds.includes(s.id))}>
                 <input
                   type="checkbox"
@@ -266,7 +272,7 @@ export function FlowScopeForm({ connections }: Props) {
                   onChange={() => setDoneStatusIds((prev) => toggleId(prev, s.id))}
                     style={{ accentColor: '#1d4ed8' }}
                 />{' '}
-                {s.name}
+                {boardStatusIds.has(s.id) ? s.name : `${s.name} (off-board)`}
               </label>
             ))}
               </div>

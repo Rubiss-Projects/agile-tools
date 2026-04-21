@@ -40,9 +40,11 @@ describe('FlowScopeForm', () => {
           boardId: 42,
           boardName: 'Payments Board',
           columns: [{ name: 'Doing', statusIds: ['10'] }],
-          statuses: [
+          statuses: [{ id: '10', name: 'In Progress' }],
+          completionStatuses: [
             { id: '10', name: 'In Progress' },
             { id: '30', name: 'Done' },
+            { id: '40', name: 'Closed' },
           ],
           issueTypes: [{ id: 'story', name: 'Story' }],
         }),
@@ -57,7 +59,7 @@ describe('FlowScopeForm', () => {
             timezone: 'UTC',
             includedIssueTypeIds: ['story'],
             startStatusIds: ['10'],
-            doneStatusIds: ['30'],
+            doneStatusIds: ['40'],
             syncIntervalMinutes: 5,
             status: 'active',
           },
@@ -93,9 +95,10 @@ describe('FlowScopeForm', () => {
     expect(startFieldset).not.toBeNull();
     expect(doneFieldset).not.toBeNull();
     expect(issueTypeFieldset).not.toBeNull();
+    expect(within(doneFieldset as HTMLFieldSetElement).getByText(/closed \(off-board\)/i)).toBeVisible();
 
     await user.click(within(startFieldset as HTMLFieldSetElement).getByRole('checkbox', { name: /in progress/i }));
-    await user.click(within(doneFieldset as HTMLFieldSetElement).getByRole('checkbox', { name: /done/i }));
+    await user.click(within(doneFieldset as HTMLFieldSetElement).getByRole('checkbox', { name: /closed \(off-board\)/i }));
     await user.click(within(issueTypeFieldset as HTMLFieldSetElement).getByRole('checkbox', { name: /story/i }));
     await user.click(screen.getByRole('button', { name: /create flow scope/i }));
 

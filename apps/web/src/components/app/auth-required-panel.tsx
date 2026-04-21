@@ -1,17 +1,27 @@
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
-import { DemoBootstrapForm } from './demo-bootstrap-form';
+import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
+import { LocalBootstrapForm } from './demo-bootstrap-form';
 
 interface AuthRequiredPanelProps {
   title?: string;
   description?: string;
-  nextPath?: string;
+  demoNextPath?: string;
+  adminNextPath?: string;
+  showDemoBootstrap?: boolean;
+  showAdminBootstrap?: boolean;
 }
 
 export function AuthRequiredPanel({
   title = 'Authentication required',
   description = 'This page expects the workspace session cookie used by the app.',
-  nextPath = getLocalDemoDefaultPath(),
+  demoNextPath = getLocalDemoDefaultPath(),
+  adminNextPath = getLocalAdminDefaultPath(),
+  showDemoBootstrap = true,
+  showAdminBootstrap = true,
 }: AuthRequiredPanelProps) {
+  const adminBootstrapEnabled = showAdminBootstrap && isLocalAdminBootstrapAvailable();
+  const demoBootstrapEnabled = showDemoBootstrap && isLocalDemoEnabled();
+
   return (
     <main
       style={{
@@ -38,10 +48,19 @@ export function AuthRequiredPanel({
         </p>
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
-          {isLocalDemoEnabled() && (
-            <DemoBootstrapForm
+          {adminBootstrapEnabled && (
+            <LocalBootstrapForm
+              label="Create local admin session and continue →"
+              nextPath={adminNextPath}
+              mode="admin"
+            />
+          )}
+          {demoBootstrapEnabled && (
+            <LocalBootstrapForm
               label="Seed local demo workspace and continue →"
-              nextPath={nextPath}
+              nextPath={demoNextPath}
+              mode="demo"
+              variant={adminBootstrapEnabled ? 'secondary' : 'primary'}
             />
           )}
           <a

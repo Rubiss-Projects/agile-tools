@@ -52,6 +52,12 @@ interface JiraIssueType {
   name: string;
 }
 
+interface JiraIssueTypeWithStatuses {
+  id: string;
+  name: string;
+  statuses: JiraStatus[];
+}
+
 interface JiraField {
   id: string;
   name: string;
@@ -97,11 +103,16 @@ export async function getBoardDetail(
   client: JiraClient,
   boardId: number,
 ): Promise<BoardDiscoveryDetail> {
-  const [config, allStatuses, allIssueTypes, allFields] = await Promise.all([
+  const [config, allStatuses, allIssueTypes, allFields, boardProjects] = await Promise.all([
     client.get<JiraBoardConfiguration>(`/rest/agile/1.0/board/${boardId}/configuration`),
     client.get<JiraStatus[]>('/rest/api/2/status'),
     client.get<JiraIssueType[]>('/rest/api/2/issuetype'),
     client.get<JiraField[]>('/rest/api/2/field'),
+    client
+      .get<JiraBoardProjectsResponse>(`/rest/agile/1.0/board/${boardId}/project`, {
+        params: { maxResults: 50 },
+      })
+      .catch(() => null),
   ]);
 
   // Build column layout from board configuration
@@ -116,24 +127,36 @@ export async function getBoardDetail(
     .filter((s) => boardStatusIds.has(s.id))
     .map((s) => ({ id: s.id, name: s.name }));
 
-  // Narrow issue types to those active in the board's projects when possible
+  const completionStatusesMap = new Map<string, string>(
+    statuses.map((status) => [status.id, status.name]),
+  );
+
+  // Narrow issue types and completion statuses to those active in the board's projects when possible.
   let issueTypes: NamedValue[] = allIssueTypes.map((t) => ({ id: t.id, name: t.name }));
-  try {
-    const projects = await client.get<JiraBoardProjectsResponse>(
-      `/rest/agile/1.0/board/${boardId}/project`,
-      { params: { maxResults: 10 } },
+  if (boardProjects?.values.length) {
+    const projectStatusResults = await Promise.allSettled(
+      boardProjects.values.map((project) =>
+        client.get<JiraIssueTypeWithStatuses[]>(`/rest/api/2/project/${project.key}/statuses`),
+      ),
     );
-    if (projects.values.length > 0) {
-      const projectKey = projects.values[0]!.key;
-      const projectIssueTypes = await client.get<Array<{ id: string; name: string; statuses: unknown[] }>>(
-        `/rest/api/2/project/${projectKey}/statuses`,
-      );
-      if (projectIssueTypes.length > 0) {
-        issueTypes = projectIssueTypes.map((t) => ({ id: t.id, name: t.name }));
+
+    const issueTypesMap = new Map<string, string>();
+
+    for (const result of projectStatusResults) {
+      if (result.status !== 'fulfilled') continue;
+
+      for (const issueType of result.value) {
+        issueTypesMap.set(issueType.id, issueType.name);
+
+        for (const status of issueType.statuses) {
+          completionStatusesMap.set(status.id, status.name);
+        }
       }
     }
-  } catch {
-    // Fall back to global issue types already fetched above
+
+    if (issueTypesMap.size > 0) {
+      issueTypes = Array.from(issueTypesMap, ([id, name]) => ({ id, name }));
+    }
   }
 
   // Candidate blocked/flagged fields: select list, checkbox, or radio fields
@@ -148,6 +171,7 @@ export async function getBoardDetail(
     boardName: config.name,
     columns,
     statuses,
+    completionStatuses: Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
     issueTypes,
     blockedFields: blockedFields.length > 0 ? blockedFields : undefined,
   };
