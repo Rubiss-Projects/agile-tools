@@ -2,6 +2,8 @@
 
 import { ResponsiveLine } from '@nivo/line';
 import type { ThroughputResponse } from '@agile-tools/shared/contracts/api';
+import { noticeStyle, palette } from '@/components/app/chrome';
+import { useTheme } from '@/components/app/theme-provider';
 
 interface ThroughputChartProps {
   response: ThroughputResponse;
@@ -10,6 +12,11 @@ interface ThroughputChartProps {
 
 export function ThroughputChart({ response, height = 200 }: ThroughputChartProps) {
   const { days, sampleSize, historicalWindowDays, warnings } = response;
+  const { resolvedTheme } = useTheme();
+  const chartColor = resolvedTheme === 'dark' ? '#9db9ff' : '#325796';
+  const axisColor = resolvedTheme === 'dark' ? '#b5afa4' : '#5d6575';
+  const gridColor = resolvedTheme === 'dark' ? 'rgba(229, 221, 207, 0.12)' : 'rgba(23, 32, 51, 0.1)';
+  const panelColor = resolvedTheme === 'dark' ? '#1e242f' : '#fffaf5';
 
   if (days.length === 0) {
     return (
@@ -19,9 +26,9 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#6b7280',
+          color: palette.soft,
           fontSize: '0.875rem',
-          border: '1px dashed #e5e7eb',
+          border: `1px dashed ${palette.lineStrong}`,
           borderRadius: '4px',
         }}
         aria-label="Daily throughput chart"
@@ -43,18 +50,9 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
   const tickValues = days.filter((_, i) => i % tickEveryN === 0).map((d) => d.day);
 
   return (
-    <div>
+      <div>
       {warnings.length > 0 && (
-        <div
-          style={{
-            marginBottom: '0.5rem',
-            padding: '0.5rem 0.75rem',
-            background: '#fef9c3',
-            border: '1px solid #fde047',
-            borderRadius: '4px',
-            fontSize: '0.8125rem',
-          }}
-        >
+        <div style={{ ...noticeStyle('warning'), marginBottom: '0.5rem', fontSize: '0.8125rem' }}>
           {warnings.map((w, i) => (
             <p key={i} style={{ margin: i === 0 ? 0 : '0.25rem 0 0' }}>
               ⚠ {w.message}
@@ -72,12 +70,50 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
           curve="monotoneX"
           enableArea={true}
           areaOpacity={0.15}
-          colors={['#1d4ed8']}
+          colors={[chartColor]}
           lineWidth={2}
           pointSize={4}
           pointColor={{ from: 'color' }}
           pointBorderWidth={0}
           enableGridX={false}
+          theme={{
+            text: {
+              fill: axisColor,
+              fontSize: 12,
+            },
+            axis: {
+              domain: {
+                line: {
+                  stroke: gridColor,
+                },
+              },
+              ticks: {
+                line: {
+                  stroke: gridColor,
+                },
+                text: {
+                  fill: axisColor,
+                },
+              },
+              legend: {
+                text: {
+                  fill: axisColor,
+                },
+              },
+            },
+            grid: {
+              line: {
+                stroke: gridColor,
+              },
+            },
+            crosshair: {
+              line: {
+                stroke: chartColor,
+                strokeWidth: 1,
+                strokeOpacity: 0.6,
+              },
+            },
+          }}
           axisBottom={{
             tickValues,
             tickRotation: -45,
@@ -94,12 +130,13 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
           tooltip={({ point }) => (
             <div
               style={{
-                background: 'white',
-                border: '1px solid #e5e7eb',
+                background: panelColor,
+                border: `1px solid ${gridColor}`,
                 borderRadius: '4px',
                 padding: '0.375rem 0.625rem',
                 fontSize: '0.8125rem',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                boxShadow: palette.shadowSoft,
+                color: axisColor,
               }}
             >
               <strong>{String(point.data.x)}</strong>
@@ -111,7 +148,7 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
         />
       </div>
 
-      <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+      <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: palette.soft }}>
         {sampleSize} stories completed over the last {historicalWindowDays} days
       </p>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import type { ForecastResponse, ForecastResult } from '@agile-tools/shared/contracts/forecast';
-import { codeStyle, insetPanelStyle, noticeStyle, statCardStyle, statLabelStyle, statValueStyle } from '@/components/app/chrome';
+import { codeStyle, insetPanelStyle, noticeStyle, palette, statCardStyle, statLabelStyle, statValueStyle } from '@/components/app/chrome';
 
 interface ForecastResultsProps {
   response: ForecastResponse;
@@ -36,7 +36,7 @@ export function ForecastResults({ response }: ForecastResultsProps) {
       {warnings.length > 0 && (
         <div style={{ ...(hasLowSample ? noticeStyle('danger') : noticeStyle('warning')), marginBottom: '0.85rem' }}>
           {warnings.map((w, i) => (
-            <p key={i} style={{ margin: i === 0 ? 0 : '0.25rem 0 0', color: hasLowSample ? '#991b1b' : '#92400e' }}>
+            <p key={i} style={{ margin: i === 0 ? 0 : '0.25rem 0 0', color: hasLowSample ? palette.danger : palette.warning }}>
               ⚠ {w.message}
             </p>
           ))}
@@ -50,17 +50,17 @@ export function ForecastResults({ response }: ForecastResultsProps) {
             <article key={r.confidenceLevel} style={statCardStyle}>
               <p style={statLabelStyle}>Confidence</p>
               <p style={statValueStyle}>{r.confidenceLevel}%</p>
-              <p style={{ margin: '0.4rem 0 0', color: '#475569', lineHeight: 1.5 }}>
+              <p style={{ margin: '0.4rem 0 0', color: palette.muted, lineHeight: 1.5 }}>
                 {type === 'when' ? 'Completion date' : 'Stories completed'}
               </p>
-              <p style={{ margin: '0.35rem 0 0', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '1rem', fontWeight: 700, color: palette.ink }}>
                 {formatResult(r, type)}
               </p>
             </article>
           ))}
         </div>
       ) : (
-        <p style={{ color: '#6b7280', margin: 0 }}>
+        <p style={{ color: palette.soft, margin: 0 }}>
           No forecast results available. This usually means there is no throughput history in the
           selected window.
         </p>
@@ -71,7 +71,7 @@ export function ForecastResults({ response }: ForecastResultsProps) {
         style={{
           ...insetPanelStyle,
           marginTop: '0.85rem',
-          color: '#6b7280',
+          color: palette.soft,
           fontSize: '0.75rem',
           display: 'flex',
           flexWrap: 'wrap',
@@ -79,13 +79,13 @@ export function ForecastResults({ response }: ForecastResultsProps) {
         }}
       >
         <span>
-          Sample size: <strong style={{ color: '#374151' }}>{sampleSize} stories</strong>
+          Sample size: <strong style={{ color: palette.text }}>{sampleSize} stories</strong>
         </span>
         <span>
-          Iterations: <strong style={{ color: '#374151' }}>{iterations.toLocaleString()}</strong>
+          Iterations: <strong style={{ color: palette.text }}>{iterations.toLocaleString()}</strong>
         </span>
         <span>
-          Window: <strong style={{ color: '#374151' }}>{historicalWindowDays} days</strong>
+          Window: <strong style={{ color: palette.text }}>{historicalWindowDays} days</strong>
         </span>
         <span>
           Data version: <span style={codeStyle}>{dataVersion || '—'}</span>

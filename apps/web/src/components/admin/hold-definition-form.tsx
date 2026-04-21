@@ -2,7 +2,7 @@
 
 import { useState, useEffect, type FormEvent } from 'react';
 import type { HoldDefinitionResponse } from '@agile-tools/shared/contracts/api';
-import { buttonStyle, checkboxChipStyle, insetPanelStyle, noticeStyle, sectionCopyStyle } from '@/components/app/chrome';
+import { buttonStyle, checkboxChipStyle, insetPanelStyle, noticeStyle, palette, sectionCopyStyle, selectionControlStyle } from '@/components/app/chrome';
 
 interface HoldDefinitionFormProps {
   scopeId: string;
@@ -75,16 +75,16 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
   }
 
   return (
-    <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+    <div style={{ marginTop: '1rem', borderTop: `1px solid ${palette.line}`, paddingTop: '1rem' }}>
       <button
         onClick={() => setExpanded((v) => !v)}
         style={buttonStyle('secondary')}
       >
         {expanded ? '▲' : '▼'} Hold Definition
         {current && (
-          <span style={{ marginLeft: '0.5rem', color: '#475569' }}>
-            ({current.holdStatusIds.length} hold statuses)
-          </span>
+            <span style={{ marginLeft: '0.5rem', color: palette.muted }}>
+              ({current.holdStatusIds.length} hold statuses)
+            </span>
         )}
       </button>
 
@@ -95,7 +95,7 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
             <form onSubmit={(e) => { void handleSubmit(e); }}>
               {availableStatuses && availableStatuses.length > 0 ? (
                 <div>
-                  <p style={{ margin: '0 0 0.6rem', color: '#0f172a', fontWeight: 700 }}>
+                  <p style={{ margin: '0 0 0.6rem', color: palette.ink, fontWeight: 700 }}>
                     Hold Statuses
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -109,7 +109,7 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
                           checked={selected.includes(s.id)}
                           onChange={() => toggleStatus(s.id)}
                           disabled={saving}
-                          style={{ accentColor: '#1d4ed8' }}
+                          style={selectionControlStyle}
                         />
                         {s.name}
                       </label>

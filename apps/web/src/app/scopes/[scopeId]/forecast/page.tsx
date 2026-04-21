@@ -12,6 +12,7 @@ import {
   heroCopyStyle,
   heroTitleStyle,
   pageShellStyle,
+  palette,
   sectionCardStyle,
   sectionCopyStyle,
   sectionHeaderRowStyle,
@@ -158,7 +159,7 @@ export default function ForecastPage() {
           historicalWindowOptions={[30, 60, 90, 180, 365]}
         />
         {forecastLoading && (
-          <p style={{ marginTop: '0.85rem', color: '#64748b', fontSize: '0.875rem' }}>
+          <p style={{ marginTop: '0.85rem', color: palette.soft, fontSize: '0.875rem' }}>
             Running Monte Carlo simulation…
           </p>
         )}
