@@ -201,3 +201,20 @@ export async function getBoardDetail(
     blockedFields: blockedFields.length > 0 ? blockedFields : undefined,
   };
 }
+
+/**
+ * Return the saved-filter ID backing a board's JQL query.
+ *
+ * Returns null if the board configuration does not expose a filter (unexpected in practice).
+ * This filter ID can be used in JQL via `filter = <id>` to scope searches to the same
+ * issue set as the board without being constrained to column-mapped statuses.
+ */
+export async function getBoardFilterId(
+  client: JiraClient,
+  boardId: number,
+): Promise<string | null> {
+  const config = await client.get<{ filter?: { id: string } }>(
+    `/rest/agile/1.0/board/${boardId}/configuration`,
+  );
+  return config.filter?.id ?? null;
+}

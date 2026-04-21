@@ -1,0 +1,315 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  jiraClientStub,
+  loggerMock,
+  getConfigMock,
+  decryptSecretMock,
+  createJiraClientMock,
+  getBoardDetailMock,
+  getBoardFilterIdMock,
+  streamBoardIssuesMock,
+  streamJqlIssuesMock,
+  fetchIssueChangelogMock,
+  detectBoardDriftMock,
+  applyBoardDriftHandlingMock,
+  updateConnectionHealthAfterSyncMock,
+  normalizeJiraIssueMock,
+  rebuildScopeProjectionsMock,
+  MockJiraClientError,
+} = vi.hoisted(() => {
+  class MockJiraClientError extends Error {
+    constructor(public readonly code: string, message: string) {
+      super(message);
+      this.name = 'JiraClientError';
+    }
+  }
+
+  const jiraClientStub = { name: 'jira-client' };
+  const loggerMock = {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  };
+
+  return {
+    jiraClientStub,
+    loggerMock,
+    getConfigMock: vi.fn(() => ({ ENCRYPTION_KEY: 'test-encryption-key' })),
+    decryptSecretMock: vi.fn(() => 'pat-123'),
+    createJiraClientMock: vi.fn(() => jiraClientStub),
+    getBoardDetailMock: vi.fn(),
+    getBoardFilterIdMock: vi.fn(),
+    streamBoardIssuesMock: vi.fn(),
+    streamJqlIssuesMock: vi.fn(),
+    fetchIssueChangelogMock: vi.fn(),
+    detectBoardDriftMock: vi.fn(),
+    applyBoardDriftHandlingMock: vi.fn(),
+    updateConnectionHealthAfterSyncMock: vi.fn(),
+    normalizeJiraIssueMock: vi.fn(),
+    rebuildScopeProjectionsMock: vi.fn(),
+    MockJiraClientError,
+  };
+});
+
+vi.mock('@agile-tools/db', () => ({
+  DEFAULT_COMPLETED_WINDOW_DAYS: 90,
+}));
+
+vi.mock('@agile-tools/shared', () => ({
+  getConfig: getConfigMock,
+  decryptSecret: decryptSecretMock,
+  logger: loggerMock,
+}));
+
+vi.mock('@agile-tools/jira-client', () => ({
+  JiraClientError: MockJiraClientError,
+  createJiraClient: createJiraClientMock,
+  getBoardDetail: getBoardDetailMock,
+  getBoardFilterId: getBoardFilterIdMock,
+  streamBoardIssues: streamBoardIssuesMock,
+  streamJqlIssues: streamJqlIssuesMock,
+  fetchIssueChangelog: fetchIssueChangelogMock,
+}));
+
+vi.mock('./detect-board-drift.js', () => ({
+  detectBoardDrift: detectBoardDriftMock,
+  applyBoardDriftHandling: applyBoardDriftHandlingMock,
+}));
+
+vi.mock('./update-connection-health.js', () => ({
+  updateConnectionHealthAfterSync: updateConnectionHealthAfterSyncMock,
+}));
+
+vi.mock('./normalize-jira-issues.js', () => ({
+  normalizeJiraIssue: normalizeJiraIssueMock,
+}));
+
+vi.mock('../projections/rebuild-scope-summary.js', () => ({
+  rebuildScopeProjections: rebuildScopeProjectionsMock,
+}));
+
+import { runScopeSync } from './run-scope-sync.js';
+
+function makeIssue(params: {
+  id: string;
+  key: string;
+  projectId: string;
+  statusId: string;
+  statusName: string;
+}): {
+  id: string;
+  key: string;
+  fields: {
+    summary: string;
+    issuetype: { id: string; name: string };
+    project: { id: string; key: string };
+    status: { id: string; name: string };
+    created: string;
+  };
+} {
+  return {
+    id: params.id,
+    key: params.key,
+    fields: {
+      summary: `Issue ${params.key}`,
+      issuetype: { id: 'story', name: 'Story' },
+      project: { id: params.projectId, key: 'PROJ' },
+      status: { id: params.statusId, name: params.statusName },
+      created: '2025-01-01T00:00:00.000Z',
+    },
+  };
+}
+
+async function* issueStream<T>(...issues: T[]): AsyncGenerator<T> {
+  for (const issue of issues) {
+    yield issue;
+  }
+}
+
+function createDb(options?: { doneStatusIds?: string[] }) {
+  const syncRun = { id: 'run-1', scopeId: 'scope-1', status: 'queued' };
+  const scope = {
+    id: 'scope-1',
+    workspaceId: 'workspace-1',
+    connectionId: 'connection-1',
+    boardId: '42',
+    status: 'active',
+    startStatusIds: ['10'],
+    doneStatusIds: options?.doneStatusIds ?? ['30', '40'],
+    includedIssueTypeIds: ['story'],
+  };
+  const connection = {
+    id: 'connection-1',
+    workspaceId: 'workspace-1',
+    baseUrl: 'https://jira.example.internal',
+    encryptedSecretRef: 'encrypted-secret',
+  };
+
+  const db = {
+    syncRun: {
+      findUnique: vi.fn().mockResolvedValue(syncRun),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      update: vi.fn().mockResolvedValue(undefined),
+    },
+    flowScope: {
+      findUnique: vi.fn().mockResolvedValue(scope),
+    },
+    jiraConnection: {
+      findFirst: vi.fn().mockResolvedValue(connection),
+    },
+    boardSnapshot: {
+      create: vi.fn().mockResolvedValue({ id: 'snapshot-1' }),
+      update: vi.fn().mockResolvedValue(undefined),
+    },
+    workItem: {
+      upsert: vi.fn(async (args: { where: { scopeId_jiraIssueId: { jiraIssueId: string } } }) => ({
+        id: `work-item-${args.where.scopeId_jiraIssueId.jiraIssueId}`,
+      })),
+    },
+    workItemLifecycleEvent: {
+      createMany: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+
+  return db;
+}
+
+describe('runScopeSync', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    getConfigMock.mockReturnValue({ ENCRYPTION_KEY: 'test-encryption-key' });
+    decryptSecretMock.mockReturnValue('pat-123');
+    createJiraClientMock.mockReturnValue(jiraClientStub);
+    getBoardDetailMock.mockResolvedValue({
+      boardId: 42,
+      boardName: 'Payments Board',
+      columns: [{ name: 'Doing', statusIds: ['10'] }],
+      statuses: [{ id: '10', name: 'In Progress' }],
+      completionStatuses: [
+        { id: '30', name: 'Closed' },
+        { id: '40', name: 'Resolved' },
+      ],
+      issueTypes: [{ id: 'story', name: 'Story' }],
+    });
+    detectBoardDriftMock.mockReturnValue(null);
+    applyBoardDriftHandlingMock.mockResolvedValue(undefined);
+    fetchIssueChangelogMock.mockResolvedValue([]);
+    updateConnectionHealthAfterSyncMock.mockResolvedValue(undefined);
+    rebuildScopeProjectionsMock.mockResolvedValue(undefined);
+    normalizeJiraIssueMock.mockImplementation(
+      (issue: {
+        id: string;
+        key: string;
+        fields: {
+          summary: string;
+          issuetype: { id: string; name: string };
+          project: { id: string };
+          status: { id: string; name: string };
+          created: string;
+        };
+      }) => ({
+        jiraIssueId: issue.id,
+        issueKey: issue.key,
+        summary: issue.fields.summary,
+        issueTypeId: issue.fields.issuetype.id,
+        issueTypeName: issue.fields.issuetype.name,
+        projectId: issue.fields.project.id,
+        currentStatusId: issue.fields.status.id,
+        currentColumn: issue.fields.status.id === '10' ? 'Doing' : null,
+        createdAt: new Date(issue.fields.created),
+        startedAt: null,
+        completedAt: issue.fields.status.id === '10' ? null : new Date('2025-01-02T00:00:00.000Z'),
+        reopenedCount: 0,
+        directUrl: `https://jira.example.internal/browse/${issue.key}`,
+        excludedReason: null,
+        lifecycleEvents: [],
+      }),
+    );
+  });
+
+  it('backfills completed issues using the board filter JQL', async () => {
+    const db = createDb();
+    const boardIssue = makeIssue({
+      id: 'ISSUE-1',
+      key: 'PROJ-1',
+      projectId: 'proj-board',
+      statusId: '10',
+      statusName: 'In Progress',
+    });
+    const completedIssue = makeIssue({
+      id: 'ISSUE-2',
+      key: 'PROJ-2',
+      projectId: 'proj-offboard',
+      statusId: '30',
+      statusName: 'Closed',
+    });
+
+    streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
+    getBoardFilterIdMock.mockResolvedValue('1001');
+    streamJqlIssuesMock.mockReturnValue(issueStream(completedIssue));
+
+    await runScopeSync(db as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(getBoardFilterIdMock).toHaveBeenCalledWith(jiraClientStub, 42);
+    expect(streamJqlIssuesMock).toHaveBeenCalledWith(
+      jiraClientStub,
+      'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
+    );
+    expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
+    expect(db.boardSnapshot.update).toHaveBeenCalledWith({
+      where: { id: 'snapshot-1' },
+      data: {
+        projectRefs: [{ id: 'proj-board' }, { id: 'proj-offboard' }],
+      },
+    });
+    expect(loggerMock.info).toHaveBeenCalledWith('Completed-issue sync pass finished', {
+      syncRunId: 'run-1',
+      scopeId: 'scope-1',
+    });
+  });
+
+  it('skips the completed-issue pass when the board exposes no saved filter', async () => {
+    const db = createDb();
+    const boardIssue = makeIssue({
+      id: 'ISSUE-1',
+      key: 'PROJ-1',
+      projectId: 'proj-board',
+      statusId: '10',
+      statusName: 'In Progress',
+    });
+
+    streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
+    getBoardFilterIdMock.mockResolvedValue(null);
+
+    await runScopeSync(db as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(streamJqlIssuesMock).not.toHaveBeenCalled();
+    expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      'Board has no saved filter; skipping completed-issue sync pass',
+      { syncRunId: 'run-1', boardId: 42 },
+    );
+  });
+
+  it('skips the completed-issue pass when the scope has no done statuses', async () => {
+    const db = createDb({ doneStatusIds: [] });
+    const boardIssue = makeIssue({
+      id: 'ISSUE-1',
+      key: 'PROJ-1',
+      projectId: 'proj-board',
+      statusId: '10',
+      statusName: 'In Progress',
+    });
+
+    streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
+
+    await runScopeSync(db as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(getBoardFilterIdMock).not.toHaveBeenCalled();
+    expect(streamJqlIssuesMock).not.toHaveBeenCalled();
+    expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
+  });
+});

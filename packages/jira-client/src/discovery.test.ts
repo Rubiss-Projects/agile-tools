@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createJiraClient } from './client.js';
-import { getBoardDetail } from './discovery.js';
+import { getBoardDetail, getBoardFilterId } from './discovery.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -172,5 +172,60 @@ describe('getBoardDetail', () => {
       { id: '10', name: 'Done' },
       { id: '20', name: 'In Progress' },
     ]);
+  });
+});
+
+describe('getBoardFilterId', () => {
+  it('returns the saved filter id from board configuration', async () => {
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = String(input);
+
+      if (url.endsWith('/rest/agile/1.0/board/42/configuration')) {
+        return Promise.resolve(
+          jsonResponse({
+            id: 42,
+            name: 'Payments Board',
+            filter: { id: '1001' },
+            columnConfig: { columns: [] },
+          }),
+        );
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const filterId = await getBoardFilterId(
+      createJiraClient('https://jira.example.internal', 'pat-123'),
+      42,
+    );
+
+    expect(filterId).toBe('1001');
+  });
+
+  it('returns null when board configuration has no saved filter', async () => {
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = String(input);
+
+      if (url.endsWith('/rest/agile/1.0/board/42/configuration')) {
+        return Promise.resolve(
+          jsonResponse({
+            id: 42,
+            name: 'Payments Board',
+            columnConfig: { columns: [] },
+          }),
+        );
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const filterId = await getBoardFilterId(
+      createJiraClient('https://jira.example.internal', 'pat-123'),
+      42,
+    );
+
+    expect(filterId).toBeNull();
   });
 });

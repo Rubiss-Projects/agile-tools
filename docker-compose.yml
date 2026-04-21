@@ -2,6 +2,14 @@ x-agile-tools-runtime: &agile-tools-runtime
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
+      COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-}
+      NPM_CONFIG_STRICT_SSL: ${NPM_CONFIG_STRICT_SSL:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      NODE_TLS_REJECT_UNAUTHORIZED: ${NODE_TLS_REJECT_UNAUTHORIZED:-}
   image: agile-tools:local
   env_file:
     - .env
