@@ -169,8 +169,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FlowScope'
+        '400':
+          description: Invalid scope payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Flow scope or Jira connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '409':
-          description: Scope update requires a follow-up sync but a sync is already active
+          description: Scope update conflicts with an active sync or concurrent board-selection change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '502':
+          description: Jira board validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Scope update was rolled back because the follow-up sync could not be queued
           content:
             application/json:
               schema:
@@ -207,6 +231,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncRun'
+        '404':
+          description: Flow scope not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: A sync is already queued or running for the scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: The sync run could not be queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
     get:
       tags: [Admin Scopes]
       summary: List sync history for the scope

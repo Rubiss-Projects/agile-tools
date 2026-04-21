@@ -69,17 +69,26 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function clearSelections() {
+  const usingSavedEditConfig =
+    isEditMode &&
+    initialScope !== undefined &&
+    connectionId === initialScope.connectionId &&
+    selectedBoardId === initialScope.boardId &&
+    boardDetail === null;
+  const inspectedBoardMatchesSelection =
+    boardDetail !== null && selectedBoardId !== null && boardDetail.boardId === selectedBoardId;
+
+  const clearSelections = useCallback(() => {
     setIncludedIssueTypeIds([]);
     setStartStatusIds([]);
     setDoneStatusIds([]);
-  }
+  }, []);
 
-  function resetBoardInspection() {
+  const resetBoardInspection = useCallback(() => {
     setBoardDetail(null);
     setInspectError(null);
     clearSelections();
-  }
+  }, [clearSelections]);
 
   function restoreInitialScopeState() {
     if (!initialScope) return;
@@ -119,7 +128,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     setLoadingBoards(true);
     setBoards([]);
     setBoardDetail(null);
-    setSelectedBoardId(null);
+    setInspectError(null);
     try {
       const res = await fetch(
         `/api/v1/admin/jira-connections/${activeConnectionId}/discovery/boards`,
@@ -163,10 +172,16 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     scopeToApply?: FlowScope,
   ) => {
     if (!boardId) return;
+    const preserveSavedConfig =
+      initialScope !== undefined &&
+      activeConnectionId === initialScope.connectionId &&
+      boardId === initialScope.boardId;
     setInspectError(null);
     setInspecting(true);
-    setBoardDetail(null);
-    clearSelections();
+    if (!preserveSavedConfig) {
+      setBoardDetail(null);
+      clearSelections();
+    }
     try {
       const res = await fetch(
         `/api/v1/admin/jira-connections/${activeConnectionId}/discovery/boards/${boardId}`,
@@ -185,7 +200,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     } finally {
       setInspecting(false);
     }
-  }, [applyScopeSelections, connectionId, selectedBoardId]);
+  }, [applyScopeSelections, clearSelections, connectionId, initialScope, selectedBoardId]);
 
   useEffect(() => {
     if (!isEditMode || !expanded || initializedEditRef.current) return;
@@ -296,13 +311,18 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     );
   }
 
-  const canSubmit =
-    !submitting &&
-    boardDetail !== null &&
-    selectedBoardId !== null &&
+  const canSubmitWithSavedConfig =
+    usingSavedEditConfig &&
     startStatusIds.length > 0 &&
     doneStatusIds.length > 0 &&
     includedIssueTypeIds.length > 0;
+  const canSubmit =
+    !submitting &&
+    selectedBoardId !== null &&
+    startStatusIds.length > 0 &&
+    doneStatusIds.length > 0 &&
+    includedIssueTypeIds.length > 0 &&
+    (inspectedBoardMatchesSelection || canSubmitWithSavedConfig);
 
   const completionStatuses = boardDetail?.completionStatuses ?? boardDetail?.statuses ?? [];
   const boardStatusIds = new Set(boardDetail?.statuses.map((status) => status.id) ?? []);
@@ -373,67 +393,78 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
         </div>
       )}
 
-      {boardDetail && (
+      {(inspectedBoardMatchesSelection || canSubmitWithSavedConfig) && (
         <form onSubmit={(e) => { void handleSubmit(e); }}>
-          <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
-            <legend>
-              <strong>Start Statuses</strong> — when work begins
-            </legend>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
-              {boardDetail.statuses.map((status) => (
-                <label key={status.id} style={checkboxChipStyle(startStatusIds.includes(status.id))}>
-                  <input
-                    type="checkbox"
-                    checked={startStatusIds.includes(status.id)}
-                    onChange={() => setStartStatusIds((prev) => toggleId(prev, status.id))}
-                    style={{ accentColor: '#1d4ed8' }}
-                  />{' '}
-                  {status.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {inspectedBoardMatchesSelection && boardDetail ? (
+            <>
+              <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
+                <legend>
+                  <strong>Start Statuses</strong> — when work begins
+                </legend>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+                  {boardDetail.statuses.map((status) => (
+                    <label key={status.id} style={checkboxChipStyle(startStatusIds.includes(status.id))}>
+                      <input
+                        type="checkbox"
+                        checked={startStatusIds.includes(status.id)}
+                        onChange={() => setStartStatusIds((prev) => toggleId(prev, status.id))}
+                        style={{ accentColor: '#1d4ed8' }}
+                      />{' '}
+                      {status.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
-          <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
-            <legend>
-              <strong>Done Statuses</strong> — when work completes
-            </legend>
-            <p style={{ ...helperTextStyle, margin: '0.5rem 0 0' }}>
-              Completion statuses can include workflow states that are not currently shown as board columns.
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
-              {completionStatuses.map((status) => (
-                <label key={status.id} style={checkboxChipStyle(doneStatusIds.includes(status.id))}>
-                  <input
-                    type="checkbox"
-                    checked={doneStatusIds.includes(status.id)}
-                    onChange={() => setDoneStatusIds((prev) => toggleId(prev, status.id))}
-                    style={{ accentColor: '#1d4ed8' }}
-                  />{' '}
-                  {boardStatusIds.has(status.id) ? status.name : `${status.name} (off-board)`}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+              <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
+                <legend>
+                  <strong>Done Statuses</strong> — when work completes
+                </legend>
+                <p style={{ ...helperTextStyle, margin: '0.5rem 0 0' }}>
+                  Completion statuses can include workflow states that are not currently shown as board columns.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+                  {completionStatuses.map((status) => (
+                    <label key={status.id} style={checkboxChipStyle(doneStatusIds.includes(status.id))}>
+                      <input
+                        type="checkbox"
+                        checked={doneStatusIds.includes(status.id)}
+                        onChange={() => setDoneStatusIds((prev) => toggleId(prev, status.id))}
+                        style={{ accentColor: '#1d4ed8' }}
+                      />{' '}
+                      {boardStatusIds.has(status.id) ? status.name : `${status.name} (off-board)`}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
-          <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
-            <legend>
-              <strong>Issue Types</strong> — types to include in flow tracking
-            </legend>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
-              {boardDetail.issueTypes.map((issueType) => (
-                <label key={issueType.id} style={checkboxChipStyle(includedIssueTypeIds.includes(issueType.id))}>
-                  <input
-                    type="checkbox"
-                    checked={includedIssueTypeIds.includes(issueType.id)}
-                    onChange={() => setIncludedIssueTypeIds((prev) => toggleId(prev, issueType.id))}
-                    style={{ accentColor: '#1d4ed8' }}
-                  />{' '}
-                  {issueType.name}
-                </label>
-              ))}
+              <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
+                <legend>
+                  <strong>Issue Types</strong> — types to include in flow tracking
+                </legend>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+                  {boardDetail.issueTypes.map((issueType) => (
+                    <label key={issueType.id} style={checkboxChipStyle(includedIssueTypeIds.includes(issueType.id))}>
+                      <input
+                        type="checkbox"
+                        checked={includedIssueTypeIds.includes(issueType.id)}
+                        onChange={() => setIncludedIssueTypeIds((prev) => toggleId(prev, issueType.id))}
+                        style={{ accentColor: '#1d4ed8' }}
+                      />{' '}
+                      {issueType.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </>
+          ) : (
+            <div style={{ ...noticeStyle('info'), marginBottom: '0.9rem' }}>
+              <p style={{ margin: 0 }}>
+                Using the saved scope mapping because Jira inspection is unavailable. You can still change cadence or timezone,
+                but switch the connection or board and re-run inspection before editing statuses or issue types.
+              </p>
             </div>
-          </fieldset>
+          )}
 
           <div style={{ marginBottom: '0.75rem' }}>
             <label>
@@ -472,7 +503,9 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
             </button>
             {!submitting && !canSubmit && (
               <span style={{ color: '#64748b', fontSize: '0.875rem' }}>
-                Select at least one start status, done status, and issue type.
+                {usingSavedEditConfig
+                  ? 'Retry board inspection or keep the saved board selection to submit the existing mapping.'
+                  : 'Select at least one start status, done status, and issue type.'}
               </span>
             )}
           </div>

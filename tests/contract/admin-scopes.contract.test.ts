@@ -273,6 +273,31 @@ describe('PUT /v1/admin/scopes/:id', () => {
     expect(res.status).toBe(409);
   });
 
+  it('returns 409 before board preflight when an active sync already exists', async () => {
+    mswServer.use(
+      http.get(`${JIRA_BASE}/rest/agile/1.0/board/:boardId/project`, () =>
+        HttpResponse.json({ message: 'jira unavailable' }, { status: 503 }),
+      ),
+    );
+
+    const db = getPrismaClient();
+    await db.syncRun.create({
+      data: {
+        scopeId,
+        trigger: 'manual',
+        status: 'queued',
+      },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      boardId: 2,
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(409);
+  });
+
   it('updates flow boundaries without Jira availability when the board stays the same', async () => {
     mswServer.use(
       http.get(`${JIRA_BASE}/rest/agile/1.0/board/:boardId/project`, () =>
