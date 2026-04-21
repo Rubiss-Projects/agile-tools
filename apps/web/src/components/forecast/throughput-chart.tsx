@@ -3,7 +3,6 @@
 import { ResponsiveLine } from '@nivo/line';
 import type { ThroughputResponse } from '@agile-tools/shared/contracts/api';
 import { noticeStyle, palette } from '@/components/app/chrome';
-import { useTheme } from '@/components/app/theme-provider';
 
 interface ThroughputChartProps {
   response: ThroughputResponse;
@@ -12,11 +11,10 @@ interface ThroughputChartProps {
 
 export function ThroughputChart({ response, height = 200 }: ThroughputChartProps) {
   const { days, sampleSize, historicalWindowDays, warnings } = response;
-  const { resolvedTheme } = useTheme();
-  const chartColor = resolvedTheme === 'dark' ? '#9db9ff' : '#325796';
-  const axisColor = resolvedTheme === 'dark' ? '#b5afa4' : '#5d6575';
-  const gridColor = resolvedTheme === 'dark' ? 'rgba(229, 221, 207, 0.12)' : 'rgba(23, 32, 51, 0.1)';
-  const panelColor = resolvedTheme === 'dark' ? '#1e242f' : '#fffaf5';
+  const chartColor = palette.accentStrong;
+  const axisColor = palette.soft;
+  const gridColor = palette.line;
+  const panelColor = palette.panelStrong;
 
   if (days.length === 0) {
     return (
@@ -50,7 +48,7 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
   const tickValues = days.filter((_, i) => i % tickEveryN === 0).map((d) => d.day);
 
   return (
-      <div>
+    <div>
       {warnings.length > 0 && (
         <div style={{ ...noticeStyle('warning'), marginBottom: '0.5rem', fontSize: '0.8125rem' }}>
           {warnings.map((w, i) => (

@@ -8,7 +8,6 @@ import type {
 import type { ScatterDatum, FlowAnalyticsViewModel } from '@/server/views/flow-analytics';
 import type { AgingModel } from '@agile-tools/shared/contracts/api';
 import { palette } from '@/components/app/chrome';
-import { useTheme } from '@/components/app/theme-provider';
 
 /** Render dashed vertical reference lines at the p50, p70, and p85 thresholds. */
 function createThresholdLayer(
@@ -69,31 +68,17 @@ export function AgingScatterPlot({
 }: AgingScatterPlotProps) {
   const { series, agingModel } = viewModel;
   const isEmpty = series.every((s) => s.data.length === 0);
-  const { resolvedTheme } = useTheme();
-  const colors =
-    resolvedTheme === 'dark'
-      ? {
-          positive: '#63c89f',
-          warning: '#e6b75d',
-          danger: '#f29198',
-          neutral: '#7d8592',
-          hold: '#b8a9ef',
-          text: '#e5ddcf',
-          soft: '#8d897f',
-          line: 'rgba(229, 221, 207, 0.12)',
-          panel: '#1e242f',
-        }
-      : {
-          positive: '#3d8d6f',
-          warning: '#c0832c',
-          danger: '#c5545c',
-          neutral: '#8f96a6',
-          hold: '#7f6db8',
-          text: '#2d3648',
-          soft: '#7b8392',
-          line: 'rgba(23, 32, 51, 0.1)',
-          panel: '#fffaf5',
-        };
+  const colors = {
+    positive: palette.chartPositive,
+    warning: palette.chartWarning,
+    danger: palette.chartDanger,
+    neutral: palette.chartNeutral,
+    hold: palette.chartHold,
+    text: palette.text,
+    soft: palette.soft,
+    line: palette.line,
+    panel: palette.panelStrong,
+  };
   const zoneColors: Record<string, string> = {
     normal: colors.positive,
     watch: colors.warning,

@@ -20,13 +20,25 @@ export const THEME_INIT_SCRIPT = `(() => {
   const storageKey = '${THEME_STORAGE_KEY}';
   const mediaQuery = '${THEME_MEDIA_QUERY}';
   const normalize = (value) => value === 'light' || value === 'dark' || value === 'system' ? value : 'system';
-  const preference = normalize(window.localStorage.getItem(storageKey));
-  const prefersDark = window.matchMedia(mediaQuery).matches;
-  const resolved = preference === 'system'
-    ? (prefersDark ? 'dark' : 'light')
-    : preference;
 
-  document.documentElement.dataset.theme = resolved;
-  document.documentElement.dataset.themePreference = preference;
-  document.documentElement.style.colorScheme = resolved;
+  try {
+    const preference = normalize(window.localStorage.getItem(storageKey));
+    const prefersDark = window.matchMedia(mediaQuery).matches;
+    const resolved = preference === 'system'
+      ? (prefersDark ? 'dark' : 'light')
+      : preference;
+
+    document.documentElement.dataset.theme = resolved;
+    document.documentElement.dataset.themePreference = preference;
+    document.documentElement.style.colorScheme = resolved;
+  } catch {
+    const preference = 'system';
+    const prefersDark =
+      typeof window.matchMedia === 'function' && window.matchMedia(mediaQuery).matches;
+    const resolved = prefersDark ? 'dark' : 'light';
+
+    document.documentElement.dataset.theme = resolved;
+    document.documentElement.dataset.themePreference = preference;
+    document.documentElement.style.colorScheme = resolved;
+  }
 })();`;
