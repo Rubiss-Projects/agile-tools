@@ -64,11 +64,13 @@ interface JiraField {
   schema?: { type: string; custom?: string };
 }
 
+const namedValueCollator = new Intl.Collator('en', {
+  sensitivity: 'base',
+});
+
 function sortNamedValues(values: Iterable<NamedValue>): NamedValue[] {
   return Array.from(values).sort(
-    (left, right) =>
-      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }) ||
-      left.id.localeCompare(right.id),
+    (left, right) => namedValueCollator.compare(left.name, right.name) || left.id.localeCompare(right.id),
   );
 }
 
@@ -137,9 +139,8 @@ export async function getBoardDetail(
       .map((s) => ({ id: s.id, name: s.name })),
   );
 
-  const completionStatusesMap = new Map<string, string>(
-    allStatuses.map((status) => [status.id, status.name]),
-  );
+  const boardAndFallbackStatusEntries = allStatuses.map((status) => [status.id, status.name] as const);
+  let completionStatusesMap: Map<string, string>;
 
   // Narrow issue types and completion statuses to those active in the board's projects when possible.
   let issueTypes: NamedValue[] = allIssueTypes.map((t) => ({ id: t.id, name: t.name }));
@@ -151,6 +152,7 @@ export async function getBoardDetail(
     );
 
     const issueTypesMap = new Map<string, string>();
+    const projectCompletionStatusesMap = new Map<string, string>();
 
     for (const result of projectStatusResults) {
       if (result.status !== 'fulfilled') continue;
@@ -159,14 +161,25 @@ export async function getBoardDetail(
         issueTypesMap.set(issueType.id, issueType.name);
 
         for (const status of issueType.statuses) {
-          completionStatusesMap.set(status.id, status.name);
+          projectCompletionStatusesMap.set(status.id, status.name);
         }
       }
     }
 
     if (issueTypesMap.size > 0) {
-      issueTypes = Array.from(issueTypesMap, ([id, name]) => ({ id, name }));
+      issueTypes = sortNamedValues(Array.from(issueTypesMap, ([id, name]) => ({ id, name })));
     }
+
+    if (projectCompletionStatusesMap.size > 0) {
+      completionStatusesMap = new Map<string, string>(statuses.map((status) => [status.id, status.name]));
+      for (const [id, name] of projectCompletionStatusesMap) {
+        completionStatusesMap.set(id, name);
+      }
+    } else {
+      completionStatusesMap = new Map<string, string>(boardAndFallbackStatusEntries);
+    }
+  } else {
+    completionStatusesMap = new Map<string, string>(boardAndFallbackStatusEntries);
   }
 
   // Candidate blocked/flagged fields: select list, checkbox, or radio fields
