@@ -4,3 +4,6 @@ export type { Config } from './config.js';
 export { encryptSecret, decryptSecret, redactCredentials, maskSecret } from './secrets.js';
 
 export { logger } from './logging.js';
+
+export { QUEUE_NAMES } from './queue-names.js';
+export type { QueueName } from './queue-names.js';

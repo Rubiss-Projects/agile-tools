@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import type { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@agile-tools/shared';
 import { ResponseError } from './errors';
 import {
@@ -10,6 +11,8 @@ import {
 
 // Session cookie name — must match the value set by the auth middleware.
 export const SESSION_COOKIE_NAME = 'agile_session';
+
+const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
 export { serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
 
@@ -63,4 +66,27 @@ export async function requireAdminContext(): Promise<WorkspaceContext> {
     );
   }
   return ctx;
+}
+
+export function setWorkspaceSessionCookie(
+  response: NextResponse,
+  request: NextRequest,
+  context: WorkspaceContext,
+): void {
+  response.cookies.set({
+    name: SESSION_COOKIE_NAME,
+    value: serializeWorkspaceContext(context),
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: shouldUseSecureSessionCookie(request),
+    path: '/',
+    maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
+  });
+}
+
+function shouldUseSecureSessionCookie(request: NextRequest): boolean {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const protocol = forwardedProto ?? request.nextUrl.protocol.replace(/:$/, '');
+
+  return protocol === 'https';
 }

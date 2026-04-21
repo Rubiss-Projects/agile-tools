@@ -1,10 +1,13 @@
 import { getPrismaClient, listFlowScopes, listJiraConnections } from '@agile-tools/db';
 import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
-import { DemoBootstrapForm } from '@/components/app/demo-bootstrap-form';
+import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
+import { LocalBootstrapForm } from '@/components/app/demo-bootstrap-form';
 
 export default async function HomePage() {
   const ctx = await getWorkspaceContext();
+  const demoEnabled = isLocalDemoEnabled();
+  const adminBootstrapEnabled = isLocalAdminBootstrapAvailable();
 
   if (!ctx) {
     return (
@@ -22,21 +25,23 @@ export default async function HomePage() {
           </p>
           <h1 style={{ margin: '0.75rem 0 0', fontSize: '2.25rem', lineHeight: 1.1 }}>Kanban flow analytics and forecasting</h1>
           <p style={{ margin: '1rem 0 0', maxWidth: '46rem', color: '#334155', lineHeight: 1.7 }}>
-            The working app routes in this feature are the Jira setup page, the scope analytics page, and the forecast page underneath a scope. This landing page exists to make local development usable when no workspace session is present yet.
+            The working app routes in this feature are the Jira setup page, the scope analytics page, and the forecast page underneath a scope. This landing page exists to make local development and local image hosting usable when no workspace session is present yet.
           </p>
 
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
-            {isLocalDemoEnabled() && (
-              <DemoBootstrapForm
+            {demoEnabled && (
+              <LocalBootstrapForm
                 label="Open seeded demo scope →"
                 nextPath={getLocalDemoDefaultPath()}
+                mode="demo"
               />
             )}
-            {isLocalDemoEnabled() && (
-              <DemoBootstrapForm
-                label="Seed demo and open Jira setup"
-                nextPath="/admin/jira"
-                variant="secondary"
+            {adminBootstrapEnabled && (
+              <LocalBootstrapForm
+                label="Create local admin session and open Jira setup"
+                nextPath={getLocalAdminDefaultPath()}
+                mode="admin"
+                variant={demoEnabled ? 'secondary' : 'primary'}
               />
             )}
           </div>
@@ -49,16 +54,20 @@ export default async function HomePage() {
               href: '/admin/jira',
               description: 'Connections, validation, and flow scope creation.',
             },
-            {
-              title: 'Scope Analytics',
-              href: getLocalDemoDefaultPath(),
-              description: 'Connection health, sync status, aging scatter plot, and hold rules.',
-            },
-            {
-              title: 'Forecast',
-              href: `${getLocalDemoDefaultPath()}/forecast`,
-              description: 'Historical throughput plus Monte Carlo forecasts.',
-            },
+            ...(demoEnabled
+              ? [
+                  {
+                    title: 'Scope Analytics',
+                    href: getLocalDemoDefaultPath(),
+                    description: 'Connection health, sync status, aging scatter plot, and hold rules.',
+                  },
+                  {
+                    title: 'Forecast',
+                    href: `${getLocalDemoDefaultPath()}/forecast`,
+                    description: 'Historical throughput plus Monte Carlo forecasts.',
+                  },
+                ]
+              : []),
           ].map((entry) => (
             <a
               key={entry.title}
@@ -125,10 +134,11 @@ export default async function HomePage() {
           >
             Open Jira setup
           </a>
-          {isLocalDemoEnabled() && (
-            <DemoBootstrapForm
+          {demoEnabled && (
+            <LocalBootstrapForm
               label="Reset local demo data"
               nextPath={getLocalDemoDefaultPath()}
+              mode="demo"
               variant="secondary"
             />
           )}

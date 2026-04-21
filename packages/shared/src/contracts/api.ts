@@ -78,6 +78,7 @@ export const BoardDiscoveryDetailSchema = z.object({
   boardName: z.string(),
   columns: z.array(BoardColumnSchema),
   statuses: z.array(NamedValueSchema),
+  completionStatuses: z.array(NamedValueSchema).optional(),
   issueTypes: z.array(NamedValueSchema),
   blockedFields: z.array(NamedValueSchema).optional(),
 });

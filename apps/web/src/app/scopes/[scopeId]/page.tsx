@@ -40,7 +40,8 @@ export default async function ScopePage({
       <AuthRequiredPanel
         title="Scope analytics require a workspace session"
         description="This route only works inside a workspace context. In local development you can seed a demo workspace and land straight back on this scope."
-        nextPath={`/scopes/${scopeId}`}
+        demoNextPath={`/scopes/${scopeId}`}
+        adminNextPath="/admin/jira"
       />
     );
   }
