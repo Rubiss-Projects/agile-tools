@@ -1,0 +1,121 @@
+:root {
+  --font-body: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-label: "Consolas", "Courier New", monospace;
+
+  --color-canvas: #f3eee4;
+  --color-panel: rgba(255, 252, 246, 0.84);
+  --color-panel-alt: rgba(250, 245, 236, 0.92);
+  --color-panel-strong: rgba(255, 255, 255, 0.96);
+  --color-ink: #172033;
+  --color-text: #2d3648;
+  --color-text-muted: #5d6575;
+  --color-text-soft: #7b8392;
+  --color-line: rgba(23, 32, 51, 0.1);
+  --color-line-strong: rgba(23, 32, 51, 0.18);
+  --color-accent: #17284b;
+  --color-accent-strong: #325796;
+  --color-accent-soft: #dde6f5;
+  --color-positive: #185b48;
+  --color-positive-soft: #dbeee6;
+  --color-warning: #8d621d;
+  --color-warning-soft: #f2e2b9;
+  --color-danger: #8c3338;
+  --color-danger-soft: #f3d7d8;
+  --color-overlay: rgba(23, 32, 51, 0.48);
+  --color-button-primary-bg: #17284b;
+  --color-button-primary-text: #f7f1e6;
+  --color-button-secondary-bg: rgba(255, 255, 255, 0.74);
+  --color-button-secondary-text: #172033;
+  --color-button-disabled-bg: #d7d0c4;
+  --color-button-disabled-text: #5f6674;
+  --chart-neutral: #8f96a6;
+  --chart-positive: #3d8d6f;
+  --chart-warning: #c0832c;
+  --chart-danger: #c5545c;
+  --chart-hold: #7f6db8;
+  --shadow-soft: 0 16px 34px rgba(17, 23, 35, 0.08);
+  --shadow-card: 0 26px 64px rgba(17, 23, 35, 0.12);
+}
+
+html[data-theme='dark'] {
+  --color-canvas: #11161d;
+  --color-panel: rgba(28, 33, 43, 0.84);
+  --color-panel-alt: rgba(24, 30, 39, 0.92);
+  --color-panel-strong: rgba(30, 36, 47, 0.96);
+  --color-ink: #f3ead8;
+  --color-text: #e5ddcf;
+  --color-text-muted: #b5afa4;
+  --color-text-soft: #8d897f;
+  --color-line: rgba(229, 221, 207, 0.12);
+  --color-line-strong: rgba(229, 221, 207, 0.22);
+  --color-accent: #ddc9a3;
+  --color-accent-strong: #9db9ff;
+  --color-accent-soft: rgba(157, 185, 255, 0.18);
+  --color-positive: #76c5a7;
+  --color-positive-soft: rgba(118, 197, 167, 0.16);
+  --color-warning: #e0b25d;
+  --color-warning-soft: rgba(224, 178, 93, 0.18);
+  --color-danger: #ef9ba0;
+  --color-danger-soft: rgba(239, 155, 160, 0.18);
+  --color-overlay: rgba(5, 9, 14, 0.58);
+  --color-button-primary-bg: #ddc9a3;
+  --color-button-primary-text: #161d29;
+  --color-button-secondary-bg: rgba(28, 33, 43, 0.86);
+  --color-button-secondary-text: #f3ead8;
+  --color-button-disabled-bg: #38404d;
+  --color-button-disabled-text: #8b92a0;
+  --chart-neutral: #7d8592;
+  --chart-positive: #63c89f;
+  --chart-warning: #e6b75d;
+  --chart-danger: #f29198;
+  --chart-hold: #b8a9ef;
+  --shadow-soft: 0 18px 38px rgba(0, 0, 0, 0.28);
+  --shadow-card: 0 30px 72px rgba(0, 0, 0, 0.36);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-canvas);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

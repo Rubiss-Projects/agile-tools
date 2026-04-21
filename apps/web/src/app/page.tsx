@@ -3,6 +3,26 @@ import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
 import { LocalBootstrapForm } from '@/components/app/demo-bootstrap-form';
+import {
+  buttonStyle,
+  codeStyle,
+  eyebrowStyle,
+  heroCardStyle,
+  heroCopyStyle,
+  heroTitleStyle,
+  itemCardStyle,
+  linkStyle,
+  pageShellStyle,
+  palette,
+  sectionCardStyle,
+  sectionCopyStyle,
+  sectionStackStyle,
+  sectionTitleStyle,
+  statCardStyle,
+  statGridStyle,
+  statLabelStyle,
+  statValueStyle,
+} from '@/components/app/chrome';
 
 export default async function HomePage() {
   const ctx = await getWorkspaceContext();
@@ -11,20 +31,13 @@ export default async function HomePage() {
 
   if (!ctx) {
     return (
-      <main style={{ padding: '3rem 1.5rem', maxWidth: '960px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <section
-          style={{
-            padding: '2rem',
-            borderRadius: '24px',
-            background: 'linear-gradient(140deg, #fff7ed 0%, #eff6ff 55%, #ecfeff 100%)',
-            border: '1px solid #e2e8f0',
-          }}
-        >
-          <p style={{ margin: 0, fontSize: '0.8rem', letterSpacing: '0.1em', color: '#9a3412', textTransform: 'uppercase' }}>
+      <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
+        <section style={heroCardStyle}>
+          <p style={eyebrowStyle}>
             Local Entry
           </p>
-          <h1 style={{ margin: '0.75rem 0 0', fontSize: '2.25rem', lineHeight: 1.1 }}>Kanban flow analytics and forecasting</h1>
-          <p style={{ margin: '1rem 0 0', maxWidth: '46rem', color: '#334155', lineHeight: 1.7 }}>
+          <h1 style={heroTitleStyle}>Kanban flow analytics and forecasting</h1>
+          <p style={heroCopyStyle}>
             The working app routes in this feature are the Jira setup page, the scope analytics page, and the forecast page underneath a scope. This landing page exists to make local development and local image hosting usable when no workspace session is present yet.
           </p>
 
@@ -47,7 +60,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section style={{ marginTop: '1.5rem', display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <section style={statGridStyle}>
           {[
             {
               title: 'Jira Setup',
@@ -73,17 +86,14 @@ export default async function HomePage() {
               key={entry.title}
               href={entry.href}
               style={{
+                ...itemCardStyle,
                 display: 'block',
-                padding: '1.25rem',
-                borderRadius: '18px',
-                border: '1px solid #e2e8f0',
                 textDecoration: 'none',
-                color: '#0f172a',
-                background: 'white',
+                color: palette.text,
               }}
             >
-              <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{entry.title}</h2>
-              <p style={{ margin: '0.5rem 0 0', color: '#475569', lineHeight: 1.6 }}>{entry.description}</p>
+              <h2 style={{ ...sectionTitleStyle, fontSize: '1.3rem' }}>{entry.title}</h2>
+              <p style={{ ...sectionCopyStyle, marginTop: '0.5rem' }}>{entry.description}</p>
             </a>
           ))}
         </section>
@@ -102,34 +112,25 @@ export default async function HomePage() {
   ]);
 
   return (
-    <main style={{ padding: '3rem 1.5rem', maxWidth: '960px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <section
-        style={{
-          padding: '2rem',
-          borderRadius: '24px',
-          background: 'linear-gradient(140deg, #f8fafc 0%, #eef2ff 50%, #f0fdf4 100%)',
-          border: '1px solid #e2e8f0',
-        }}
-      >
-        <p style={{ margin: 0, fontSize: '0.8rem', letterSpacing: '0.1em', color: '#475569', textTransform: 'uppercase' }}>
+    <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
+      <section style={heroCardStyle}>
+        <p style={eyebrowStyle}>
           Workspace Home
         </p>
-        <h1 style={{ margin: '0.75rem 0 0', fontSize: '2.25rem', lineHeight: 1.1 }}>
+        <h1 style={heroTitleStyle}>
           {workspace?.name ?? 'Agile Tools'}
         </h1>
-        <p style={{ margin: '0.75rem 0 0', color: '#475569' }}>
-          Signed in as {ctx.role} for workspace {ctx.workspaceId}.
+        <p style={heroCopyStyle}>
+          Signed in as {ctx.role} for workspace <span style={codeStyle}>{ctx.workspaceId}</span>.
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
           <a
             href="/admin/jira"
             style={{
-              padding: '0.8rem 1rem',
-              borderRadius: '9999px',
-              background: '#0f172a',
-              color: 'white',
+              ...buttonStyle('primary'),
+              display: 'inline-flex',
+              alignItems: 'center',
               textDecoration: 'none',
-              fontWeight: 600,
             }}
           >
             Open Jira setup
@@ -145,35 +146,32 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section style={{ marginTop: '1.5rem', display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        <article style={{ padding: '1.25rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: 'white' }}>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Connections</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '2rem', fontWeight: 700 }}>{connections.length}</p>
+      <section style={statGridStyle}>
+        <article style={statCardStyle}>
+          <p style={statLabelStyle}>Connections</p>
+          <p style={statValueStyle}>{connections.length}</p>
         </article>
-        <article style={{ padding: '1.25rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: 'white' }}>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scopes</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '2rem', fontWeight: 700 }}>{scopes.length}</p>
+        <article style={statCardStyle}>
+          <p style={statLabelStyle}>Scopes</p>
+          <p style={statValueStyle}>{scopes.length}</p>
         </article>
-        <article style={{ padding: '1.25rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: 'white' }}>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timezone</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '1.25rem', fontWeight: 700 }}>{workspace?.defaultTimezone ?? 'Unknown'}</p>
+        <article style={statCardStyle}>
+          <p style={statLabelStyle}>Timezone</p>
+          <p style={{ ...statValueStyle, fontSize: '1.2rem' }}>{workspace?.defaultTimezone ?? 'Unknown'}</p>
         </article>
       </section>
 
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2 style={{ marginBottom: '0.75rem' }}>Available scopes</h2>
+      <section style={{ ...sectionCardStyle, marginTop: '1.5rem' }}>
+        <h2 style={sectionTitleStyle}>Available scopes</h2>
         {scopes.length === 0 ? (
-          <p style={{ color: '#475569' }}>No scopes are configured in this workspace yet.</p>
+          <p style={sectionCopyStyle}>No scopes are configured in this workspace yet.</p>
         ) : (
-          <div style={{ display: 'grid', gap: '1rem' }}>
+          <div style={sectionStackStyle}>
             {scopes.map((scope) => (
               <div
                 key={scope.id}
                 style={{
-                  padding: '1.25rem',
-                  borderRadius: '18px',
-                  border: '1px solid #e2e8f0',
-                  background: 'white',
+                  ...itemCardStyle,
                   display: 'flex',
                   justifyContent: 'space-between',
                   gap: '1rem',
@@ -181,16 +179,16 @@ export default async function HomePage() {
                 }}
               >
                 <div>
-                  <h3 style={{ margin: 0 }}>{scope.boardName}</h3>
-                  <p style={{ margin: '0.5rem 0 0', color: '#475569' }}>
+                  <h3 style={{ ...sectionTitleStyle, fontSize: '1.2rem' }}>{scope.boardName}</h3>
+                  <p style={{ ...sectionCopyStyle, marginTop: '0.5rem' }}>
                     Board {scope.boardId} · every {scope.syncIntervalMinutes} minutes · {scope.status}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <a href={`/scopes/${scope.id}`} style={{ color: '#1d4ed8', textDecoration: 'none', fontWeight: 600 }}>
+                  <a href={`/scopes/${scope.id}`} style={linkStyle}>
                     Scope →
                   </a>
-                  <a href={`/scopes/${scope.id}/forecast`} style={{ color: '#1d4ed8', textDecoration: 'none', fontWeight: 600 }}>
+                  <a href={`/scopes/${scope.id}/forecast`} style={linkStyle}>
                     Forecast →
                   </a>
                 </div>

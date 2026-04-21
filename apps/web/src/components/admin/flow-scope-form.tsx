@@ -16,9 +16,12 @@ import {
   inputStyle,
   insetPanelStyle,
   noticeStyle,
+  palette,
   sectionCopyStyle,
   sectionTitleStyle,
+  selectionControlStyle,
   selectStyle,
+  linkStyle,
 } from '@/components/app/chrome';
 
 interface Props {
@@ -305,7 +308,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
           </p>
         )}
         <div style={{ marginTop: '0.5rem' }}>
-          <a href={`/scopes/${result.scope.id}`}>View Scope →</a>
+          <a href={`/scopes/${result.scope.id}`} style={linkStyle}>View Scope →</a>
         </div>
       </div>
     );
@@ -395,6 +398,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
 
       {(inspectedBoardMatchesSelection || canSubmitWithSavedConfig) && (
         <form onSubmit={(e) => { void handleSubmit(e); }}>
+<<<<<<< HEAD
           {inspectedBoardMatchesSelection && boardDetail ? (
             <>
               <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
@@ -465,6 +469,67 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
               </p>
             </div>
           )}
+=======
+            <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
+            <legend>
+              <strong>Start Statuses</strong> — when work begins
+            </legend>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+              {boardDetail.statuses.map((s) => (
+                <label key={s.id} style={checkboxChipStyle(startStatusIds.includes(s.id))}>
+                <input
+                  type="checkbox"
+                  checked={startStatusIds.includes(s.id)}
+                  onChange={() => setStartStatusIds((prev) => toggleId(prev, s.id))}
+                    style={selectionControlStyle}
+                />{' '}
+                {s.name}
+              </label>
+            ))}
+              </div>
+          </fieldset>
+
+            <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
+            <legend>
+              <strong>Done Statuses</strong> — when work completes
+            </legend>
+            <p style={{ ...helperTextStyle, margin: '0.5rem 0 0' }}>
+              Completion statuses can include workflow states that are not currently shown as board columns.
+            </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+              {completionStatuses.map((s) => (
+                <label key={s.id} style={checkboxChipStyle(doneStatusIds.includes(s.id))}>
+                <input
+                  type="checkbox"
+                  checked={doneStatusIds.includes(s.id)}
+                  onChange={() => setDoneStatusIds((prev) => toggleId(prev, s.id))}
+                    style={selectionControlStyle}
+                />{' '}
+                {boardStatusIds.has(s.id) ? s.name : `${s.name} (off-board)`}
+              </label>
+            ))}
+              </div>
+          </fieldset>
+
+            <fieldset style={{ ...insetPanelStyle, marginBottom: '0.9rem', paddingTop: '1rem' }}>
+            <legend>
+              <strong>Issue Types</strong> — types to include in flow tracking
+            </legend>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', marginTop: '0.5rem' }}>
+              {boardDetail.issueTypes.map((t) => (
+                <label key={t.id} style={checkboxChipStyle(includedIssueTypeIds.includes(t.id))}>
+                <input
+                  type="checkbox"
+                  checked={includedIssueTypeIds.includes(t.id)}
+                  onChange={() => setIncludedIssueTypeIds((prev) => toggleId(prev, t.id))}
+                    style={selectionControlStyle}
+                />{' '}
+                {t.name}
+              </label>
+            ))}
+              </div>
+          </fieldset>
+>>>>>>> b021ae1 (Refresh web UI theming)
 
           <div style={{ marginBottom: '0.75rem' }}>
             <label>
@@ -499,6 +564,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
           {submitError && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{submitError}</p></div>}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <button type="submit" disabled={!canSubmit} style={buttonStyle('primary', !canSubmit)}>
+<<<<<<< HEAD
               {submitting ? (isEditMode ? 'Saving…' : 'Creating…') : (isEditMode ? 'Save Flow Scope' : 'Create Flow Scope')}
             </button>
             {!submitting && !canSubmit && (
@@ -509,6 +575,15 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
               </span>
             )}
           </div>
+=======
+            {submitting ? 'Creating…' : 'Create Flow Scope'}
+          </button>
+          {!submitting && !canSubmit && (
+              <span style={{ marginLeft: '0.75rem', color: palette.soft, fontSize: '0.875rem' }}>
+                Select at least one start status, done status, and issue type.
+              </span>
+          )}
+>>>>>>> b021ae1 (Refresh web UI theming)
         </form>
       )}
 

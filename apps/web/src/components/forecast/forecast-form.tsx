@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import type { ForecastRequest } from '@agile-tools/shared/contracts/forecast';
-import { buttonStyle, checkboxChipStyle, fieldLabelStyle, insetPanelStyle, noticeStyle, inputStyle, selectStyle } from '@/components/app/chrome';
+import { buttonStyle, checkboxChipStyle, fieldLabelStyle, insetPanelStyle, noticeStyle, inputStyle, selectStyle, selectionControlStyle } from '@/components/app/chrome';
 
 interface ForecastFormProps {
   onSubmit: (request: ForecastRequest) => void;
@@ -86,7 +86,7 @@ export function ForecastForm({
               checked={type === 'when'}
               onChange={() => setType('when')}
               disabled={disabled}
-              style={{ accentColor: '#1d4ed8' }}
+               style={selectionControlStyle}
               aria-label="When will we finish?"
             />
             When will we finish?
@@ -99,7 +99,7 @@ export function ForecastForm({
               checked={type === 'how_many'}
               onChange={() => setType('how_many')}
               disabled={disabled}
-              style={{ accentColor: '#1d4ed8' }}
+               style={selectionControlStyle}
               aria-label="How many stories by a date?"
             />
             How many by a date?
@@ -186,7 +186,7 @@ export function ForecastForm({
                 checked={confidenceLevels.includes(level)}
                 onChange={() => toggleConfidence(level)}
                 disabled={disabled}
-                style={{ accentColor: '#1d4ed8' }}
+                style={selectionControlStyle}
                 aria-label={`${level}% confidence`}
               />
               {level}%
