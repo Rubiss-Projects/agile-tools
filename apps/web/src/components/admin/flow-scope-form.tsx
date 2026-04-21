@@ -34,7 +34,6 @@ interface SubmitResult {
   scope: FlowScope;
   syncQueued: boolean;
 }
-
 const namedValueCollator = new Intl.Collator('en', {
   sensitivity: 'base',
 });
