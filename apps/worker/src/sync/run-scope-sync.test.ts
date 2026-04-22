@@ -122,7 +122,7 @@ function makeIssue(params: {
   };
 }
 
-async function* issueStream<T>(...issues: T[]): AsyncGenerator<T> {
+function* issueStream<T>(...issues: T[]): Generator<T> {
   for (const issue of issues) {
     yield issue;
   }
@@ -164,9 +164,11 @@ function createDb(options?: { doneStatusIds?: string[] }) {
       update: vi.fn().mockResolvedValue(undefined),
     },
     workItem: {
-      upsert: vi.fn(async (args: { where: { scopeId_jiraIssueId: { jiraIssueId: string } } }) => ({
-        id: `work-item-${args.where.scopeId_jiraIssueId.jiraIssueId}`,
-      })),
+      upsert: vi.fn((args: { where: { scopeId_jiraIssueId: { jiraIssueId: string } } }) =>
+        Promise.resolve({
+          id: `work-item-${args.where.scopeId_jiraIssueId.jiraIssueId}`,
+        }),
+      ),
     },
     workItemLifecycleEvent: {
       createMany: vi.fn().mockResolvedValue(undefined),
@@ -251,7 +253,7 @@ describe('runScopeSync', () => {
     getBoardFilterIdMock.mockResolvedValue('1001');
     streamJqlIssuesMock.mockReturnValue(issueStream(completedIssue));
 
-    await runScopeSync(db as Parameters<typeof runScopeSync>[0], 'run-1');
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
     expect(getBoardFilterIdMock).toHaveBeenCalledWith(jiraClientStub, 42);
     expect(streamJqlIssuesMock).toHaveBeenCalledWith(
@@ -284,7 +286,7 @@ describe('runScopeSync', () => {
     streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
     getBoardFilterIdMock.mockResolvedValue(null);
 
-    await runScopeSync(db as Parameters<typeof runScopeSync>[0], 'run-1');
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
     expect(streamJqlIssuesMock).not.toHaveBeenCalled();
     expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
@@ -306,7 +308,7 @@ describe('runScopeSync', () => {
 
     streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
 
-    await runScopeSync(db as Parameters<typeof runScopeSync>[0], 'run-1');
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
     expect(getBoardFilterIdMock).not.toHaveBeenCalled();
     expect(streamJqlIssuesMock).not.toHaveBeenCalled();
