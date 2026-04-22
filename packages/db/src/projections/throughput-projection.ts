@@ -1,5 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 
+import { normalizeTimeZoneOrThrow } from '@agile-tools/shared';
+
 export const DEFAULT_COMPLETED_WINDOW_DAYS = 90;
 export const DEFAULT_THROUGHPUT_WINDOW_DAYS = 90;
 
@@ -82,11 +84,7 @@ export interface DailyThroughputRow {
   complete: boolean;
 }
 
-/**
- * Format a Date as YYYY-MM-DD in a given IANA timezone.
- * Uses Intl.DateTimeFormat with 'en-CA' locale which produces YYYY-MM-DD natively.
- */
-export function formatDateInTimezone(date: Date, timezone: string): string {
+function formatDateInValidatedTimezone(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric',
@@ -97,6 +95,14 @@ export function formatDateInTimezone(date: Date, timezone: string): string {
   const m = parts.find((p) => p.type === 'month')!.value;
   const d = parts.find((p) => p.type === 'day')!.value;
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * Format a Date as YYYY-MM-DD in a given IANA timezone.
+ * Uses Intl.DateTimeFormat with 'en-CA' locale which produces YYYY-MM-DD natively.
+ */
+export function formatDateInTimezone(date: Date, timezone: string): string {
+  return formatDateInValidatedTimezone(date, normalizeTimeZoneOrThrow(timezone));
 }
 
 /**
@@ -123,6 +129,7 @@ export async function queryDailyThroughput(
   const windowDays = options?.windowDays ?? DEFAULT_THROUGHPUT_WINDOW_DAYS;
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowDays * MS_PER_DAY);
+  const normalizedTimezone = normalizeTimeZoneOrThrow(timezone);
 
   const completedItems = await db.workItem.findMany({
     where: {
@@ -138,11 +145,11 @@ export async function queryDailyThroughput(
   // Bucket completions by timezone-local calendar day
   const countsByDay = new Map<string, number>();
   for (const item of completedItems) {
-    const day = formatDateInTimezone(item.completedAt!, timezone);
+    const day = formatDateInValidatedTimezone(item.completedAt!, normalizedTimezone);
     countsByDay.set(day, (countsByDay.get(day) ?? 0) + 1);
   }
 
-  const todayLocal = formatDateInTimezone(now, timezone);
+  const todayLocal = formatDateInValidatedTimezone(now, normalizedTimezone);
 
   // Generate one entry per calendar day from windowStart → today (inclusive).
   // Walk forward 24 h at a time and deduplicate formatted dates to handle DST
@@ -150,7 +157,7 @@ export async function queryDailyThroughput(
   const days: string[] = [];
   for (let i = windowDays; i >= 0; i--) {
     const d = new Date(now.getTime() - i * MS_PER_DAY);
-    const day = formatDateInTimezone(d, timezone);
+    const day = formatDateInValidatedTimezone(d, normalizedTimezone);
     if (days.length === 0 || days[days.length - 1] !== day) {
       days.push(day);
     }

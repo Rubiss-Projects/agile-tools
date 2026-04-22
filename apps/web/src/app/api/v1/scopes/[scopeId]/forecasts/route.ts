@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { logger } from '@agile-tools/shared';
+import { InvalidTimeZoneError, logger } from '@agile-tools/shared';
 import {
   getPrismaClient,
   getFlowScope,
@@ -31,10 +31,21 @@ import { shapeForecastResponse } from '@/server/views/forecast-response';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
+function buildInvalidScopeTimezoneProblem(timezone: string) {
+  return {
+    code: 'INVALID_SCOPE_TIMEZONE',
+    message:
+      `This scope uses an unsupported timezone identifier ("${timezone}"). ` +
+      'Update the scope timezone to a valid value such as UTC or America/New_York.',
+  };
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ scopeId: string }> },
 ): Promise<Response> {
+  let requestedScopeId: string | undefined;
+
   try {
     const ctx = await requireWorkspaceContext();
     assertTrustedMutationRequest(req);
@@ -45,6 +56,7 @@ export async function POST(
       windowMs: 5 * 60_000,
     });
     const { scopeId } = await params;
+    requestedScopeId = scopeId;
     const db = getPrismaClient();
 
     const scope = await getFlowScope(db, ctx.workspaceId, scopeId);
@@ -236,6 +248,15 @@ export async function POST(
     );
   } catch (err) {
     if (err instanceof ResponseError) return err.response;
+    if (err instanceof InvalidTimeZoneError) {
+      logger.warn('Forecast request blocked by invalid scope timezone', {
+        scopeId: requestedScopeId,
+        timezone: err.timezone,
+      });
+      return Response.json(buildInvalidScopeTimezoneProblem(err.timezone), {
+        status: 409,
+      });
+    }
     logger.error('Failed to run forecast', {
       error: err instanceof Error ? err.message : String(err),
     });

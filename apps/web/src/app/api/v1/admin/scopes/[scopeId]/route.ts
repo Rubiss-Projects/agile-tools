@@ -94,11 +94,12 @@ export async function PUT(
     const body: unknown = await req.json().catch(() => null);
     const parsed = UpdateFlowScopeRequestSchema.safeParse(body);
     if (!parsed.success) {
+      const details = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
       return Response.json(
         {
           code: 'INVALID_REQUEST',
-          message: 'Invalid request body.',
-          details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+          message: details[0] ?? 'Invalid request body.',
+          details,
         },
         { status: 400 },
       );

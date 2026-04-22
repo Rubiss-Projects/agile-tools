@@ -27,6 +27,15 @@ import {
   codeStyle,
 } from '@/components/app/chrome';
 
+interface ProblemResponse {
+  message?: string;
+  details?: string[];
+}
+
+function getProblemMessage(problem: ProblemResponse | null, fallbackMessage: string): string {
+  return problem?.details?.[0] ?? problem?.message ?? fallbackMessage;
+}
+
 export default function ForecastPage() {
   const { scopeId } = useParams<{ scopeId: string }>();
 
@@ -43,10 +52,18 @@ export default function ForecastPage() {
     setThroughputLoading(true);
     setThroughputError(null);
     fetch(`/api/v1/scopes/${scopeId}/throughput`)
-      .then((res) => {
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as ProblemResponse | ThroughputResponse | null;
         if (res.status === 401) throw new Error('Authentication required. Please sign in.');
-        if (!res.ok) throw new Error(`Failed to load throughput (HTTP ${res.status}).`);
-        return res.json() as Promise<ThroughputResponse>;
+        if (!res.ok) {
+          throw new Error(
+            getProblemMessage(
+              body as ProblemResponse | null,
+              `Failed to load throughput (HTTP ${res.status}).`,
+            ),
+          );
+        }
+        return body as ThroughputResponse;
       })
       .then((data) => {
         setThroughput(data);
@@ -75,9 +92,9 @@ export default function ForecastPage() {
         body: JSON.stringify(body),
       });
 
-      const data: unknown = await res.json();
+      const data = (await res.json().catch(() => null)) as ForecastResponse | ProblemResponse | null;
       if (!res.ok) {
-        throw new Error((data as { message?: string }).message ?? `HTTP ${res.status}`);
+        throw new Error(getProblemMessage(data as ProblemResponse | null, `HTTP ${res.status}`));
       }
       setForecastResponse(data as ForecastResponse);
     } catch (err) {

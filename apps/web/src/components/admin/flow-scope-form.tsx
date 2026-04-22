@@ -494,6 +494,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
                 style={{ ...inputStyle, maxWidth: '16rem' }}
               />
             </label>
+            <p style={helperTextStyle}>Use a valid time zone identifier such as UTC or America/New_York.</p>
           </div>
 
           <div style={{ marginBottom: '0.75rem' }}>

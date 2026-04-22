@@ -187,6 +187,20 @@ describe('POST /v1/admin/scopes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 when the timezone identifier is invalid', async () => {
+    const req = makeRequest('http://localhost/api/v1/admin/scopes', 'POST', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      timezone: 'ETC',
+    });
+    const res = await createScope(req);
+    expect(res.status).toBe(400);
+
+    const body = ProblemSchema.parse(await res.json());
+    expect(body.message).toContain('timezone');
+    expect(body.message).toContain('valid time zone identifier');
+  });
+
   it('returns 404 when the connection does not exist', async () => {
     const missingId = '00000000-0000-0000-0000-000000000000';
     const req = makeRequest('http://localhost/api/v1/admin/scopes', 'POST', {

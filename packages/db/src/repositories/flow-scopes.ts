@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient, type FlowScope } from '@prisma/client';
 import type { FlowScopeStatus } from '@prisma/client';
 
+import { normalizeTimeZoneOrThrow } from '@agile-tools/shared';
+
 type FlowScopeClient = PrismaClient | Prisma.TransactionClient;
 
 export interface CreateFlowScopeInput {
@@ -33,13 +35,15 @@ export async function createFlowScope(
   input: CreateFlowScopeInput,
 ): Promise<FlowScope> {
   assertStatusSetsDisjoint(input.startStatusIds, input.doneStatusIds);
+  const timezone = normalizeTimeZoneOrThrow(input.timezone);
+
   return client.flowScope.create({
     data: {
       workspaceId,
       connectionId: input.connectionId,
       boardId: String(input.boardId),
       boardName: input.boardName,
-      timezone: input.timezone,
+      timezone,
       includedIssueTypeIds: input.includedIssueTypeIds,
       startStatusIds: input.startStatusIds,
       doneStatusIds: input.doneStatusIds,
@@ -79,6 +83,7 @@ export async function updateFlowScope(
   input: UpdateFlowScopeInput,
 ): Promise<FlowScope | null> {
   assertStatusSetsDisjoint(input.startStatusIds, input.doneStatusIds);
+  const timezone = normalizeTimeZoneOrThrow(input.timezone);
 
   try {
     return await client.flowScope.update({
@@ -87,7 +92,7 @@ export async function updateFlowScope(
         connectionId: input.connectionId,
         boardId: String(input.boardId),
         boardName: input.boardName,
-        timezone: input.timezone,
+        timezone,
         includedIssueTypeIds: input.includedIssueTypeIds,
         startStatusIds: input.startStatusIds,
         doneStatusIds: input.doneStatusIds,
