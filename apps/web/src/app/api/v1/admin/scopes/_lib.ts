@@ -12,6 +12,7 @@ import {
   updateSyncRun,
 } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
+import type { z } from 'zod';
 import { ResponseError } from '@/server/errors';
 import { enqueueScopeSyncJob } from '@/server/queue';
 
@@ -54,6 +55,15 @@ export function mapSyncRun(run: DbSyncRun): ApiSyncRun {
     ...(run.errorCode != null && { errorCode: run.errorCode }),
     ...(run.errorSummary != null && { errorSummary: run.errorSummary }),
   };
+}
+
+export function formatIssueDetail(issue: z.core.$ZodIssue): string {
+  const path = issue.path.join('.');
+  return path ? `${path}: ${issue.message}` : issue.message;
+}
+
+export function formatIssueDetails(issues: readonly z.core.$ZodIssue[]): string[] {
+  return issues.map(formatIssueDetail);
 }
 
 /**

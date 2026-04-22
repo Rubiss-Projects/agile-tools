@@ -17,7 +17,7 @@ import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { createClientForConnection, normalizeJiraError } from '../../jira-connections/_lib';
-import { mapScope } from '../_lib';
+import { formatIssueDetails, mapScope } from '../_lib';
 import { enqueueScopeSyncJob } from '@/server/queue';
 
 function sameStringSet(left: string[], right: string[]): boolean {
@@ -94,7 +94,7 @@ export async function PUT(
     const body: unknown = await req.json().catch(() => null);
     const parsed = UpdateFlowScopeRequestSchema.safeParse(body);
     if (!parsed.success) {
-      const details = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+      const details = formatIssueDetails(parsed.error.issues);
       return Response.json(
         {
           code: 'INVALID_REQUEST',

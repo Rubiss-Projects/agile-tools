@@ -10,17 +10,9 @@ import {
 import type { ThroughputResponse, Warning } from '@agile-tools/shared/contracts/api';
 import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { buildInvalidScopeTimezoneProblem } from '../../_problems';
 
 const DEFAULT_HISTORICAL_WINDOW = 90;
-
-function buildInvalidScopeTimezoneProblem(timezone: string) {
-  return {
-    code: 'INVALID_SCOPE_TIMEZONE',
-    message:
-      `This scope uses an unsupported timezone identifier ("${timezone}"). ` +
-      'Update the scope timezone to a valid value such as UTC or America/New_York.',
-  };
-}
 
 export async function GET(
   req: NextRequest,

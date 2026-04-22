@@ -7,7 +7,7 @@ import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../jira-connections/_lib';
-import { mapScope } from './_lib';
+import { formatIssueDetails, mapScope } from './_lib';
 
 export async function POST(req: NextRequest): Promise<Response> {
   try {
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const body: unknown = await req.json().catch(() => null);
     const parsed = CreateFlowScopeRequestSchema.safeParse(body);
     if (!parsed.success) {
-      const details = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+      const details = formatIssueDetails(parsed.error.issues);
       return Response.json(
         {
           code: 'INVALID_REQUEST',
