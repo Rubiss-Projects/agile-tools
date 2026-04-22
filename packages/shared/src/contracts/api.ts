@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { TimeZoneIdentifierSchema } from '../timezones.js';
+
 // ─── Shared Primitives ───────────────────────────────────────────────────────
 
 export const WarningSchema = z.object({
@@ -114,7 +116,7 @@ export type FlowScope = z.infer<typeof FlowScopeSchema>;
 export const CreateFlowScopeRequestSchema = z.object({
   connectionId: z.string().uuid(),
   boardId: z.number().int(),
-  timezone: z.string(),
+  timezone: TimeZoneIdentifierSchema,
   includedIssueTypeIds: z.array(z.string()).min(1),
   startStatusIds: z.array(z.string()).min(1),
   doneStatusIds: z.array(z.string()).min(1),
