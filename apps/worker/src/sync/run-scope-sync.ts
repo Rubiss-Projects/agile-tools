@@ -5,8 +5,7 @@ import type { JiraClient } from '@agile-tools/jira-client';
 import {
   JiraClientError,
   createJiraClient,
-  getBoardDetail,
-  getBoardFilterId,
+  getBoardDetailWithFilterId,
   streamBoardIssues,
   streamJqlIssues,
   fetchIssueChangelog,
@@ -22,6 +21,7 @@ import {
 import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js';
 
 const BATCH_SIZE = 10;
+const COMPLETED_ISSUE_SEARCH_FIELDS = 'summary,status,issuetype,project,created';
 
 class SyncError extends Error {
   constructor(
@@ -101,7 +101,10 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     const jiraClient = createJiraClient(connection.baseUrl, pat);
 
     const boardId = Number(scope.boardId);
-    const boardDetail = await getBoardDetail(jiraClient, boardId);
+    const { detail: boardDetail, filterId: boardFilterId } = await getBoardDetailWithFilterId(
+      jiraClient,
+      boardId,
+    );
 
     // Abort early if the board layout has drifted away from the scope's configured statuses.
     // Continuing would produce incorrect lifecycle data (startedAt/completedAt derivation
@@ -151,8 +154,13 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     // parallelism in changelog fetching (the Jira client's internal pLimit throttles HTTP).
     let batch: RawJiraIssue[] = [];
     const projectIdsSet = new Set<string>();
+    const processedIssueIds = new Set<string>();
 
     for await (const issue of streamBoardIssues(jiraClient, boardId)) {
+      if (processedIssueIds.has(issue.id)) {
+        continue;
+      }
+      processedIssueIds.add(issue.id);
       batch.push(issue);
       if (batch.length >= BATCH_SIZE) {
         await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
@@ -169,14 +177,19 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     // The board endpoint only returns issues whose status is mapped to a column, so
     // without this second pass the aging threshold model has no completed samples.
     if (scope.doneStatusIds.length > 0) {
-      const filterId = await getBoardFilterId(jiraClient, boardId);
-      if (filterId != null) {
+      if (boardFilterId != null) {
         const doneIdList = scope.doneStatusIds.map((id: string) => `"${id}"`).join(', ');
         const completedJql =
-          `filter = ${filterId} AND status in (${doneIdList}) ` +
+          `filter = ${boardFilterId} AND status in (${doneIdList}) ` +
           `AND updated >= -${DEFAULT_COMPLETED_WINDOW_DAYS}d`;
 
-        for await (const issue of streamJqlIssues(jiraClient, completedJql)) {
+        for await (const issue of streamJqlIssues(jiraClient, completedJql, {
+          fields: COMPLETED_ISSUE_SEARCH_FIELDS,
+        })) {
+          if (processedIssueIds.has(issue.id)) {
+            continue;
+          }
+          processedIssueIds.add(issue.id);
           batch.push(issue);
           if (batch.length >= BATCH_SIZE) {
             await processBatch(db, jiraClient, batch, ctx, projectIdsSet);

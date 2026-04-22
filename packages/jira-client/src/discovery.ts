@@ -64,6 +64,14 @@ interface JiraField {
   schema?: { type: string; custom?: string };
 }
 
+interface BoardDetailData {
+  config: JiraBoardConfiguration;
+  allStatuses: JiraStatus[];
+  allIssueTypes: JiraIssueType[];
+  allFields: JiraField[];
+  boardProjects: JiraBoardProjectsResponse | null;
+}
+
 const namedValueCollator = new Intl.Collator('en', {
   sensitivity: 'base',
 });
@@ -74,45 +82,10 @@ function sortNamedValues(values: Iterable<NamedValue>): NamedValue[] {
   );
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────────
-
-/**
- * List all Kanban boards visible to the service account.
- * Paginates through the full result set.
- */
-export async function listBoards(client: JiraClient): Promise<BoardSummary[]> {
-  const boards: BoardSummary[] = [];
-  let startAt = 0;
-  const maxResults = 50;
-
-  for (;;) {
-    const page = await client.get<JiraBoardListResponse>('/rest/agile/1.0/board', {
-      params: { type: 'kanban', startAt, maxResults },
-    });
-
-    for (const board of page.values) {
-      boards.push({
-        boardId: board.id,
-        boardName: board.name,
-        projectKeys: board.location?.projectKey ? [board.location.projectKey] : undefined,
-      });
-    }
-
-    if (page.isLast || page.values.length === 0) break;
-    startAt += page.values.length;
-  }
-
-  return boards;
-}
-
-/**
- * Return column layout, statuses, issue types, and candidate blocked fields for a board.
- * Fetches board configuration and supporting metadata in parallel where possible.
- */
-export async function getBoardDetail(
+async function fetchBoardDetailData(
   client: JiraClient,
   boardId: number,
-): Promise<BoardDiscoveryDetail> {
+): Promise<BoardDetailData> {
   const [config, allStatuses, allIssueTypes, allFields, boardProjects] = await Promise.all([
     client.get<JiraBoardConfiguration>(`/rest/agile/1.0/board/${boardId}/configuration`),
     client.get<JiraStatus[]>('/rest/api/2/status'),
@@ -125,13 +98,23 @@ export async function getBoardDetail(
       .catch(() => null),
   ]);
 
-  // Build column layout from board configuration
+  return { config, allStatuses, allIssueTypes, allFields, boardProjects };
+}
+
+async function buildBoardDetail(
+  client: JiraClient,
+  boardId: number,
+  data: BoardDetailData,
+): Promise<BoardDiscoveryDetail> {
+  const { config, allStatuses, allIssueTypes, allFields, boardProjects } = data;
+
+  // Build column layout from board configuration.
   const columns: BoardColumn[] = config.columnConfig.columns.map((col) => ({
     name: col.name,
     statusIds: col.statuses.map((s) => s.id),
   }));
 
-  // Filter statuses to those that appear in the board columns
+  // Filter statuses to those that appear in the board columns.
   const boardStatusIds = new Set(columns.flatMap((c) => c.statusIds));
   const statuses = sortNamedValues(
     allStatuses
@@ -182,8 +165,7 @@ export async function getBoardDetail(
     completionStatusesMap = new Map<string, string>(boardAndFallbackStatusEntries);
   }
 
-  // Candidate blocked/flagged fields: select list, checkbox, or radio fields
-  // whose name contains a hold-related keyword
+  // Candidate blocked/flagged fields: select list, checkbox, or radio fields whose name contains a hold-related keyword.
   const holdKeywords = ['blocked', 'flagged', 'impediment', 'on hold', 'on-hold'];
   const blockedFields: NamedValue[] = allFields
     .filter((f) => holdKeywords.some((kw) => f.name.toLowerCase().includes(kw)))
@@ -199,6 +181,61 @@ export async function getBoardDetail(
     ),
     issueTypes,
     blockedFields: blockedFields.length > 0 ? blockedFields : undefined,
+  };
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * List all Kanban boards visible to the service account.
+ * Paginates through the full result set.
+ */
+export async function listBoards(client: JiraClient): Promise<BoardSummary[]> {
+  const boards: BoardSummary[] = [];
+  let startAt = 0;
+  const maxResults = 50;
+
+  for (;;) {
+    const page = await client.get<JiraBoardListResponse>('/rest/agile/1.0/board', {
+      params: { type: 'kanban', startAt, maxResults },
+    });
+
+    for (const board of page.values) {
+      boards.push({
+        boardId: board.id,
+        boardName: board.name,
+        projectKeys: board.location?.projectKey ? [board.location.projectKey] : undefined,
+      });
+    }
+
+    if (page.isLast || page.values.length === 0) break;
+    startAt += page.values.length;
+  }
+
+  return boards;
+}
+
+/**
+ * Return column layout, statuses, issue types, and candidate blocked fields for a board.
+ * Fetches board configuration and supporting metadata in parallel where possible.
+ */
+export async function getBoardDetail(
+  client: JiraClient,
+  boardId: number,
+): Promise<BoardDiscoveryDetail> {
+  const data = await fetchBoardDetailData(client, boardId);
+  return buildBoardDetail(client, boardId, data);
+}
+
+export async function getBoardDetailWithFilterId(
+  client: JiraClient,
+  boardId: number,
+): Promise<{ detail: BoardDiscoveryDetail; filterId: string | null }> {
+  const data = await fetchBoardDetailData(client, boardId);
+
+  return {
+    detail: await buildBoardDetail(client, boardId, data),
+    filterId: data.config.filter?.id ?? null,
   };
 }
 

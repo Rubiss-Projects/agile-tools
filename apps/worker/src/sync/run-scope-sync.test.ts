@@ -6,8 +6,7 @@ const {
   getConfigMock,
   decryptSecretMock,
   createJiraClientMock,
-  getBoardDetailMock,
-  getBoardFilterIdMock,
+  getBoardDetailWithFilterIdMock,
   streamBoardIssuesMock,
   streamJqlIssuesMock,
   fetchIssueChangelogMock,
@@ -39,8 +38,7 @@ const {
     getConfigMock: vi.fn(() => ({ ENCRYPTION_KEY: 'test-encryption-key' })),
     decryptSecretMock: vi.fn(() => 'pat-123'),
     createJiraClientMock: vi.fn(() => jiraClientStub),
-    getBoardDetailMock: vi.fn(),
-    getBoardFilterIdMock: vi.fn(),
+    getBoardDetailWithFilterIdMock: vi.fn(),
     streamBoardIssuesMock: vi.fn(),
     streamJqlIssuesMock: vi.fn(),
     fetchIssueChangelogMock: vi.fn(),
@@ -66,8 +64,7 @@ vi.mock('@agile-tools/shared', () => ({
 vi.mock('@agile-tools/jira-client', () => ({
   JiraClientError: MockJiraClientError,
   createJiraClient: createJiraClientMock,
-  getBoardDetail: getBoardDetailMock,
-  getBoardFilterId: getBoardFilterIdMock,
+  getBoardDetailWithFilterId: getBoardDetailWithFilterIdMock,
   streamBoardIssues: streamBoardIssuesMock,
   streamJqlIssues: streamJqlIssuesMock,
   fetchIssueChangelog: fetchIssueChangelogMock,
@@ -185,16 +182,19 @@ describe('runScopeSync', () => {
     getConfigMock.mockReturnValue({ ENCRYPTION_KEY: 'test-encryption-key' });
     decryptSecretMock.mockReturnValue('pat-123');
     createJiraClientMock.mockReturnValue(jiraClientStub);
-    getBoardDetailMock.mockResolvedValue({
-      boardId: 42,
-      boardName: 'Payments Board',
-      columns: [{ name: 'Doing', statusIds: ['10'] }],
-      statuses: [{ id: '10', name: 'In Progress' }],
-      completionStatuses: [
-        { id: '30', name: 'Closed' },
-        { id: '40', name: 'Resolved' },
-      ],
-      issueTypes: [{ id: 'story', name: 'Story' }],
+    getBoardDetailWithFilterIdMock.mockResolvedValue({
+      detail: {
+        boardId: 42,
+        boardName: 'Payments Board',
+        columns: [{ name: 'Doing', statusIds: ['10'] }],
+        statuses: [{ id: '10', name: 'In Progress' }],
+        completionStatuses: [
+          { id: '30', name: 'Closed' },
+          { id: '40', name: 'Resolved' },
+        ],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      },
+      filterId: null,
     });
     detectBoardDriftMock.mockReturnValue(null);
     applyBoardDriftHandlingMock.mockResolvedValue(undefined);
@@ -250,15 +250,29 @@ describe('runScopeSync', () => {
     });
 
     streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
-    getBoardFilterIdMock.mockResolvedValue('1001');
+    getBoardDetailWithFilterIdMock.mockResolvedValue({
+      detail: {
+        boardId: 42,
+        boardName: 'Payments Board',
+        columns: [{ name: 'Doing', statusIds: ['10'] }],
+        statuses: [{ id: '10', name: 'In Progress' }],
+        completionStatuses: [
+          { id: '30', name: 'Closed' },
+          { id: '40', name: 'Resolved' },
+        ],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      },
+      filterId: '1001',
+    });
     streamJqlIssuesMock.mockReturnValue(issueStream(completedIssue));
 
     await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
-    expect(getBoardFilterIdMock).toHaveBeenCalledWith(jiraClientStub, 42);
+    expect(getBoardDetailWithFilterIdMock).toHaveBeenCalledWith(jiraClientStub, 42);
     expect(streamJqlIssuesMock).toHaveBeenCalledWith(
       jiraClientStub,
       'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
+      { fields: 'summary,status,issuetype,project,created' },
     );
     expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
     expect(db.boardSnapshot.update).toHaveBeenCalledWith({
@@ -284,7 +298,6 @@ describe('runScopeSync', () => {
     });
 
     streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
-    getBoardFilterIdMock.mockResolvedValue(null);
 
     await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
@@ -294,6 +307,44 @@ describe('runScopeSync', () => {
       'Board has no saved filter; skipping completed-issue sync pass',
       { syncRunId: 'run-1', boardId: 42 },
     );
+  });
+
+  it('skips completed issues already seen during the board pass', async () => {
+    const db = createDb();
+    const completedIssue = makeIssue({
+      id: 'ISSUE-2',
+      key: 'PROJ-2',
+      projectId: 'proj-offboard',
+      statusId: '30',
+      statusName: 'Closed',
+    });
+
+    getBoardDetailWithFilterIdMock.mockResolvedValue({
+      detail: {
+        boardId: 42,
+        boardName: 'Payments Board',
+        columns: [{ name: 'Done', statusIds: ['30'] }],
+        statuses: [{ id: '30', name: 'Closed' }],
+        completionStatuses: [
+          { id: '30', name: 'Closed' },
+          { id: '40', name: 'Resolved' },
+        ],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      },
+      filterId: '1001',
+    });
+    streamBoardIssuesMock.mockReturnValue(issueStream(completedIssue));
+    streamJqlIssuesMock.mockReturnValue(issueStream(completedIssue));
+
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(streamJqlIssuesMock).toHaveBeenCalledWith(
+      jiraClientStub,
+      'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
+      { fields: 'summary,status,issuetype,project,created' },
+    );
+    expect(fetchIssueChangelogMock).toHaveBeenCalledTimes(1);
+    expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
   });
 
   it('skips the completed-issue pass when the scope has no done statuses', async () => {
@@ -310,7 +361,6 @@ describe('runScopeSync', () => {
 
     await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
-    expect(getBoardFilterIdMock).not.toHaveBeenCalled();
     expect(streamJqlIssuesMock).not.toHaveBeenCalled();
     expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
   });

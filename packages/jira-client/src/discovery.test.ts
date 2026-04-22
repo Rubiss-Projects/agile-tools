@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createJiraClient } from './client.js';
-import { getBoardDetail, getBoardFilterId } from './discovery.js';
+import { getBoardDetail, getBoardDetailWithFilterId, getBoardFilterId } from './discovery.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -172,6 +172,59 @@ describe('getBoardDetail', () => {
       { id: '10', name: 'Done' },
       { id: '20', name: 'In Progress' },
     ]);
+  });
+});
+
+describe('getBoardDetailWithFilterId', () => {
+  it('returns the filter id without refetching board configuration', async () => {
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = String(input);
+
+      if (url.endsWith('/rest/agile/1.0/board/42/configuration')) {
+        return Promise.resolve(
+          jsonResponse({
+            id: 42,
+            name: 'Payments Board',
+            filter: { id: '1001' },
+            columnConfig: {
+              columns: [{ name: 'Done', statuses: [{ id: '10' }] }],
+            },
+          }),
+        );
+      }
+
+      if (url.endsWith('/rest/api/2/status')) {
+        return Promise.resolve(jsonResponse([{ id: '10', name: 'Done' }]));
+      }
+
+      if (url.endsWith('/rest/api/2/issuetype')) {
+        return Promise.resolve(jsonResponse([{ id: 'story', name: 'Story' }]));
+      }
+
+      if (url.endsWith('/rest/api/2/field')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+
+      if (url.includes('/rest/agile/1.0/board/42/project')) {
+        return Promise.resolve(new Response('not found', { status: 404 }));
+      }
+
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getBoardDetailWithFilterId(
+      createJiraClient('https://jira.example.internal', 'pat-123'),
+      42,
+    );
+
+    expect(result.filterId).toBe('1001');
+    expect(result.detail.boardName).toBe('Payments Board');
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith('/rest/agile/1.0/board/42/configuration'),
+      ),
+    ).toHaveLength(1);
   });
 });
 
