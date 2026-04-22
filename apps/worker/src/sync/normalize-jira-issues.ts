@@ -28,7 +28,9 @@ export interface NormalizedWorkItem {
   issueTypeName: string;
   projectId: string;
   currentStatusId: string;
+  currentStatusName: string;
   currentColumn: string | null;
+  assigneeName: string | null;
   createdAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -46,6 +48,7 @@ export function normalizeJiraIssue(
 ): NormalizedWorkItem {
   const { fields } = issue;
   const currentStatusId = fields.status.id;
+  const assigneeName = fields.assignee?.name ?? fields.assignee?.accountId ?? null;
 
   const excludedReason = !ctx.includedIssueTypeIds.has(fields.issuetype.id)
     ? 'issue_type_excluded'
@@ -63,7 +66,9 @@ export function normalizeJiraIssue(
     issueTypeName: fields.issuetype.name,
     projectId: fields.project.id,
     currentStatusId,
+    currentStatusName: fields.status.name,
     currentColumn: ctx.statusIdsByColumn[currentStatusId] ?? null,
+    assigneeName,
     createdAt: new Date(fields.created),
     startedAt,
     completedAt,

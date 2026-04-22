@@ -109,13 +109,11 @@ test.afterAll(async () => {
 /** Inject the admin session cookie before each test navigates anywhere. */
 async function setAdminSession(page: Page) {
   const baseUrl = process.env['PLAYWRIGHT_BASE_URL'] ?? 'http://localhost:3000';
-  const url = new URL(baseUrl);
   await page.context().addCookies([
     {
       name: 'agile_session',
       value: adminCookie,
-      domain: url.hostname,
-      path: '/',
+      url: baseUrl,
     },
   ]);
 }

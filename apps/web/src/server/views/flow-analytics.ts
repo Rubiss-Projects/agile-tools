@@ -7,6 +7,10 @@ export interface ScatterDatum {
   workItemId: string;
   issueKey: string;
   summary: string;
+  issueType?: string;
+  currentStatus: string;
+  currentColumn?: string;
+  assigneeName?: string;
   onHoldNow: boolean;
   agingZone: 'normal' | 'watch' | 'aging';
   jiraUrl?: string;
@@ -50,6 +54,10 @@ export function shapeFlowAnalytics(response: FlowAnalyticsResponse): FlowAnalyti
       workItemId: point.workItemId,
       issueKey: point.issueKey,
       summary: point.summary,
+      ...(point.issueType ? { issueType: point.issueType } : {}),
+      currentStatus: point.currentStatus,
+      ...(point.currentColumn ? { currentColumn: point.currentColumn } : {}),
+      ...(point.assigneeName ? { assigneeName: point.assigneeName } : {}),
       onHoldNow: point.onHoldNow,
       agingZone: point.agingZone,
       ...(point.jiraUrl ? { jiraUrl: point.jiraUrl } : {}),

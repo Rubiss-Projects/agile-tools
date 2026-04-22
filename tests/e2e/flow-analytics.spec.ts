@@ -62,8 +62,9 @@ const MOCK_FLOW_RESPONSE: FlowAnalyticsResponse = {
       issueKey: MOCK_ISSUE_KEY,
       summary: 'Normal work item',
       issueType: 'Story',
-      currentStatus: '10',
-      currentColumn: 'In Progress',
+      currentStatus: 'In Progress',
+      currentColumn: 'Doing',
+      assigneeName: 'Riley Chen',
       ageDays: 3,
       totalHoldHours: 0,
       onHoldNow: false,
@@ -75,8 +76,9 @@ const MOCK_FLOW_RESPONSE: FlowAnalyticsResponse = {
       issueKey: 'FLOW-2',
       summary: 'Watch item',
       issueType: 'Story',
-      currentStatus: '10',
-      currentColumn: 'In Progress',
+      currentStatus: 'In Progress',
+      currentColumn: 'Doing',
+      assigneeName: 'Morgan Lee',
       ageDays: 7,
       totalHoldHours: 2,
       onHoldNow: false,
@@ -88,8 +90,9 @@ const MOCK_FLOW_RESPONSE: FlowAnalyticsResponse = {
       issueKey: 'FLOW-3',
       summary: 'Aging item on hold',
       issueType: 'Story',
-      currentStatus: '20',
+      currentStatus: 'Blocked',
       currentColumn: 'On Hold',
+      assigneeName: 'Casey Nguyen',
       ageDays: 18,
       totalHoldHours: 48,
       onHoldNow: true,
@@ -105,6 +108,7 @@ const MOCK_DETAIL: WorkItemDetail = {
   issueKey: MOCK_ISSUE_KEY,
   summary: 'Normal work item',
   currentStatus: 'In Progress',
+  assigneeName: 'Riley Chen',
   ageDays: 3.2,
   jiraUrl: `${JIRA_BASE}/browse/FLOW-1`,
   holdPeriods: [],
@@ -184,7 +188,9 @@ test.beforeAll(async () => {
       issueTypeName: 'Story',
       projectId: 'FLOW',
       currentStatusId: '10',
+      currentStatusName: 'In Progress',
       currentColumn: 'In Progress',
+      assigneeName: 'Riley Chen',
       directUrl: `${JIRA_BASE}/browse/FLOW-1`,
       createdAt: new Date('2025-01-12T00:00:00Z'),
       startedAt: new Date('2025-01-12T08:00:00Z'),
@@ -210,13 +216,11 @@ test.afterAll(async () => {
 
 async function setAdminSession(page: Page) {
   const baseUrl = process.env['PLAYWRIGHT_BASE_URL'] ?? 'http://localhost:3000';
-  const url = new URL(baseUrl);
   await page.context().addCookies([
     {
       name: 'agile_session',
       value: adminCookie,
-      domain: url.hostname,
-      path: '/',
+      url: baseUrl,
     },
   ]);
 }
@@ -281,6 +285,21 @@ test('flow filter panel renders with timeframe picker and toggles', async ({ pag
 
   // On-hold toggle.
   await expect(page.getByText('On-hold only')).toBeVisible();
+});
+
+test('aging scatter hover card shows assignee and readable status text', async ({ page }) => {
+  await setAdminSession(page);
+  await mockFlowApi(page);
+
+  await page.goto(`/scopes/${scopeId}`);
+
+  const nodes = page.locator('svg[aria-label="Aging scatter plot"] circle');
+  await expect(nodes.first()).toBeVisible({ timeout: 10_000 });
+  await nodes.first().hover({ force: true });
+
+  await expect(page.getByText('Riley Chen')).toBeVisible();
+  await expect(page.getByText(/In Progress.*Doing/)).toBeVisible();
+  await expect(page.getByText('Normal work item')).toBeVisible();
 });
 
 // ─── Test: Work item detail drawer opens ─────────────────────────────────────

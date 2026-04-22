@@ -180,7 +180,9 @@ model WorkItem {
   issueTypeName   String?
   projectId       String
   currentStatusId String
+  currentStatusName String?
   currentColumn   String?
+  assigneeName    String?
   createdAt       DateTime  // Jira creation timestamp — NOT auto-generated
   startedAt       DateTime?
   completedAt     DateTime?

@@ -803,6 +803,8 @@ components:
           type: string
         currentColumn:
           type: string
+        assigneeName:
+          type: string
         ageDays:
           type: number
         totalHoldHours:
@@ -829,6 +831,8 @@ components:
         summary:
           type: string
         currentStatus:
+          type: string
+        assigneeName:
           type: string
         ageDays:
           type: number
