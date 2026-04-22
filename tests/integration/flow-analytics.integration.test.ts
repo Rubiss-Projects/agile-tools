@@ -317,7 +317,9 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
           issueTypeName: 'Story',
           projectId: 'AZ',
           currentStatusId: '10',
+          currentStatusName: 'In Progress',
           currentColumn: 'In Progress',
+          assigneeName: 'Riley Chen',
           directUrl: 'https://jira.example.internal/browse/AZ-1',
           createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
           startedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
@@ -332,7 +334,9 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
           issueTypeName: 'Story',
           projectId: 'AZ',
           currentStatusId: '10',
+          currentStatusName: 'In Progress',
           currentColumn: 'In Progress',
+          assigneeName: null,
           directUrl: 'https://jira.example.internal/browse/AZ-2',
           createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
           startedAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
@@ -347,7 +351,9 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
           issueTypeName: 'Story',
           projectId: 'AZ',
           currentStatusId: '10',
+          currentStatusName: 'In Progress',
           currentColumn: 'In Progress',
+          assigneeName: 'Casey Nguyen',
           directUrl: 'https://jira.example.internal/browse/AZ-3',
           createdAt: new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000),
           startedAt: new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000),
@@ -371,6 +377,9 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
     expect(byKey['AZ-1']!.agingZone).toBe('normal');
     expect(byKey['AZ-2']!.agingZone).toBe('watch');
     expect(byKey['AZ-3']!.agingZone).toBe('aging');
+    expect(byKey['AZ-1']!.currentStatusName).toBe('In Progress');
+    expect(byKey['AZ-1']!.assigneeName).toBe('Riley Chen');
+    expect(byKey['AZ-2']!.assigneeName).toBeNull();
   });
 
   it('defaults all items to normal zone when no agingThresholds supplied', async () => {

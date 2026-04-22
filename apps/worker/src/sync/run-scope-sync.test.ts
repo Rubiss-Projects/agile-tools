@@ -220,7 +220,9 @@ describe('runScopeSync', () => {
         issueTypeName: issue.fields.issuetype.name,
         projectId: issue.fields.project.id,
         currentStatusId: issue.fields.status.id,
+        currentStatusName: issue.fields.status.name,
         currentColumn: issue.fields.status.id === '10' ? 'Doing' : null,
+        assigneeName: issue.key === 'PROJ-2' ? 'Morgan Lee' : 'Riley Chen',
         createdAt: new Date(issue.fields.created),
         startedAt: null,
         completedAt: issue.fields.status.id === '10' ? null : new Date('2025-01-02T00:00:00.000Z'),
@@ -275,6 +277,21 @@ describe('runScopeSync', () => {
       { fields: 'summary,status,issuetype,project,created' },
     );
     expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
+    expect(db.workItem.upsert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        create: expect.objectContaining({
+          currentStatusId: '30',
+          currentStatusName: 'Closed',
+          assigneeName: 'Morgan Lee',
+        }),
+        update: expect.objectContaining({
+          currentStatusId: '30',
+          currentStatusName: 'Closed',
+          assigneeName: 'Morgan Lee',
+        }),
+      }),
+    );
     expect(db.boardSnapshot.update).toHaveBeenCalledWith({
       where: { id: 'snapshot-1' },
       data: {

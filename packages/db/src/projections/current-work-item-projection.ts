@@ -18,8 +18,12 @@ export interface CurrentWorkItemRow {
   /** Human-readable issue type name; falls back to issueTypeId when not available. */
   issueTypeName: string;
   currentStatusId: string;
+  /** Human-readable Jira status name; falls back to currentStatusId when not available. */
+  currentStatusName: string;
   /** Board column name; falls back to currentStatusId when the status has no column mapping. */
   currentColumn: string;
+  /** Human-readable assignee display value; null when the issue is unassigned. */
+  assigneeName: string | null;
   /** Cycle time in fractional days from startedAt (or createdAt if not yet started). */
   ageInDays: number;
   startedAt: Date | null;
@@ -78,7 +82,9 @@ export async function queryCurrentWorkItems(
       issueTypeId: true,
       issueTypeName: true,
       currentStatusId: true,
+      currentStatusName: true,
       currentColumn: true,
+      assigneeName: true,
       startedAt: true,
       createdAt: true,
       directUrl: true,
@@ -114,7 +120,9 @@ export async function queryCurrentWorkItems(
       issueTypeId: item.issueTypeId,
       issueTypeName: item.issueTypeName ?? item.issueTypeId,
       currentStatusId: item.currentStatusId,
-      currentColumn: item.currentColumn ?? item.currentStatusId,
+      currentStatusName: item.currentStatusName ?? item.currentColumn ?? item.currentStatusId,
+      currentColumn: item.currentColumn ?? item.currentStatusName ?? item.currentStatusId,
+      assigneeName: item.assigneeName,
       ageInDays,
       startedAt: item.startedAt,
       totalHoldHours,
@@ -149,6 +157,7 @@ export async function queryScopeFilterOptions(
       issueTypeId: true,
       issueTypeName: true,
       currentStatusId: true,
+      currentStatusName: true,
       currentColumn: true,
     },
   });
@@ -161,7 +170,10 @@ export async function queryScopeFilterOptions(
       issueTypeMap.set(item.issueTypeId, item.issueTypeName ?? item.issueTypeId);
     }
     if (!statusMap.has(item.currentStatusId)) {
-      statusMap.set(item.currentStatusId, item.currentColumn ?? item.currentStatusId);
+      statusMap.set(
+        item.currentStatusId,
+        item.currentColumn ?? item.currentStatusName ?? item.currentStatusId,
+      );
     }
   }
 

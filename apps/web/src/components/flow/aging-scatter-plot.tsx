@@ -74,15 +74,33 @@ export function AgingScatterPlot({
     danger: palette.chartDanger,
     neutral: palette.chartNeutral,
     hold: palette.chartHold,
+    ink: palette.ink,
     text: palette.text,
     soft: palette.soft,
     line: palette.line,
+    lineStrong: palette.lineStrong,
     panel: palette.panelStrong,
+    panelStrong: palette.panelStrong,
   };
   const zoneColors: Record<string, string> = {
     normal: colors.positive,
     watch: colors.warning,
     aging: colors.danger,
+  };
+
+  const zoneSurfaces: Record<ScatterDatum['agingZone'], { accent: string; glow: string }> = {
+    normal: {
+      accent: 'color-mix(in srgb, var(--chart-positive) 30%, transparent)',
+      glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-positive) 22%, transparent), transparent 68%)',
+    },
+    watch: {
+      accent: 'color-mix(in srgb, var(--chart-warning) 34%, transparent)',
+      glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-warning) 24%, transparent), transparent 68%)',
+    },
+    aging: {
+      accent: 'color-mix(in srgb, var(--chart-danger) 32%, transparent)',
+      glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-danger) 24%, transparent), transparent 68%)',
+    },
   };
 
   // Recreated on every render; fine because agingModel only changes on new data loads.
@@ -173,29 +191,114 @@ export function AgingScatterPlot({
         ]}
         tooltip={({ node }: { node: ScatterPlotNodeData<ScatterDatum> }) => {
           const d = node.data;
+          const surface = zoneSurfaces[d.agingZone];
+          const zoneLabel = d.agingZone === 'aging' ? 'Needs attention' : d.agingZone === 'watch' ? 'Watchlist' : 'Healthy';
+          const statusLine = d.currentColumn && d.currentColumn !== d.currentStatus
+            ? `${d.currentStatus} · ${d.currentColumn}`
+            : d.currentStatus;
           return (
             <div
               style={{
-                background: colors.panel,
-                border: `1px solid ${colors.line}`,
-                borderRadius: '4px',
-                padding: '0.5rem 0.75rem',
+                position: 'relative',
+                overflow: 'hidden',
+                background: `radial-gradient(circle at top right, ${surface.accent}, transparent 46%), ${colors.panel}`,
+                border: `1px solid ${colors.lineStrong}`,
+                borderRadius: '18px',
+                padding: '0.95rem 1rem 0.9rem',
                 fontSize: '0.8125rem',
-                boxShadow: palette.shadowSoft,
-                maxWidth: '18rem',
+                boxShadow: palette.shadowCard,
+                maxWidth: '19.5rem',
                 color: colors.text,
+                backdropFilter: 'blur(16px)',
               }}
             >
-              <strong>{d.issueKey}</strong>
-              <br />
-              <span style={{ color: colors.text }}>{d.summary}</span>
-              <br />
-              <span style={{ color: colors.soft }}>
-                Age: {node.xValue.toFixed(1)}d
-              </span>
-              {d.onHoldNow && (
-                <span style={{ marginLeft: '0.5rem', color: colors.hold }}>● On hold</span>
-              )}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: surface.glow,
+                  pointerEvents: 'none',
+                }}
+              />
+              <div style={{ position: 'relative', display: 'grid', gap: '0.8rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <strong
+                        style={{
+                          color: colors.ink,
+                          fontFamily: 'var(--font-display)',
+                          fontSize: '1rem',
+                          letterSpacing: '-0.03em',
+                        }}
+                      >
+                        {d.issueKey}
+                      </strong>
+                      {d.issueType && (
+                        <span
+                          style={{
+                            padding: '0.18rem 0.45rem',
+                            borderRadius: '999px',
+                            border: `1px solid ${colors.line}`,
+                            color: colors.soft,
+                            background: colors.panelStrong,
+                            fontSize: '0.66rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.12em',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {d.issueType}
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: '0.34rem',
+                        color: colors.text,
+                        lineHeight: 1.45,
+                        fontSize: '0.86rem',
+                      }}
+                    >
+                      {d.summary}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      padding: '0.28rem 0.55rem',
+                      borderRadius: '999px',
+                      background: surface.accent,
+                      color: zoneColors[d.agingZone],
+                      border: `1px solid ${zoneColors[d.agingZone]}`,
+                      fontSize: '0.66rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {zoneLabel}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: '0.55rem',
+                  }}
+                >
+                  <TooltipStat label="Status" value={statusLine} />
+                  <TooltipStat label="Assigned" value={d.assigneeName ?? 'Unassigned'} />
+                  <TooltipStat label="Age" value={`${node.xValue.toFixed(1)} days`} />
+                  <TooltipStat
+                    label="Hold"
+                    value={d.onHoldNow ? 'On hold now' : 'Active'}
+                    {...(d.onHoldNow ? { highlight: colors.hold } : {})}
+                  />
+                </div>
+              </div>
             </div>
           );
         }}
@@ -204,6 +307,52 @@ export function AgingScatterPlot({
         }}
         ariaLabel="Aging scatter plot"
       />
+    </div>
+  );
+}
+
+function TooltipStat({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: '0.58rem 0.62rem 0.55rem',
+        borderRadius: '14px',
+        border: `1px solid ${palette.line}`,
+        background: palette.panelStrong,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          color: palette.soft,
+          fontSize: '0.62rem',
+          fontWeight: 700,
+          letterSpacing: '0.13em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: '0.28rem',
+          color: highlight ?? palette.ink,
+          fontSize: '0.8rem',
+          fontWeight: 600,
+          lineHeight: 1.35,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
