@@ -27,18 +27,10 @@ import {
 import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
+import { buildInvalidScopeTimezoneProblem } from '../../_problems';
 import { shapeForecastResponse } from '@/server/views/forecast-response';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-function buildInvalidScopeTimezoneProblem(timezone: string) {
-  return {
-    code: 'INVALID_SCOPE_TIMEZONE',
-    message:
-      `This scope uses an unsupported timezone identifier ("${timezone}"). ` +
-      'Update the scope timezone to a valid value such as UTC or America/New_York.',
-  };
-}
 
 export async function POST(
   req: NextRequest,
