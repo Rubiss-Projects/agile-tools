@@ -6,15 +6,18 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks';
 export default [
   js.configs.recommended,
   {
-    files: ['docker/**/*.mjs'],
+    files: ['**/*.mjs'],
     languageOptions: {
       globals: {
         AbortController: 'readonly',
+        Buffer: 'readonly',
         clearTimeout: 'readonly',
         console: 'readonly',
         fetch: 'readonly',
         process: 'readonly',
         setTimeout: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
       },
     },
   },
