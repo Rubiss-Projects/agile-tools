@@ -168,6 +168,29 @@ Open `http://localhost:3000` and navigate to **Admin → Jira Connections** to c
 
 If you are running the production image locally and do not have an upstream workspace session provider, open `http://localhost:3000/admin/jira` and use **Create local admin session and continue**.
 
+### Optional local Jira stack for manual smoke testing
+
+If you want a real Jira target on the same machine, use [docker-compose.jira.yml](docker-compose.jira.yml). It runs a single-node Jira Data Center instance plus a dedicated PostgreSQL database, isolated from the main Agile Tools stack.
+
+```bash
+docker compose -f docker-compose.jira.yml up -d
+docker compose -f docker-compose.jira.yml logs -f jira
+```
+
+For a full clean rerun that also clears generated Jira seed output and the local Agile Tools admin setup state, use:
+
+```bash
+node docker/reset-local-jira-stack.mjs
+```
+
+After the Jira setup wizard is complete, you can also run the optional seed job:
+
+```bash
+docker compose -f docker-compose.jira.yml --profile bootstrap run --rm jira-bootstrap
+```
+
+See [docs/local-jira-testing.md](docs/local-jira-testing.md) for the reset flow, browser-driven first-run wizard guidance, optional bootstrap env variables, and the minimum project, board, PAT, and permission checklist needed to connect Agile Tools to the local Jira instance.
+
 ## Releases
 
 The repository includes a tag-driven release workflow that publishes the runtime image to GitHub Container Registry and creates a GitHub Release with generated notes.
