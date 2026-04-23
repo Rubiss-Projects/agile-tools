@@ -21,7 +21,7 @@ import {
 import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js';
 
 const BATCH_SIZE = 10;
-const COMPLETED_ISSUE_SEARCH_FIELDS = 'summary,status,issuetype,project,created';
+const COMPLETED_ISSUE_SEARCH_FIELDS = 'summary,status,issuetype,project,created,assignee';
 
 class SyncError extends Error {
   constructor(
