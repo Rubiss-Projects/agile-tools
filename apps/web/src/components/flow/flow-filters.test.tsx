@@ -47,4 +47,44 @@ describe('FlowFiltersPanel', () => {
     await user.click(screen.getByRole('checkbox', { name: /on-hold only/i }));
     expect(onChange).toHaveBeenCalledWith({ ...baseFilters, onHoldOnly: true });
   });
+
+  it('groups duplicate status labels and toggles all mapped status ids together', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <FlowFiltersPanel
+        filterOptions={{
+          statuses: [
+            { id: '10', name: 'Backlog' },
+            { id: '11', name: 'Backlog' },
+            { id: '20', name: 'In Progress' },
+          ],
+        }}
+        filters={baseFilters}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getAllByText('Backlog')).toHaveLength(1);
+
+    await user.click(screen.getByRole('checkbox', { name: /filter by status backlog/i }));
+    expect(onChange).toHaveBeenLastCalledWith({ ...baseFilters, statusIds: ['10', '11'] });
+
+    rerender(
+      <FlowFiltersPanel
+        filterOptions={{
+          statuses: [
+            { id: '10', name: 'Backlog' },
+            { id: '11', name: 'Backlog' },
+            { id: '20', name: 'In Progress' },
+          ],
+        }}
+        filters={{ ...baseFilters, statusIds: ['10', '11', '20'] }}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('checkbox', { name: /filter by status backlog/i }));
+    expect(onChange).toHaveBeenLastCalledWith({ ...baseFilters, statusIds: ['20'] });
+  });
 });

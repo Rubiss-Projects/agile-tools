@@ -24,7 +24,30 @@ interface FlowFiltersPanelProps {
   disabled?: boolean;
 }
 
+interface GroupedStatusOption {
+  name: string;
+  statusIds: string[];
+}
+
 const DEFAULT_WINDOWS = [30, 60, 90, 180];
+
+function groupStatuses(statuses: Array<{ id: string; name: string }>): GroupedStatusOption[] {
+  const groups = new Map<string, GroupedStatusOption>();
+
+  for (const status of statuses) {
+    const existing = groups.get(status.name);
+    if (existing) {
+      if (!existing.statusIds.includes(status.id)) {
+        existing.statusIds.push(status.id);
+      }
+      continue;
+    }
+
+    groups.set(status.name, { name: status.name, statusIds: [status.id] });
+  }
+
+  return Array.from(groups.values());
+}
 
 export function FlowFiltersPanel({
   filterOptions,
@@ -35,6 +58,17 @@ export function FlowFiltersPanel({
   function toggle(arr: string[], id: string): string[] {
     return arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
   }
+
+  function toggleMany(arr: string[], ids: string[]): string[] {
+    const allSelected = ids.every((id) => arr.includes(id));
+    if (allSelected) {
+      return arr.filter((id) => !ids.includes(id));
+    }
+
+    return [...arr, ...ids.filter((id) => !arr.includes(id))];
+  }
+
+  const groupedStatuses = groupStatuses(filterOptions.statuses ?? []);
 
   return (
     <div
@@ -101,26 +135,29 @@ export function FlowFiltersPanel({
       )}
 
       {/* Workflow-status checkboxes */}
-      {filterOptions.statuses && filterOptions.statuses.length > 0 && (
+      {groupedStatuses.length > 0 && (
         <div>
           <p style={{ ...fieldLabelStyle, margin: '0 0 0.35rem' }}>Status</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {filterOptions.statuses.map((s) => (
+            {groupedStatuses.map((statusGroup) => (
               <label
-                key={s.id}
-                style={checkboxChipStyle(filters.statusIds.includes(s.id))}
+                key={statusGroup.name}
+                style={checkboxChipStyle(statusGroup.statusIds.every((id) => filters.statusIds.includes(id)))}
               >
                 <input
                   type="checkbox"
-                  checked={filters.statusIds.includes(s.id)}
+                  checked={statusGroup.statusIds.every((id) => filters.statusIds.includes(id))}
                   onChange={() =>
-                    onChange({ ...filters, statusIds: toggle(filters.statusIds, s.id) })
+                    onChange({
+                      ...filters,
+                      statusIds: toggleMany(filters.statusIds, statusGroup.statusIds),
+                    })
                   }
                   disabled={disabled}
                   style={selectionControlStyle}
-                  aria-label={`Filter by status ${s.name}`}
+                  aria-label={`Filter by status ${statusGroup.name}`}
                 />
-                {s.name}
+                {statusGroup.name}
               </label>
             ))}
           </div>
