@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "node .github/hooks/lint-after-edit.mjs",
+        "cwd": ".",
+        "timeout": 90
+      }
+    ]
+  }
+}
