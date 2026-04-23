@@ -119,6 +119,14 @@ function runJiraCompose(args) {
 }
 
 async function resetLocalAdminState() {
+  if (options.dryRun) {
+    console.log('[dry-run] docker compose exec -T web node --input-type=module -e <local-admin-reset>');
+    return {
+      status: 'dry-run',
+      workspaceId: LOCAL_ADMIN_WORKSPACE_ID,
+    };
+  }
+
   const webContainerId = captureOutput('docker', ['compose', 'ps', '-q', 'web']).trim();
 
   if (!webContainerId) {
@@ -145,14 +153,6 @@ async function resetLocalAdminState() {
     '}));',
     'await disconnectPrisma();',
   ].join(' ');
-
-  if (options.dryRun) {
-    console.log('[dry-run] docker compose exec -T web node --input-type=module -e <local-admin-reset>');
-    return {
-      status: 'dry-run',
-      workspaceId: LOCAL_ADMIN_WORKSPACE_ID,
-    };
-  }
 
   try {
     const output = captureOutput('docker', [

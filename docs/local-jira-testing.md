@@ -39,7 +39,7 @@ Wizard defaults used by the local browser skill:
 
 - Application title: `Agile Tools Local Jira`
 - Mode: `private`
-- Base URL: value from `JIRA_BOOTSTRAP_PUBLIC_BASE_URL`
+- Base URL: value from `JIRA_SETUP_BASE_URL`, or `JIRA_BOOTSTRAP_PUBLIC_BASE_URL` when `JIRA_SETUP_BASE_URL` is unset
 - Admin username/password: `JIRA_BOOTSTRAP_USERNAME` and `JIRA_BOOTSTRAP_PASSWORD`
 - Admin display name: `JIRA_SETUP_ADMIN_DISPLAY_NAME` or `Agile Tools Local Admin`
 - Admin email: `JIRA_SETUP_ADMIN_EMAIL` or `<username>@example.test`

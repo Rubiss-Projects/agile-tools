@@ -356,13 +356,20 @@ async function ensureSampleIssues(projectKey) {
     bootstrapJql,
   );
 
-  if (existing.length > 0) {
+  if (existing.length >= config.sampleIssueCount) {
     console.log(`Reusing ${existing.length} bootstrap issue(s)`);
     return existing;
   }
 
+  const missingIssueCount = config.sampleIssueCount - existing.length;
+  if (existing.length > 0) {
+    console.log(
+      `Reusing ${existing.length} bootstrap issue(s) and creating ${missingIssueCount} more`,
+    );
+  }
+
   const issueType = await chooseIssueType(projectKey);
-  const issuesToCreate = buildIssuePlan(config.sampleIssueCount);
+  const issuesToCreate = buildIssuePlan(config.sampleIssueCount).slice(existing.length);
 
   for (const issuePlan of issuesToCreate) {
     const createdIssue = await createIssue(projectKey, issueType, issuePlan.summary);
