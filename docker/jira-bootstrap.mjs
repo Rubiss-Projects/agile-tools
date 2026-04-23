@@ -373,8 +373,12 @@ async function ensureSampleIssues(projectKey) {
 }
 
 function buildBootstrapIssueJql(projectKey) {
-  const label = config.issueLabel.replace(/"/g, '\\"');
+  const label = escapeJqlStringLiteral(config.issueLabel);
   return `project = ${projectKey} AND labels = "${label}" ORDER BY created ASC`;
+}
+
+function escapeJqlStringLiteral(value) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function buildIssuePlan(sampleIssueCount) {
