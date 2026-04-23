@@ -12,6 +12,7 @@ export interface CreateFlowScopeInput {
   boardName: string;
   timezone: string;
   includedIssueTypeIds: string[];
+  includedIssueTypeNames: string[];
   startStatusIds: string[];
   doneStatusIds: string[];
   syncIntervalMinutes: number;
@@ -45,6 +46,7 @@ export async function createFlowScope(
       boardName: input.boardName,
       timezone,
       includedIssueTypeIds: input.includedIssueTypeIds,
+      includedIssueTypeNames: input.includedIssueTypeNames,
       startStatusIds: input.startStatusIds,
       doneStatusIds: input.doneStatusIds,
       syncIntervalMinutes: input.syncIntervalMinutes,
@@ -94,6 +96,7 @@ export async function updateFlowScope(
         boardName: input.boardName,
         timezone,
         includedIssueTypeIds: input.includedIssueTypeIds,
+        includedIssueTypeNames: input.includedIssueTypeNames,
         startStatusIds: input.startStatusIds,
         doneStatusIds: input.doneStatusIds,
         syncIntervalMinutes: input.syncIntervalMinutes,

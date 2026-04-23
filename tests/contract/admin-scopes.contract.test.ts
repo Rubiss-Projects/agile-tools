@@ -125,6 +125,7 @@ beforeAll(async () => {
       boardName: 'Team Kanban',
       timezone: 'UTC',
       includedIssueTypeIds: ['it-1'],
+      includedIssueTypeNames: ['Story'],
       startStatusIds: ['1'],
       doneStatusIds: ['3'],
       syncIntervalMinutes: 10,
@@ -164,6 +165,7 @@ describe('POST /v1/admin/scopes', () => {
     expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
     expect(parsed.data?.boardId).toBe(1);
     expect(parsed.data?.connectionId).toBe(connectionId);
+    expect(parsed.data?.includedIssueTypes).toEqual([{ id: 'it-1', name: 'Story' }]);
   });
 
   it('returns 400 when required fields are missing', async () => {
@@ -237,6 +239,7 @@ describe('PUT /v1/admin/scopes/:id', () => {
     const parsed = FlowScopeSchema.safeParse(body);
     expect(parsed.success, JSON.stringify(parsed.error)).toBe(true);
     expect(parsed.data?.syncIntervalMinutes).toBe(15);
+    expect(parsed.data?.includedIssueTypes).toEqual([{ id: 'it-1', name: 'Story' }]);
     const db = getPrismaClient();
     const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
     expect(syncRuns).toHaveLength(0);

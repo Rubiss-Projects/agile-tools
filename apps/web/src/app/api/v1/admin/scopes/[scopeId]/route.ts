@@ -10,14 +10,20 @@ import {
   updateSyncRun,
 } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
-import { UpdateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api';
+import { type NamedValue, UpdateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api';
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { z } from 'zod';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { createClientForConnection, normalizeJiraError } from '../../jira-connections/_lib';
-import { formatIssueDetails, mapScope } from '../_lib';
+import {
+  buildIncludedIssueTypes,
+  formatIssueDetails,
+  hasNamesForAllIds,
+  mapScope,
+  selectNamedValues,
+} from '../_lib';
 import { enqueueScopeSyncJob } from '@/server/queue';
 
 function sameStringSet(left: string[], right: string[]): boolean {
@@ -54,12 +60,19 @@ function hasBoardSelectionChange(scope: {
   return scope.connectionId !== input.connectionId || scope.boardId !== String(input.boardId);
 }
 
+function hasIssueTypeSelectionChange(scope: {
+  includedIssueTypeIds: string[];
+}, input: ScopeUpdatePayload): boolean {
+  return !sameStringSet(scope.includedIssueTypeIds, input.includedIssueTypeIds);
+}
+
 function toScopeUpdateInput(scope: {
   connectionId: string;
   boardId: string;
   boardName: string;
   timezone: string;
   includedIssueTypeIds: string[];
+  includedIssueTypeNames: string[];
   startStatusIds: string[];
   doneStatusIds: string[];
   syncIntervalMinutes: number;
@@ -70,6 +83,7 @@ function toScopeUpdateInput(scope: {
     boardName: scope.boardName,
     timezone: scope.timezone,
     includedIssueTypeIds: scope.includedIssueTypeIds,
+    includedIssueTypeNames: scope.includedIssueTypeNames,
     startStatusIds: scope.startStatusIds,
     doneStatusIds: scope.doneStatusIds,
     syncIntervalMinutes: scope.syncIntervalMinutes,
@@ -129,8 +143,20 @@ export async function PUT(
       }
     }
 
+    const preflightIncludedIssueTypes = buildIncludedIssueTypes(
+      preflightScope.includedIssueTypeIds,
+      preflightScope.includedIssueTypeNames,
+    );
+    const boardSelectionChanged = hasBoardSelectionChange(preflightScope, parsed.data);
+    const issueTypeSelectionChanged = hasIssueTypeSelectionChange(preflightScope, parsed.data);
+    const needsIssueTypeLookup =
+      boardSelectionChanged ||
+      (issueTypeSelectionChanged &&
+        !hasNamesForAllIds(parsed.data.includedIssueTypeIds, preflightIncludedIssueTypes));
+
     let prefetchedBoardName: string | null = null;
-    if (hasBoardSelectionChange(preflightScope, parsed.data)) {
+    let prefetchedIssueTypes: NamedValue[] = [];
+    if (needsIssueTypeLookup) {
       const connection = await getJiraConnection(prisma, ctx.workspaceId, parsed.data.connectionId);
       if (!connection) {
         return Response.json(
@@ -143,6 +169,7 @@ export async function PUT(
       try {
         const boardDetail = await getBoardDetail(client, parsed.data.boardId);
         prefetchedBoardName = boardDetail.boardName;
+        prefetchedIssueTypes = boardDetail.issueTypes;
       } catch (err) {
         const jiraErr = normalizeJiraError(err);
         return Response.json(
@@ -173,6 +200,11 @@ export async function PUT(
         }
       }
 
+      const currentIncludedIssueTypes = buildIncludedIssueTypes(
+        currentScope.includedIssueTypeIds,
+        currentScope.includedIssueTypeNames,
+      );
+
       let boardName = currentScope.boardName;
       if (hasBoardSelectionChange(currentScope, parsed.data)) {
         const connection = await getJiraConnection(tx, ctx.workspaceId, parsed.data.connectionId);
@@ -185,12 +217,36 @@ export async function PUT(
         boardName = prefetchedBoardName;
       }
 
+      const boardSelectionChangedCurrent = hasBoardSelectionChange(currentScope, parsed.data);
+      const issueTypeSelectionChangedCurrent = hasIssueTypeSelectionChange(currentScope, parsed.data);
+
+      let resolvedIncludedIssueTypeNames = currentScope.includedIssueTypeNames;
+      if (boardSelectionChangedCurrent || issueTypeSelectionChangedCurrent) {
+        if (
+          !boardSelectionChangedCurrent &&
+          hasNamesForAllIds(parsed.data.includedIssueTypeIds, currentIncludedIssueTypes)
+        ) {
+          resolvedIncludedIssueTypeNames = selectNamedValues(
+            parsed.data.includedIssueTypeIds,
+            currentIncludedIssueTypes ?? [],
+          ).map((issueType) => issueType.name);
+        } else if (prefetchedIssueTypes.length > 0) {
+          resolvedIncludedIssueTypeNames = selectNamedValues(
+            parsed.data.includedIssueTypeIds,
+            prefetchedIssueTypes,
+          ).map((issueType) => issueType.name);
+        } else {
+          return { kind: 'stale-board-selection' as const };
+        }
+      }
+
       const updatedScopeInput = {
         connectionId: parsed.data.connectionId,
         boardId: parsed.data.boardId,
         boardName,
         timezone: parsed.data.timezone,
         includedIssueTypeIds: parsed.data.includedIssueTypeIds,
+        includedIssueTypeNames: resolvedIncludedIssueTypeNames,
         startStatusIds: parsed.data.startStatusIds,
         doneStatusIds: parsed.data.doneStatusIds,
         syncIntervalMinutes: parsed.data.syncIntervalMinutes,

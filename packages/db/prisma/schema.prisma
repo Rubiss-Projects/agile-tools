@@ -93,6 +93,7 @@ model FlowScope {
   boardName            String
   timezone             String
   includedIssueTypeIds String[]
+  includedIssueTypeNames String[]      @default([])
   startStatusIds       String[]
   doneStatusIds        String[]
   syncIntervalMinutes  Int
