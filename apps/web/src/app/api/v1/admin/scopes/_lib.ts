@@ -1,6 +1,7 @@
 import type {
   FlowScope as ApiFlowScope,
   SyncRun as ApiSyncRun,
+  NamedValue,
 } from '@agile-tools/shared/contracts/api';
 import {
   acquireScopeSyncLock,
@@ -13,11 +14,54 @@ import {
 } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import type { z } from 'zod';
+import { NamedValueSchema } from '@agile-tools/shared/contracts/api';
 import { ResponseError } from '@/server/errors';
 import { enqueueScopeSyncJob } from '@/server/queue';
 
 type DbFlowScope = NonNullable<Awaited<ReturnType<typeof getFlowScope>>>;
 type DbSyncRun = NonNullable<Awaited<ReturnType<typeof getSyncRun>>>;
+
+const NamedValueArraySchema = NamedValueSchema.array();
+
+export function buildIncludedIssueTypes(
+  includedIssueTypeIds: string[],
+  includedIssueTypeNames: string[],
+): NamedValue[] | undefined {
+  if (
+    includedIssueTypeIds.length === 0 ||
+    includedIssueTypeNames.length === 0 ||
+    includedIssueTypeIds.length !== includedIssueTypeNames.length
+  ) {
+    return undefined;
+  }
+
+  return includedIssueTypeIds.map((id, index) => ({
+    id,
+    name: includedIssueTypeNames[index] ?? id,
+  }));
+}
+
+export function selectNamedValues(ids: string[], availableValues: NamedValue[]): NamedValue[] {
+  const availableById = new Map(availableValues.map((value) => [value.id, value.name]));
+  return ids.map((id) => ({ id, name: availableById.get(id) ?? id }));
+}
+
+export function hasNamesForAllIds(ids: string[], availableValues?: NamedValue[]): boolean {
+  if (!availableValues || availableValues.length === 0) return false;
+  const availableById = new Map(availableValues.map((value) => [value.id, value.name]));
+  return ids.every((id) => {
+    const name = availableById.get(id);
+    return name !== undefined && name !== id;
+  });
+}
+
+function parseStoredIncludedIssueTypes(scope: DbFlowScope): NamedValue[] | undefined {
+  const zipped = buildIncludedIssueTypes(scope.includedIssueTypeIds, scope.includedIssueTypeNames);
+  if (!zipped) return undefined;
+
+  const parsed = NamedValueArraySchema.safeParse(zipped);
+  return parsed.success ? parsed.data : undefined;
+}
 
 /**
  * Map a Prisma FlowScope record to the API response shape.
@@ -25,6 +69,7 @@ type DbSyncRun = NonNullable<Awaited<ReturnType<typeof getSyncRun>>>;
  * when not present.
  */
 export function mapScope(scope: DbFlowScope): ApiFlowScope {
+  const includedIssueTypes = parseStoredIncludedIssueTypes(scope);
   return {
     id: scope.id,
     connectionId: scope.connectionId,
@@ -32,6 +77,7 @@ export function mapScope(scope: DbFlowScope): ApiFlowScope {
     ...(scope.boardName ? { boardName: scope.boardName } : {}),
     timezone: scope.timezone,
     includedIssueTypeIds: scope.includedIssueTypeIds,
+    ...(includedIssueTypes ? { includedIssueTypes } : {}),
     startStatusIds: scope.startStatusIds,
     doneStatusIds: scope.doneStatusIds,
     syncIntervalMinutes: scope.syncIntervalMinutes,

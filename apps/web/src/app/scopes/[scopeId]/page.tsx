@@ -6,6 +6,10 @@ import { HoldDefinitionForm } from '@/components/admin/hold-definition-form';
 import { FlowAnalyticsSection } from '@/components/flow/flow-analytics-section';
 import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import {
+  type FlowScope,
+  type ScopeSummary,
+} from '@agile-tools/shared/contracts/api';
+import {
   codeStyle,
   eyebrowStyle,
   heroCardStyle,
@@ -27,6 +31,28 @@ import {
   insetPanelStyle,
   palette,
 } from '@/components/app/chrome';
+
+export function formatScopeIssueTypes(
+  scope: Pick<FlowScope, 'includedIssueTypeIds' | 'includedIssueTypes'>,
+  filterOptions?: ScopeSummary['filterOptions'],
+): string {
+  const filterIssueTypesById = new Map(
+    (filterOptions?.issueTypes ?? []).map((issueType) => [issueType.id, issueType.name]),
+  );
+  const persistedIssueTypesById = new Map(
+    (scope.includedIssueTypes ?? []).map((issueType) => [issueType.id, issueType.name]),
+  );
+
+  return scope.includedIssueTypeIds
+    .map((issueTypeId) => {
+      const persistedName = persistedIssueTypesById.get(issueTypeId);
+      if (persistedName && persistedName !== issueTypeId) {
+        return persistedName;
+      }
+      return filterIssueTypesById.get(issueTypeId) ?? persistedName ?? issueTypeId;
+    })
+    .join(', ');
+}
 
 export default async function ScopePage({
   params,
@@ -230,7 +256,9 @@ export default async function ScopePage({
             </article>
             <article style={statCardStyle}>
               <p style={statLabelStyle}>Issue Types</p>
-              <p style={{ ...statValueStyle, fontSize: '0.98rem', lineHeight: 1.4 }}>{scope.includedIssueTypeIds.join(', ')}</p>
+              <p style={{ ...statValueStyle, fontSize: '0.98rem', lineHeight: 1.4 }}>
+                {formatScopeIssueTypes(scope, filterOptions)}
+              </p>
             </article>
           </div>
         </section>

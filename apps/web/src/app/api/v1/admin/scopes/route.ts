@@ -7,7 +7,7 @@ import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../jira-connections/_lib';
-import { formatIssueDetails, mapScope } from './_lib';
+import { formatIssueDetails, mapScope, selectNamedValues } from './_lib';
 
 export async function POST(req: NextRequest): Promise<Response> {
   try {
@@ -38,9 +38,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     const client = createClientForConnection(conn);
 
     let boardName: string;
+    let includedIssueTypeNames: string[];
     try {
       const boardDetail = await getBoardDetail(client, parsed.data.boardId);
       boardName = boardDetail.boardName;
+      includedIssueTypeNames = selectNamedValues(
+        parsed.data.includedIssueTypeIds,
+        boardDetail.issueTypes,
+      ).map((issueType) => issueType.name);
     } catch (err) {
       const jiraErr = normalizeJiraError(err);
       return Response.json(
@@ -61,6 +66,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         boardName,
         timezone: parsed.data.timezone,
         includedIssueTypeIds: parsed.data.includedIssueTypeIds,
+        includedIssueTypeNames,
         startStatusIds: parsed.data.startStatusIds,
         doneStatusIds: parsed.data.doneStatusIds,
         syncIntervalMinutes: parsed.data.syncIntervalMinutes,

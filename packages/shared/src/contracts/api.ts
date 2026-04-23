@@ -106,6 +106,7 @@ export const FlowScopeSchema = z.object({
   boardName: z.string().optional(),
   timezone: z.string(),
   includedIssueTypeIds: z.array(z.string()),
+  includedIssueTypes: z.array(NamedValueSchema).optional(),
   startStatusIds: z.array(z.string()),
   doneStatusIds: z.array(z.string()),
   syncIntervalMinutes: z.number().int(),
