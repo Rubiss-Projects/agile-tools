@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -273,7 +273,9 @@ describe('FlowScopeForm', () => {
         method: 'DELETE',
       }),
     );
-    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('shows the API error when deleting a flow scope is blocked', async () => {

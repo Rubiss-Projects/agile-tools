@@ -222,7 +222,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Problem'
+                allOf:
+                  - $ref: '#/components/schemas/Problem'
+                  - type: object
+                    properties:
+                      syncRunId:
+                        type: string
+                        description: Identifier of the queued or running sync causing the conflict, when available.
   /v1/admin/scopes/{scopeId}/hold-definition:
     put:
       tags: [Admin Scopes]
