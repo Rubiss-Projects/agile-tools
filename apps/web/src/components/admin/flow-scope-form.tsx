@@ -81,6 +81,9 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const usingSavedEditConfig =
     isEditMode &&
@@ -117,6 +120,8 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     setDoneStatusIds(initialScope.doneStatusIds);
     setSyncIntervalMinutes(initialScope.syncIntervalMinutes);
     setSubmitError(null);
+    setDeleteError(null);
+    setConfirmingDelete(false);
     setResult(null);
     initializedEditRef.current = false;
   }
@@ -268,6 +273,8 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
 
     setSubmitting(true);
     setSubmitError(null);
+    setDeleteError(null);
+    setConfirmingDelete(false);
     try {
       const res = await fetch(
         isEditMode ? `/api/v1/admin/scopes/${initialScope.id}` : '/api/v1/admin/scopes',
@@ -288,6 +295,31 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
       setSubmitError('Network error. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!initialScope) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    setSubmitError(null);
+    try {
+      const res = await fetch(`/api/v1/admin/scopes/${initialScope.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { message?: string } | null;
+        setDeleteError(data?.message ?? 'Failed to delete scope.');
+        return;
+      }
+
+      setConfirmingDelete(false);
+      router.refresh();
+    } catch {
+      setDeleteError('Network error. Please try again.');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -342,6 +374,12 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     boardDetail?.completionStatuses ?? boardDetail?.statuses ?? [],
   );
   const boardStatusIds = new Set(boardDetail?.statuses.map((status) => status.id) ?? []);
+  const destructiveButtonStyle = {
+    ...buttonStyle('secondary', deleting),
+    border: `1px solid ${palette.danger}`,
+    background: deleting ? palette.buttonDisabled : palette.dangerSoft,
+    color: deleting ? palette.buttonDisabledText : palette.danger,
+  };
 
   return (
     <div style={{ ...insetPanelStyle, marginTop: '1rem' }}>
@@ -514,10 +552,55 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
           </div>
 
           {submitError && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{submitError}</p></div>}
+          {deleteError && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{deleteError}</p></div>}
+          {isEditMode && confirmingDelete && (
+            <div style={{ ...noticeStyle('warning'), marginBottom: '0.75rem' }}>
+              <p style={{ margin: 0 }}>
+                Deleting this flow scope permanently removes its sync history, board snapshots, work items, and derived analytics for this scope.
+              </p>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button type="submit" disabled={!canSubmit} style={buttonStyle('primary', !canSubmit)}>
+            <button type="submit" disabled={!canSubmit || deleting || confirmingDelete} style={buttonStyle('primary', !canSubmit || deleting || confirmingDelete)}>
               {submitting ? (isEditMode ? 'Saving…' : 'Creating…') : (isEditMode ? 'Save Flow Scope' : 'Create Flow Scope')}
             </button>
+            {isEditMode && !confirmingDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingDelete(true);
+                  setDeleteError(null);
+                  setSubmitError(null);
+                }}
+                disabled={deleting || submitting}
+                style={destructiveButtonStyle}
+              >
+                Delete Flow Scope
+              </button>
+            )}
+            {isEditMode && confirmingDelete && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { void handleDelete(); }}
+                  disabled={deleting || submitting}
+                  style={destructiveButtonStyle}
+                >
+                  {deleting ? 'Deleting…' : 'Confirm Delete Flow Scope'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    setDeleteError(null);
+                  }}
+                  disabled={deleting}
+                  style={buttonStyle('secondary', deleting)}
+                >
+                  Keep Scope
+                </button>
+              </>
+            )}
             {!submitting && !canSubmit && (
               <span style={{ color: palette.soft, fontSize: '0.875rem' }}>
                 {usingSavedEditConfig
@@ -538,7 +621,8 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
             }
             setExpanded(false);
           }}
-          style={buttonStyle('secondary')}
+          disabled={deleting}
+          style={buttonStyle('secondary', deleting)}
         >
           Cancel
         </button>

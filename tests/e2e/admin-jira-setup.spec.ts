@@ -259,6 +259,72 @@ test('editing a flow scope sends a PUT request and keeps the admin on the setup 
   });
 });
 
+test('deleting a flow scope removes it from the admin setup screen', async ({ page }) => {
+  await setAdminSession(page);
+
+  const deletableScope = await db.flowScope.create({
+    data: {
+      workspaceId,
+      connectionId,
+      boardId: '77',
+      boardName: 'Delete Me Board',
+      timezone: 'UTC',
+      includedIssueTypeIds: ['story'],
+      startStatusIds: ['10'],
+      doneStatusIds: ['30'],
+      syncIntervalMinutes: 10,
+    },
+  });
+
+  await page.route(`**/api/v1/admin/jira-connections/${connectionId}/discovery/boards`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        boards: [
+          { boardId: 42, boardName: 'E2E Kanban Board' },
+          { boardId: 77, boardName: 'Delete Me Board' },
+        ],
+      }),
+    });
+  });
+  await page.route(`**/api/v1/admin/jira-connections/${connectionId}/discovery/boards/77`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        boardId: 77,
+        boardName: 'Delete Me Board',
+        columns: [{ name: 'Doing', statusIds: ['10'] }],
+        statuses: [{ id: '10', name: 'In Progress' }],
+        completionStatuses: [{ id: '30', name: 'Done' }],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      }),
+    });
+  });
+
+  try {
+    await page.goto('/admin/jira');
+
+    const scopeCard = page.locator('li').filter({
+      has: page.getByText('Delete Me Board'),
+    });
+    await scopeCard.getByRole('button', { name: /edit flow scope/i }).click();
+
+    await expect(page.getByRole('button', { name: /delete flow scope/i })).toBeVisible();
+    await page.getByRole('button', { name: /delete flow scope/i }).click();
+    await expect(page.getByText(/permanently removes its sync history, board snapshots, work items, and derived analytics/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /confirm delete flow scope/i }).click();
+
+    await expect(page.locator('li').filter({
+      has: page.getByText('Delete Me Board'),
+    })).toHaveCount(0);
+  } finally {
+    await db.flowScope.deleteMany({ where: { id: deletableScope.id } });
+  }
+});
+
 // ─── Test: /scopes/:id renders scope detail ───────────────────────────────────
 
 test('scope detail page shows board name, sync status, and no error warnings', async ({

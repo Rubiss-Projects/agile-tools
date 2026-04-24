@@ -84,7 +84,7 @@ export default async function AdminJiraPage() {
         <p style={eyebrowStyle}>Workspace Admin</p>
         <h1 style={heroTitleStyle}>Jira setup</h1>
         <p style={heroCopyStyle}>
-          Manage Jira connections, validate access, and define the flow scopes that feed analytics and forecasting.
+          Manage Jira connections, validate access, and create, edit, or delete the flow scopes that feed analytics and forecasting.
         </p>
         <div style={statGridStyle}>
           <article style={statCardStyle}>
