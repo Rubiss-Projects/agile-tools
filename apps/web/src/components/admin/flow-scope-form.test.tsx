@@ -21,6 +21,10 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
+function emptyResponse(init: ResponseInit = {}): Response {
+  return new Response(null, init);
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -203,6 +207,138 @@ describe('FlowScopeForm', () => {
       }),
     );
     expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires explicit confirmation before deleting a flow scope', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ boards: [{ boardId: 42, boardName: 'Payments Board' }] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          boardId: 42,
+          boardName: 'Payments Board',
+          columns: [{ name: 'Doing', statusIds: ['10'] }],
+          statuses: [{ id: '10', name: 'In Progress' }],
+          completionStatuses: [
+            { id: '10', name: 'In Progress' },
+            { id: '40', name: 'Closed' },
+          ],
+          issueTypes: [{ id: 'story', name: 'Story' }],
+        }),
+      )
+      .mockResolvedValueOnce(emptyResponse({ status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FlowScopeForm
+        connections={[
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            baseUrl: 'https://jira.example.internal',
+            displayName: 'Team Jira',
+            healthStatus: 'healthy',
+          },
+        ]}
+        initialScope={{
+          id: '11111111-1111-4111-8111-111111111111',
+          connectionId: '22222222-2222-4222-8222-222222222222',
+          boardId: 42,
+          boardName: 'Payments Board',
+          timezone: 'UTC',
+          includedIssueTypeIds: ['story'],
+          startStatusIds: ['10'],
+          doneStatusIds: ['40'],
+          syncIntervalMinutes: 10,
+          status: 'active',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit flow scope/i }));
+    await screen.findByText(/start statuses/i);
+
+    await user.click(screen.getByRole('button', { name: /delete flow scope/i }));
+    expect(
+      screen.getByText(/permanently removes its sync history, board snapshots, work items, and derived analytics/i),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: /confirm delete flow scope/i }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/scopes/11111111-1111-4111-8111-111111111111',
+      expect.objectContaining({
+        method: 'DELETE',
+      }),
+    );
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the API error when deleting a flow scope is blocked', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ boards: [{ boardId: 42, boardName: 'Payments Board' }] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          boardId: 42,
+          boardName: 'Payments Board',
+          columns: [{ name: 'Doing', statusIds: ['10'] }],
+          statuses: [{ id: '10', name: 'In Progress' }],
+          completionStatuses: [
+            { id: '10', name: 'In Progress' },
+            { id: '40', name: 'Closed' },
+          ],
+          issueTypes: [{ id: 'story', name: 'Story' }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { message: 'Wait for the active sync to finish before deleting this flow scope.' },
+          { status: 409 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FlowScopeForm
+        connections={[
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            baseUrl: 'https://jira.example.internal',
+            displayName: 'Team Jira',
+            healthStatus: 'healthy',
+          },
+        ]}
+        initialScope={{
+          id: '11111111-1111-4111-8111-111111111111',
+          connectionId: '22222222-2222-4222-8222-222222222222',
+          boardId: 42,
+          boardName: 'Payments Board',
+          timezone: 'UTC',
+          includedIssueTypeIds: ['story'],
+          startStatusIds: ['10'],
+          doneStatusIds: ['40'],
+          syncIntervalMinutes: 10,
+          status: 'active',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit flow scope/i }));
+    await screen.findByText(/start statuses/i);
+
+    await user.click(screen.getByRole('button', { name: /delete flow scope/i }));
+    await user.click(screen.getByRole('button', { name: /confirm delete flow scope/i }));
+
+    expect(
+      await screen.findByText(/wait for the active sync to finish before deleting this flow scope/i),
+    ).toBeVisible();
+    expect(refreshSpy).not.toHaveBeenCalled();
   });
 
   it('keeps same-board edit submission available when discovery fails', async () => {

@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import {
   acquireScopeSyncLock,
   createSyncRun,
+  deleteFlowScope,
   getActiveSyncRun,
   getFlowScope,
   getJiraConnection,
@@ -38,6 +39,15 @@ function sameStringSequence(left: string[], right: string[]): boolean {
 }
 
 type ScopeUpdatePayload = z.infer<typeof UpdateFlowScopeRequestSchema>;
+const StoredStringArraySchema = z.array(z.string());
+
+function parseStoredStringArray(value: unknown, fieldName: string): string[] {
+  const parsed = StoredStringArraySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Stored flow scope field ${fieldName} must be a string array.`);
+  }
+  return parsed.data;
+}
 
 function hasBoundaryChanges(scope: {
   connectionId: string;
@@ -178,9 +188,13 @@ export async function PUT(
       }
     }
 
+    const preflightIncludedIssueTypeNames = parseStoredStringArray(
+      preflightScope.includedIssueTypeNames,
+      'includedIssueTypeNames',
+    );
     const preflightIncludedIssueTypes = buildIncludedIssueTypes(
       preflightScope.includedIssueTypeIds,
-      preflightScope.includedIssueTypeNames,
+      preflightIncludedIssueTypeNames,
     );
     const boardSelectionChanged = hasBoardSelectionChange(preflightScope, parsed.data);
     const issueTypeSelectionChanged = hasIssueTypeSelectionChange(preflightScope, parsed.data);
@@ -235,9 +249,13 @@ export async function PUT(
         }
       }
 
+      const currentIncludedIssueTypeNames = parseStoredStringArray(
+        currentScope.includedIssueTypeNames,
+        'includedIssueTypeNames',
+      );
       const currentIncludedIssueTypes = buildIncludedIssueTypes(
         currentScope.includedIssueTypeIds,
-        currentScope.includedIssueTypeNames,
+        currentIncludedIssueTypeNames,
       );
 
       let boardName = currentScope.boardName;
@@ -255,7 +273,7 @@ export async function PUT(
       const boardSelectionChangedCurrent = hasBoardSelectionChange(currentScope, parsed.data);
       const issueTypeSelectionChangedCurrent = hasIssueTypeSelectionChange(currentScope, parsed.data);
 
-      let resolvedIncludedIssueTypeNames = currentScope.includedIssueTypeNames;
+      let resolvedIncludedIssueTypeNames = currentIncludedIssueTypeNames;
       if (boardSelectionChangedCurrent || issueTypeSelectionChangedCurrent) {
         if (
           !boardSelectionChangedCurrent &&
@@ -423,6 +441,70 @@ export async function PUT(
   } catch (err) {
     if (err instanceof ResponseError) return err.response;
     logger.error('Failed to update flow scope', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return Response.json(
+      { code: 'INTERNAL_ERROR', message: 'An internal error occurred.' },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ scopeId: string }> },
+): Promise<Response> {
+  try {
+    const ctx = await requireAdminContext();
+    assertTrustedMutationRequest(req);
+    enforceRateLimit(req, {
+      bucket: 'admin-scopes:delete',
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      max: 10,
+      windowMs: 5 * 60_000,
+    });
+
+    const { scopeId } = await params;
+    const prisma = getPrismaClient();
+    const txResult = await prisma.$transaction(async (tx) => {
+      await acquireScopeSyncLock(tx, scopeId);
+
+      const currentScope = await getFlowScope(tx, ctx.workspaceId, scopeId);
+      if (!currentScope) {
+        return { kind: 'missing' as const };
+      }
+
+      const activeRun = await getActiveSyncRun(tx, ctx.workspaceId, scopeId);
+      if (activeRun) {
+        return { kind: 'active' as const, activeRunId: activeRun.id };
+      }
+
+      const deleted = await deleteFlowScope(tx, ctx.workspaceId, scopeId);
+      return deleted ? { kind: 'deleted' as const } : { kind: 'missing' as const };
+    });
+
+    if (txResult.kind === 'active') {
+      return Response.json(
+        {
+          code: 'SYNC_IN_PROGRESS',
+          message: 'Wait for the active sync to finish before deleting this flow scope.',
+          syncRunId: txResult.activeRunId,
+        },
+        { status: 409 },
+      );
+    }
+
+    if (txResult.kind === 'missing') {
+      return Response.json(
+        { code: 'NOT_FOUND', message: 'Flow scope not found.' },
+        { status: 404 },
+      );
+    }
+
+    return new Response(null, { status: 204 });
+  } catch (err) {
+    if (err instanceof ResponseError) return err.response;
+    logger.error('Failed to delete flow scope', {
       error: err instanceof Error ? err.message : String(err),
     });
     return Response.json(

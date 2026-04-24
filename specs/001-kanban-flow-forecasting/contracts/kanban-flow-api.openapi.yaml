@@ -199,6 +199,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+    delete:
+      tags: [Admin Scopes]
+      summary: Permanently delete a flow scope and its scope-owned data
+      description: |
+        Deletes the stored flow scope plus its scope-owned records through the existing cascading relationships.
+        If another sync is already queued or running for the scope, the delete fails with a conflict response
+        instead of removing the scope mid-sync.
+      parameters:
+        - $ref: '#/components/parameters/ScopeId'
+      responses:
+        '204':
+          description: Scope deleted
+        '404':
+          description: Flow scope not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Scope delete conflicts with an active sync
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/admin/scopes/{scopeId}/hold-definition:
     put:
       tags: [Admin Scopes]

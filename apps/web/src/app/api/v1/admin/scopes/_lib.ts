@@ -13,7 +13,7 @@ import {
   updateSyncRun,
 } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { NamedValueSchema } from '@agile-tools/shared/contracts/api';
 import { ResponseError } from '@/server/errors';
 import { enqueueScopeSyncJob } from '@/server/queue';
@@ -22,6 +22,15 @@ type DbFlowScope = NonNullable<Awaited<ReturnType<typeof getFlowScope>>>;
 type DbSyncRun = NonNullable<Awaited<ReturnType<typeof getSyncRun>>>;
 
 const NamedValueArraySchema = NamedValueSchema.array();
+const StoredStringArraySchema = z.array(z.string());
+
+function parseStoredStringArray(value: unknown, fieldName: string): string[] {
+  const parsed = StoredStringArraySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Stored flow scope field ${fieldName} must be a string array.`);
+  }
+  return parsed.data;
+}
 
 export function buildIncludedIssueTypes(
   includedIssueTypeIds: string[],
@@ -56,7 +65,10 @@ export function hasNamesForAllIds(ids: string[], availableValues?: NamedValue[])
 }
 
 function parseStoredIncludedIssueTypes(scope: DbFlowScope): NamedValue[] | undefined {
-  const zipped = buildIncludedIssueTypes(scope.includedIssueTypeIds, scope.includedIssueTypeNames);
+  const zipped = buildIncludedIssueTypes(
+    scope.includedIssueTypeIds,
+    parseStoredStringArray(scope.includedIssueTypeNames, 'includedIssueTypeNames'),
+  );
   if (!zipped) return undefined;
 
   const parsed = NamedValueArraySchema.safeParse(zipped);
