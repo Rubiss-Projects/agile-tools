@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import { execFile as execFileCallback } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { promisify } from "node:util";
 
 class JiraRequestError extends Error {
   constructor(message, status, body) {
@@ -11,6 +13,13 @@ class JiraRequestError extends Error {
     this.body = body;
   }
 }
+
+const execFile = promisify(execFileCallback);
+const BOOTSTRAP_DATASET_VERSION = 3;
+const MIN_COMPLETED_STORY_COUNT = 72;
+const MIN_IN_PROGRESS_STORY_COUNT = 10;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const FORECAST_HISTORY_WINDOW_DAYS = 90;
 
 const config = loadConfig();
 
@@ -26,12 +35,14 @@ async function main() {
   const currentUser = await jiraRequest("/rest/api/2/myself");
   const projectResult = await ensureProject(currentUser);
   const board = await ensureBoard(projectResult.project, projectResult.created);
-  const issues = await ensureSampleIssues(projectResult.project.key);
+  const issuePlan = buildIssuePlan();
+  const issues = await ensureSampleIssues(projectResult.project.key, issuePlan);
   const pat = config.createPat ? await ensurePat() : null;
 
   const output = {
     generatedAt: new Date().toISOString(),
     baseUrl: config.publicBaseUrl,
+    seededDataset: summarizeIssuePlan(issuePlan),
     username: config.username,
     project: {
       id: projectResult.project.id,
@@ -73,7 +84,19 @@ function loadConfig() {
       "Agile Tools Kanban Filter",
     ),
     issueLabel: requiredEnv("JIRA_BOOTSTRAP_ISSUE_LABEL", "agile-tools-bootstrap"),
-    sampleIssueCount: readPositiveInt("JIRA_BOOTSTRAP_SAMPLE_ISSUE_COUNT", 3),
+    sampleIssueCount: readPositiveInt(
+      "JIRA_BOOTSTRAP_SAMPLE_ISSUE_COUNT",
+      MIN_COMPLETED_STORY_COUNT + MIN_IN_PROGRESS_STORY_COUNT,
+    ),
+    completedStoryCount: Math.max(
+      MIN_COMPLETED_STORY_COUNT,
+      readPositiveInt("JIRA_BOOTSTRAP_COMPLETED_STORY_COUNT", MIN_COMPLETED_STORY_COUNT),
+    ),
+    inProgressStoryCount: Math.max(
+      MIN_IN_PROGRESS_STORY_COUNT,
+      readPositiveInt("JIRA_BOOTSTRAP_IN_PROGRESS_STORY_COUNT", MIN_IN_PROGRESS_STORY_COUNT),
+    ),
+    resetIssues: readBoolean("JIRA_BOOTSTRAP_RESET_ISSUES", true),
     waitTimeoutMs: readPositiveInt("JIRA_BOOTSTRAP_WAIT_TIMEOUT_MS", 600000),
     waitIntervalMs: readPositiveInt("JIRA_BOOTSTRAP_WAIT_INTERVAL_MS", 5000),
     createPat: readBoolean("JIRA_BOOTSTRAP_CREATE_PAT", true),
@@ -86,6 +109,11 @@ function loadConfig() {
       "JIRA_BOOTSTRAP_OUTPUT_PATH",
       "/bootstrap-output/jira-bootstrap.json",
     ),
+    dbHost: requiredEnv("JIRA_BOOTSTRAP_DB_HOST", "jira-db"),
+    dbPort: readPositiveInt("JIRA_BOOTSTRAP_DB_PORT", 5432),
+    dbName: requiredEnv("JIRA_BOOTSTRAP_DB_NAME", "jira"),
+    dbUser: requiredEnv("JIRA_BOOTSTRAP_DB_USER", "jira"),
+    dbPassword: requiredEnv("JIRA_BOOTSTRAP_DB_PASSWORD", "jira"),
   };
 }
 
@@ -350,33 +378,37 @@ async function getBoardDetails(boardId) {
   };
 }
 
-async function ensureSampleIssues(projectKey) {
+async function ensureSampleIssues(projectKey, issuePlans) {
   const bootstrapJql = buildBootstrapIssueJql(projectKey);
-  const existing = await searchIssues(
-    bootstrapJql,
-  );
+  const existing = await searchIssues(bootstrapJql, getBootstrapSearchLimit());
 
-  if (existing.length >= config.sampleIssueCount) {
+  if (existing.length > 0 && config.resetIssues) {
+    console.log(
+      `Deleting ${existing.length} existing bootstrap issue(s) so the local demo dataset stays deterministic`,
+    );
+
+    for (const issue of existing) {
+      await deleteIssue(issue.key);
+    }
+  }
+
+  if (!config.resetIssues && existing.length >= issuePlans.length) {
     console.log(`Reusing ${existing.length} bootstrap issue(s)`);
     return existing;
   }
 
-  const missingIssueCount = config.sampleIssueCount - existing.length;
-  if (existing.length > 0) {
-    console.log(
-      `Reusing ${existing.length} bootstrap issue(s) and creating ${missingIssueCount} more`,
-    );
-  }
-
   const issueType = await chooseIssueType(projectKey);
-  const issuesToCreate = buildIssuePlan(config.sampleIssueCount).slice(existing.length);
+  const issuesToCreate = config.resetIssues
+    ? issuePlans
+    : issuePlans.slice(existing.length);
 
   for (const issuePlan of issuesToCreate) {
-    const createdIssue = await createIssue(projectKey, issueType, issuePlan.summary);
-    await applyTransitions(createdIssue.key, issuePlan.transitions);
+    const createdIssue = await createIssue(projectKey, issueType, issuePlan);
+    const appliedTransitions = await applyTransitions(createdIssue.key, issuePlan.transitions);
+    await backfillIssueHistory(createdIssue, issuePlan, appliedTransitions);
   }
 
-  return searchIssues(bootstrapJql);
+  return searchIssues(bootstrapJql, getBootstrapSearchLimit());
 }
 
 function buildBootstrapIssueJql(projectKey) {
@@ -388,48 +420,128 @@ function escapeJqlStringLiteral(value) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-function buildIssuePlan(sampleIssueCount) {
-  const plans = [];
+function buildIssuePlan(referenceNow = new Date()) {
+  const completedStories = buildCompletedStoryPlans(referenceNow);
+  const inProgressStories = buildInProgressStoryPlans(referenceNow);
+  const backlogStories = buildBacklogStoryPlans(
+    referenceNow,
+    Math.max(0, getTargetIssueCount() - completedStories.length - inProgressStories.length),
+  );
 
-  if (sampleIssueCount >= 1) {
-    plans.push({
-      summary: "[AT] Bootstrap To Do",
-      transitions: [],
-    });
-  }
+  return [...completedStories, ...inProgressStories, ...backlogStories];
+}
 
-  if (sampleIssueCount >= 2) {
-    plans.push({
-      summary: "[AT] Bootstrap In Progress",
-      transitions: [["In Progress", "Doing", "Selected for Development"]],
-    });
-  }
+function buildCompletedStoryPlans(referenceNow) {
+  const maxCompletedDaysAgo = Math.max(1, FORECAST_HISTORY_WINDOW_DAYS - 2);
 
-  if (sampleIssueCount >= 3) {
-    plans.push({
-      summary: "[AT] Bootstrap Done",
+  return Array.from({ length: config.completedStoryCount }, (_, index) => {
+    const storyNumber = padSequence(index + 1);
+    const cycleTimeDays = 2 + index;
+    const completedDaysAgo = 1 + Math.floor(
+      (index * maxCompletedDaysAgo) / Math.max(config.completedStoryCount - 1, 1),
+    );
+    const selectedDaysAgo = completedDaysAgo + cycleTimeDays;
+    const inProgressDaysAgo = completedDaysAgo + Math.max(0.5, Math.ceil(cycleTimeDays * 0.45));
+    const createdDaysAgo = selectedDaysAgo + 1 + (index % 3);
+
+    return {
+      createdAt: timestampDaysAgo(referenceNow, createdDaysAgo, index, 8),
+      description:
+        `Bootstrap story fixture completed ${completedDaysAgo} day(s) ago ` +
+        `with a ${cycleTimeDays}-day cycle time.`,
+      seedState: "done",
+      summary: `[AT] Story Done ${storyNumber} (${cycleTimeDays}d cycle)`,
       transitions: [
-        ["In Progress", "Doing", "Selected for Development"],
-        ["Done", "Closed", "Resolved"],
+        {
+          changedAt: timestampDaysAgo(referenceNow, selectedDaysAgo, index, 9),
+          preferredNames: ["Selected for Development", "In Progress", "Doing"],
+        },
+        {
+          changedAt: timestampDaysAgo(referenceNow, inProgressDaysAgo, index, 10),
+          preferredNames: ["In Progress", "Doing"],
+        },
+        {
+          changedAt: timestampDaysAgo(referenceNow, completedDaysAgo, index, 11),
+          preferredNames: ["Done", "Closed", "Resolved"],
+        },
       ],
-    });
-  }
+    };
+  });
+}
 
-  while (plans.length < sampleIssueCount) {
-    plans.push({
-      summary: `[AT] Bootstrap Backlog ${plans.length - 1}`,
-      transitions: [],
-    });
-  }
+function buildInProgressStoryPlans(referenceNow) {
+  const baseAges = [1, 2, 3, 5, 7, 9, 12, 16, 21, 27];
 
-  return plans;
+  return Array.from({ length: config.inProgressStoryCount }, (_, index) => {
+    const storyNumber = padSequence(index + 1);
+    const ageDays = baseAges[index] ?? (baseAges[baseAges.length - 1] + ((index - baseAges.length + 1) * 4));
+    const inProgressDaysAgo = Math.max(0.25, Number((ageDays * 0.45).toFixed(2)));
+    const createdDaysAgo = ageDays + 1 + (index % 2);
+
+    return {
+      createdAt: timestampDaysAgo(referenceNow, createdDaysAgo, index, 8),
+      description: `Bootstrap story fixture actively in progress for roughly ${ageDays} day(s).`,
+      seedState: "in-progress",
+      summary: `[AT] Story In Progress ${storyNumber} (${ageDays}d age)`,
+      transitions: [
+        {
+          changedAt: timestampDaysAgo(referenceNow, ageDays, index, 9),
+          preferredNames: ["Selected for Development", "In Progress", "Doing"],
+        },
+        {
+          changedAt: timestampDaysAgo(referenceNow, inProgressDaysAgo, index, 10),
+          preferredNames: ["In Progress", "Doing"],
+        },
+      ],
+    };
+  });
+}
+
+function buildBacklogStoryPlans(referenceNow, backlogCount) {
+  return Array.from({ length: backlogCount }, (_, index) => ({
+    createdAt: timestampDaysAgo(referenceNow, 1 + index, index, 8),
+    description: "Bootstrap story fixture left in backlog so the seeded board is not exclusively active work.",
+    seedState: "backlog",
+    summary: `[AT] Story Backlog ${padSequence(index + 1)}`,
+    transitions: [],
+  }));
+}
+
+function summarizeIssuePlan(issuePlans) {
+  return {
+    version: BOOTSTRAP_DATASET_VERSION,
+    completedStories: issuePlans.filter((plan) => plan.seedState === "done").length,
+    inProgressStories: issuePlans.filter((plan) => plan.seedState === "in-progress").length,
+    backlogStories: issuePlans.filter((plan) => plan.seedState === "backlog").length,
+  };
+}
+
+function padSequence(value) {
+  return String(value).padStart(2, "0");
+}
+
+function timestampDaysAgo(referenceNow, daysAgo, sequence, hour) {
+  const timestamp = new Date(referenceNow.getTime() - (daysAgo * MS_PER_DAY));
+  timestamp.setUTCHours(hour, (sequence * 7) % 60, 0, 0);
+  return timestamp;
+}
+
+function getTargetIssueCount() {
+  return Math.max(
+    config.sampleIssueCount,
+    config.completedStoryCount + config.inProgressStoryCount,
+  );
+}
+
+function getBootstrapSearchLimit() {
+  return Math.max(getTargetIssueCount() + 20, 200);
 }
 
 async function chooseIssueType(projectKey) {
   const statusGroups = await jiraRequest(
     `/rest/api/2/project/${encodeURIComponent(projectKey)}/statuses`,
   );
-  const preferred = ["Task", "Story", "Bug"];
+  const preferred = ["Story", "Task", "Bug"];
   const issueTypes = Array.isArray(statusGroups) ? statusGroups : [];
 
   for (const preferredName of preferred) {
@@ -450,31 +562,40 @@ async function chooseIssueType(projectKey) {
   return { id: fallback.id, name: fallback.name };
 }
 
-async function createIssue(projectKey, issueType, summary) {
-  console.log(`Creating Jira issue ${summary}`);
+async function createIssue(projectKey, issueType, issuePlan) {
+  console.log(`Creating Jira issue ${issuePlan.summary}`);
   return jiraRequest("/rest/api/2/issue", {
     method: "POST",
     body: {
       fields: {
+        description: issuePlan.description,
         issuetype: { id: issueType.id },
         labels: [config.issueLabel],
         project: { key: projectKey },
-        summary,
+        summary: issuePlan.summary,
       },
     },
   });
 }
 
-async function applyTransitions(issueKey, transitionPreferenceSets) {
-  for (const preferredNames of transitionPreferenceSets) {
-    const transitioned = await transitionIssue(issueKey, preferredNames);
+async function applyTransitions(issueKey, transitionPlans) {
+  const appliedTransitions = [];
+
+  for (const transitionPlan of transitionPlans) {
+    const transitioned = await transitionIssue(issueKey, transitionPlan.preferredNames);
 
     if (!transitioned) {
       console.log(
-        `No matching Jira transition found for ${issueKey}: ${preferredNames.join(", ")}`,
+        `No matching Jira transition found for ${issueKey}: ${transitionPlan.preferredNames.join(", ")}`,
       );
+
+      continue;
     }
+
+    appliedTransitions.push(transitionPlan);
   }
+
+  return appliedTransitions;
 }
 
 async function transitionIssue(issueKey, preferredNames) {
@@ -508,20 +629,139 @@ async function transitionIssue(issueKey, preferredNames) {
   return true;
 }
 
-async function searchIssues(jql) {
+async function backfillIssueHistory(issue, issuePlan, appliedTransitions) {
+  const changeGroupIds = await loadStatusChangeGroupIds(issue.id);
+
+  if (changeGroupIds.length !== appliedTransitions.length) {
+    throw new Error(
+      `Expected ${appliedTransitions.length} status change groups for ${issue.key}, found ${changeGroupIds.length}`,
+    );
+  }
+
+  const updatedAt = appliedTransitions.length > 0
+    ? appliedTransitions[appliedTransitions.length - 1].changedAt
+    : issuePlan.createdAt;
+
+  const statements = [
+    "BEGIN;",
+    `UPDATE jiraissue SET created = ${sqlTimestamp(issuePlan.createdAt)}, updated = ${sqlTimestamp(updatedAt)} WHERE id = ${sqlNumeric(issue.id)};`,
+    ...changeGroupIds.map(
+      (id, index) =>
+        `UPDATE changegroup SET created = ${sqlTimestamp(appliedTransitions[index].changedAt)} WHERE id = ${id};`,
+    ),
+    "COMMIT;",
+  ];
+
+  await runPsql(statements.join("\n"));
+  await reindexIssue(issue.id);
+}
+
+async function loadStatusChangeGroupIds(issueId) {
+  const output = await runPsql(`
+    SELECT cg.id
+    FROM changegroup cg
+    JOIN changeitem ci ON ci.groupid = cg.id
+    WHERE cg.issueid = ${sqlNumeric(issueId)}
+      AND ci.field = 'status'
+    GROUP BY cg.id, cg.created
+    ORDER BY cg.created ASC, cg.id ASC;
+  `);
+
+  if (!output) {
+    return [];
+  }
+
+  return output
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+async function runPsql(sql) {
+  const { stdout } = await execFile(
+    "psql",
+    [
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-h",
+      config.dbHost,
+      "-p",
+      String(config.dbPort),
+      "-U",
+      config.dbUser,
+      "-d",
+      config.dbName,
+      "-t",
+      "-A",
+      "-c",
+      sql,
+    ],
+    {
+      env: {
+        ...process.env,
+        PGPASSWORD: config.dbPassword,
+      },
+    },
+  );
+
+  return stdout.trim();
+}
+
+function sqlLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function sqlTimestamp(value) {
+  return `${sqlLiteral(value.toISOString())}::timestamptz`;
+}
+
+function sqlNumeric(value) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    throw new Error(`Expected numeric SQL value, received: ${value}`);
+  }
+
+  return String(Math.trunc(numeric));
+}
+
+async function reindexIssue(issueId) {
+  await jiraRequest("/rest/api/2/reindex/issue", {
+    method: "POST",
+    query: {
+      indexChangeHistory: true,
+      issueId,
+    },
+  });
+}
+
+async function deleteIssue(issueKey) {
+  console.log(`Deleting Jira issue ${issueKey}`);
+  await jiraRequest(`/rest/api/2/issue/${encodeURIComponent(issueKey)}`, {
+    method: "DELETE",
+    query: {
+      deleteSubtasks: true,
+    },
+  });
+}
+
+async function searchIssues(jql, maxResults = getBootstrapSearchLimit()) {
   const searchResult = await jiraRequest("/rest/api/2/search", {
     query: {
-      fields: "summary,status",
+      fields: "summary,status,issuetype,created,updated",
       jql,
-      maxResults: config.sampleIssueCount,
+      maxResults,
     },
   });
 
   return (searchResult.issues ?? []).map((issue) => ({
+    createdAt: issue.fields?.created ?? null,
     id: issue.id,
+    issueType: issue.fields?.issuetype?.name ?? null,
     key: issue.key,
     status: issue.fields?.status?.name ?? null,
     summary: issue.fields?.summary ?? null,
+    updatedAt: issue.fields?.updated ?? null,
   }));
 }
 
