@@ -23,6 +23,7 @@ import {
   formatIssueDetails,
   hasNamesForAllIds,
   mapScope,
+  parseStoredStringArray,
   selectNamedValues,
 } from '../_lib';
 import { enqueueScopeSyncJob } from '@/server/queue';
@@ -39,15 +40,6 @@ function sameStringSequence(left: string[], right: string[]): boolean {
 }
 
 type ScopeUpdatePayload = z.infer<typeof UpdateFlowScopeRequestSchema>;
-const StoredStringArraySchema = z.array(z.string());
-
-function parseStoredStringArray(value: unknown, fieldName: string): string[] {
-  const parsed = StoredStringArraySchema.safeParse(value);
-  if (!parsed.success) {
-    throw new Error(`Stored flow scope field ${fieldName} must be a string array.`);
-  }
-  return parsed.data;
-}
 
 function hasBoundaryChanges(scope: {
   connectionId: string;

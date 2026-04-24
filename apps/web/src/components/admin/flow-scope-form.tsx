@@ -374,11 +374,12 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
     boardDetail?.completionStatuses ?? boardDetail?.statuses ?? [],
   );
   const boardStatusIds = new Set(boardDetail?.statuses.map((status) => status.id) ?? []);
+  const destructiveActionsDisabled = deleting || submitting;
   const destructiveButtonStyle = {
-    ...buttonStyle('secondary', deleting),
+    ...buttonStyle('secondary', destructiveActionsDisabled),
     border: `1px solid ${palette.danger}`,
-    background: deleting ? palette.buttonDisabled : palette.dangerSoft,
-    color: deleting ? palette.buttonDisabledText : palette.danger,
+    background: destructiveActionsDisabled ? palette.buttonDisabled : palette.dangerSoft,
+    color: destructiveActionsDisabled ? palette.buttonDisabledText : palette.danger,
   };
 
   return (
@@ -572,7 +573,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
                   setDeleteError(null);
                   setSubmitError(null);
                 }}
-                disabled={deleting || submitting}
+                disabled={destructiveActionsDisabled}
                 style={destructiveButtonStyle}
               >
                 Delete Flow Scope
@@ -583,7 +584,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
                 <button
                   type="button"
                   onClick={() => { void handleDelete(); }}
-                  disabled={deleting || submitting}
+                  disabled={destructiveActionsDisabled}
                   style={destructiveButtonStyle}
                 >
                   {deleting ? 'Deleting…' : 'Confirm Delete Flow Scope'}

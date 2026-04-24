@@ -24,7 +24,7 @@ type DbSyncRun = NonNullable<Awaited<ReturnType<typeof getSyncRun>>>;
 const NamedValueArraySchema = NamedValueSchema.array();
 const StoredStringArraySchema = z.array(z.string());
 
-function parseStoredStringArray(value: unknown, fieldName: string): string[] {
+export function parseStoredStringArray(value: unknown, fieldName: string): string[] {
   const parsed = StoredStringArraySchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(`Stored flow scope field ${fieldName} must be a string array.`);
