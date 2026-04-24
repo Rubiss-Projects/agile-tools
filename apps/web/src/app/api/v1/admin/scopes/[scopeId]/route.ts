@@ -33,6 +33,10 @@ function sameStringSet(left: string[], right: string[]): boolean {
   return right.every((value) => leftSet.has(value));
 }
 
+function sameStringSequence(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 type ScopeUpdatePayload = z.infer<typeof UpdateFlowScopeRequestSchema>;
 
 function hasBoundaryChanges(scope: {
@@ -63,7 +67,38 @@ function hasBoardSelectionChange(scope: {
 function hasIssueTypeSelectionChange(scope: {
   includedIssueTypeIds: string[];
 }, input: ScopeUpdatePayload): boolean {
-  return !sameStringSet(scope.includedIssueTypeIds, input.includedIssueTypeIds);
+  return !sameStringSequence(scope.includedIssueTypeIds, input.includedIssueTypeIds);
+}
+
+function matchesQueuedScopeForRollback(
+  scope: {
+    connectionId: string;
+    boardId: string;
+    timezone: string;
+    includedIssueTypeIds: string[];
+    includedIssueTypeNames: string[];
+    startStatusIds: string[];
+    doneStatusIds: string[];
+  },
+  queued: {
+    connectionId: string;
+    boardId: string;
+    timezone: string;
+    includedIssueTypeIds: string[];
+    includedIssueTypeNames: string[];
+    startStatusIds: string[];
+    doneStatusIds: string[];
+  },
+): boolean {
+  return (
+    scope.connectionId === queued.connectionId &&
+    scope.boardId === queued.boardId &&
+    scope.timezone === queued.timezone &&
+    sameStringSequence(scope.includedIssueTypeIds, queued.includedIssueTypeIds) &&
+    sameStringSequence(scope.includedIssueTypeNames, queued.includedIssueTypeNames) &&
+    sameStringSet(scope.startStatusIds, queued.startStatusIds) &&
+    sameStringSet(scope.doneStatusIds, queued.doneStatusIds)
+  );
 }
 
 function toScopeUpdateInput(scope: {
@@ -349,7 +384,10 @@ export async function PUT(
             return false;
           }
 
-          const scopeStillMatchesUpdatedBoundary = hasBoundaryChanges(currentScope, parsed.data) === false;
+          const scopeStillMatchesUpdatedBoundary = matchesQueuedScopeForRollback(
+            currentScope,
+            txResult.updated,
+          );
 
           if (!scopeStillMatchesUpdatedBoundary) {
             return false;

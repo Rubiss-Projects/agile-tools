@@ -245,6 +245,37 @@ describe('PUT /v1/admin/scopes/:id', () => {
     expect(syncRuns).toHaveLength(0);
   });
 
+  it('reorders included issue type names to match the submitted id order', async () => {
+    const db = getPrismaClient();
+    await db.flowScope.update({
+      where: { id: scopeId },
+      data: {
+        includedIssueTypeIds: ['it-1', 'it-2'],
+        includedIssueTypeNames: ['Story', 'Bug'],
+      },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      includedIssueTypeIds: ['it-2', 'it-1'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(200);
+
+    const body = FlowScopeSchema.parse(await res.json());
+    expect(body.includedIssueTypes).toEqual([
+      { id: 'it-2', name: 'Bug' },
+      { id: 'it-1', name: 'Story' },
+    ]);
+
+    const updatedScope = await db.flowScope.findUniqueOrThrow({ where: { id: scopeId } });
+    expect(updatedScope.includedIssueTypeNames).toEqual(['Bug', 'Story']);
+
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(0);
+  });
+
   it('returns 404 when the scope does not exist', async () => {
     const missingId = '00000000-0000-0000-0000-000000000000';
     const req = makeRequest(`http://localhost/api/v1/admin/scopes/${missingId}`, 'PUT', {
@@ -362,6 +393,51 @@ describe('PUT /v1/admin/scopes/:id', () => {
     const scope = await db.flowScope.findUnique({ where: { id: scopeId } });
     expect(scope?.startStatusIds).toEqual(['1']);
     expect(scope?.syncIntervalMinutes).toBe(30);
+
+    const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('canceled');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_ENQUEUE_FAILED');
+  });
+
+  it('skips rollback when a concurrent update reorders issue types before enqueue failure handling', async () => {
+    const db = getPrismaClient();
+    await db.flowScope.update({
+      where: { id: scopeId },
+      data: {
+        includedIssueTypeIds: ['it-1', 'it-2'],
+        includedIssueTypeNames: ['Story', 'Bug'],
+      },
+    });
+
+    vi.mocked(enqueueScopeSyncJob).mockImplementationOnce(async () => {
+      await db.flowScope.update({
+        where: { id: scopeId },
+        data: {
+          includedIssueTypeIds: ['it-2', 'it-1'],
+          includedIssueTypeNames: ['Bug', 'Story'],
+        },
+      });
+
+      return null;
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      includedIssueTypeIds: ['it-1', 'it-2'],
+      startStatusIds: ['2'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(503);
+
+    const body = ProblemSchema.parse(await res.json());
+    expect(body.message).toContain('manual review');
+
+    const scope = await db.flowScope.findUniqueOrThrow({ where: { id: scopeId } });
+    expect(scope.startStatusIds).toEqual(['2']);
+    expect(scope.includedIssueTypeIds).toEqual(['it-2', 'it-1']);
+    expect(scope.includedIssueTypeNames).toEqual(['Bug', 'Story']);
 
     const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
     expect(syncRuns).toHaveLength(1);
