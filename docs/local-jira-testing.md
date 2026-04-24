@@ -58,7 +58,8 @@ After the first-run wizard is complete, the compose file can seed the minimum Ag
 
 - one software project
 - one Kanban board and backing filter
-- several sample issues with real transition history
+- 72 completed stories with varied cycle-time ranges across the last 90 days
+- 10 stories currently in progress for the analytics page
 - one PAT for the Jira user you supply
 
 Add the bootstrap credentials to your local `.env` first:
@@ -75,6 +76,8 @@ docker compose -f docker-compose.jira.yml --profile bootstrap run --rm jira-boot
 ```
 
 The service waits for Jira to accept authenticated API requests, so it is safe to run immediately after the wizard if the app is still finishing startup.
+
+By default the bootstrap job deletes prior issues with the bootstrap label before reseeding, so rerunning it refreshes the demo dataset instead of appending another small batch of stale fixtures.
 
 Bootstrap output is written to `.jira-local/jira-bootstrap.json` and includes the seeded project key, board id, issue keys, and any PAT the script created.
 
