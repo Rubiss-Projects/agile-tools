@@ -35,14 +35,14 @@ async function main() {
   const currentUser = await jiraRequest("/rest/api/2/myself");
   const projectResult = await ensureProject(currentUser);
   const board = await ensureBoard(projectResult.project, projectResult.created);
-  const issuePlan = buildIssuePlan();
-  const issues = await ensureSampleIssues(projectResult.project.key, issuePlan);
+  const issuePlans = buildIssuePlan();
+  const issues = await ensureSampleIssues(projectResult.project.key, issuePlans);
   const pat = config.createPat ? await ensurePat() : null;
 
   const output = {
     generatedAt: new Date().toISOString(),
     baseUrl: config.publicBaseUrl,
-    seededDataset: summarizeIssuePlan(issuePlan),
+    seededDataset: summarizeIssuePlan(issuePlans),
     username: config.username,
     project: {
       id: projectResult.project.id,
@@ -647,7 +647,7 @@ async function backfillIssueHistory(issue, issuePlan, appliedTransitions) {
     `UPDATE jiraissue SET created = ${sqlTimestamp(issuePlan.createdAt)}, updated = ${sqlTimestamp(updatedAt)} WHERE id = ${sqlNumeric(issue.id)};`,
     ...changeGroupIds.map(
       (id, index) =>
-        `UPDATE changegroup SET created = ${sqlTimestamp(appliedTransitions[index].changedAt)} WHERE id = ${id};`,
+        `UPDATE changegroup SET created = ${sqlTimestamp(appliedTransitions[index].changedAt)} WHERE id = ${sqlNumeric(id)};`,
     ),
     "COMMIT;",
   ];

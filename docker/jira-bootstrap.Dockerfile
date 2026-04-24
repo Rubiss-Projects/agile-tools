@@ -1,5 +1,5 @@
 FROM node:24-alpine
 
-RUN apk add --no-cache postgresql17-client
+RUN apk add --no-cache postgresql18-client
 
 WORKDIR /bootstrap
