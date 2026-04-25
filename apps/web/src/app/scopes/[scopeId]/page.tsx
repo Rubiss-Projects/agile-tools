@@ -54,6 +54,22 @@ export function formatScopeIssueTypes(
     .join(', ');
 }
 
+export function formatScopeTimestamp(
+  timestamp: string,
+  timeZone: string,
+  locale = 'en-US',
+): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date(timestamp));
+}
+
 export default async function ScopePage({
   params,
 }: {
@@ -104,6 +120,9 @@ export default async function ScopePage({
       : scope.status === 'needs_attention'
         ? 'danger'
         : 'neutral';
+  const formattedLastSyncAt = lastSync?.finishedAt
+    ? formatScopeTimestamp(lastSync.finishedAt, scope.timezone)
+    : null;
 
   return (
     <main style={pageShellStyle}>
@@ -130,7 +149,7 @@ export default async function ScopePage({
           <article style={statCardStyle}>
             <p style={statLabelStyle}>Last Sync</p>
             <p style={{ ...statValueStyle, fontSize: '1rem' }}>
-              {lastSync?.finishedAt ? new Date(lastSync.finishedAt).toLocaleString() : 'No sync yet'}
+              {formattedLastSyncAt ?? 'No sync yet'}
             </p>
           </article>
           <article style={statCardStyle}>
@@ -182,9 +201,9 @@ export default async function ScopePage({
                 >
                   {lastSync.status}
                 </strong>
-                {lastSync.finishedAt && (
+                {formattedLastSyncAt && (
                   <span style={{ marginLeft: '0.45rem', color: palette.soft }}>
-                    finished {new Date(lastSync.finishedAt).toLocaleString()}
+                    finished {formattedLastSyncAt}
                   </span>
                 )}
               </p>

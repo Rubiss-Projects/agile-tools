@@ -1,6 +1,75 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
 
-import { formatScopeIssueTypes } from './page';
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+
+const { getWorkspaceContextMock, buildScopeSummaryMock } = vi.hoisted(() => ({
+  getWorkspaceContextMock: vi.fn(),
+  buildScopeSummaryMock: vi.fn(),
+}));
+
+vi.mock('@/server/auth', () => ({
+  getWorkspaceContext: getWorkspaceContextMock,
+}));
+
+vi.mock('@/server/views/scope-summary', () => ({
+  buildScopeSummary: buildScopeSummaryMock,
+}));
+
+vi.mock('@/components/admin/trigger-sync-button', () => ({
+  TriggerSyncButton: () => null,
+}));
+
+vi.mock('@/components/admin/hold-definition-form', () => ({
+  HoldDefinitionForm: () => null,
+}));
+
+vi.mock('@/components/flow/flow-analytics-section', () => ({
+  FlowAnalyticsSection: () => null,
+}));
+
+vi.mock('@/components/app/auth-required-panel', () => ({
+  AuthRequiredPanel: ({ title }: { title: string }) => React.createElement('div', null, title),
+}));
+
+import ScopePage, { formatScopeIssueTypes, formatScopeTimestamp } from './page';
+
+beforeEach(() => {
+  getWorkspaceContextMock.mockResolvedValue({
+    userId: 'user-1',
+    workspaceId: 'workspace-1',
+    role: 'member',
+  });
+  buildScopeSummaryMock.mockResolvedValue({
+    scope: {
+      id: 'scope-1',
+      connectionId: 'connection-1',
+      boardId: 42,
+      boardName: 'Platform Board',
+      timezone: 'America/New_York',
+      includedIssueTypeIds: ['story', 'bug'],
+      startStatusIds: ['in-progress'],
+      doneStatusIds: ['done'],
+      syncIntervalMinutes: 10,
+      status: 'active',
+    },
+    connectionHealth: 'healthy',
+    lastSync: {
+      id: 'sync-1',
+      scopeId: 'scope-1',
+      trigger: 'manual',
+      status: 'succeeded',
+      finishedAt: '2026-04-24T22:00:00.000Z',
+      dataVersion: 'sync-1',
+    },
+    warnings: [],
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('formatScopeIssueTypes', () => {
   it('prefers persisted configured issue type names when available', () => {
@@ -57,5 +126,22 @@ describe('formatScopeIssueTypes', () => {
         includedIssueTypeIds: ['story', 'bug'],
       }),
     ).toBe('story, bug');
+  });
+});
+
+describe('formatScopeTimestamp', () => {
+  it('formats timestamps in the selected scope timezone instead of the server timezone', () => {
+    expect(formatScopeTimestamp('2026-04-24T22:00:00.000Z', 'America/New_York')).toMatch(
+      /Apr 24, 2026.*6:00 PM.*EDT/,
+    );
+  });
+});
+
+describe('ScopePage', () => {
+  it('renders last sync timestamps in the selected scope timezone in both display locations', async () => {
+    render(await ScopePage({ params: Promise.resolve({ scopeId: 'scope-1' }) }));
+
+    const matches = await screen.findAllByText(/Apr 24, 2026.*6:00 PM.*EDT/);
+    expect(matches).toHaveLength(2);
   });
 });
