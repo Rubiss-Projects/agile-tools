@@ -109,4 +109,26 @@ describe('ForecastCalculationDrawer', () => {
       await screen.findByText(/unsupported timezone identifier \("ETC"\)/i),
     ).toBeVisible();
   });
+
+  it('does not fetch the latest throughput when the forecast has no pinned snapshot', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ForecastCalculationDrawer
+        open={true}
+        scopeId="scope-1"
+        request={request}
+        response={{ ...response, dataVersion: '' }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/was not generated from a synced snapshot/i),
+    ).toBeVisible();
+    expect(screen.getByText('Pinned snapshot')).toBeVisible();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
 });

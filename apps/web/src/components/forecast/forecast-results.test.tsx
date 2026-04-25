@@ -21,6 +21,8 @@ afterEach(() => {
 
 describe('ForecastResults', () => {
   it('opens the calculation notebook drawer for the current run', async () => {
+    const user = userEvent.setup();
+
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValueOnce(
@@ -63,7 +65,7 @@ describe('ForecastResults', () => {
       />,
     );
 
-    await userEvent.click(
+    await user.click(
       screen.getByRole('button', { name: /how this forecast was calculated/i }),
     );
 
