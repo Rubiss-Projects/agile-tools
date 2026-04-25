@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { InvalidTimeZoneError, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { buildScopeSummary } from '@/server/views/scope-summary';
 import { TriggerSyncButton } from '@/components/admin/trigger-sync-button';
@@ -59,15 +60,49 @@ export function formatScopeTimestamp(
   timeZone: string,
   locale = 'en-US',
 ): string {
+  try {
+    const normalizedTimeZone = normalizeTimeZoneOrThrow(timeZone);
+    return new Intl.DateTimeFormat(locale, {
+      timeZone: normalizedTimeZone,
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).format(new Date(timestamp));
+  } catch (err) {
+    if (err instanceof InvalidTimeZoneError) {
+      const fallbackTimestamp = new Intl.DateTimeFormat(locale, {
+        timeZone: 'UTC',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short',
+      }).format(new Date(timestamp));
+      return `${fallbackTimestamp} (invalid scope timezone: ${timeZone})`;
+    }
+    throw err;
+  }
+}
+
+export function formatScopeTimestampParts(
+  timestamp: string,
+  timeZone: string,
+  locale = 'en-US',
+): Intl.DateTimeFormatPart[] {
+  const normalizedTimeZone = normalizeTimeZoneOrThrow(timeZone);
   return new Intl.DateTimeFormat(locale, {
-    timeZone,
+    timeZone: normalizedTimeZone,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
-  }).format(new Date(timestamp));
+  }).formatToParts(new Date(timestamp));
 }
 
 export default async function ScopePage({
