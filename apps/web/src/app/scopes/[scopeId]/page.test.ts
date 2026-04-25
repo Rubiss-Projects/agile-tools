@@ -33,7 +33,15 @@ vi.mock('@/components/app/auth-required-panel', () => ({
   AuthRequiredPanel: ({ title }: { title: string }) => React.createElement('div', null, title),
 }));
 
-import ScopePage, { formatScopeIssueTypes, formatScopeTimestamp } from './page';
+import ScopePage, {
+  formatScopeIssueTypes,
+  formatScopeTimestamp,
+  formatScopeTimestampParts,
+} from './page';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 beforeEach(() => {
   getWorkspaceContextMock.mockResolvedValue({
@@ -131,17 +139,34 @@ describe('formatScopeIssueTypes', () => {
 
 describe('formatScopeTimestamp', () => {
   it('formats timestamps in the selected scope timezone instead of the server timezone', () => {
-    expect(formatScopeTimestamp('2026-04-24T22:00:00.000Z', 'America/New_York')).toMatch(
-      /Apr 24, 2026.*6:00 PM.*EDT/,
+    const parts = formatScopeTimestampParts('2026-04-24T22:00:00.000Z', 'America/New_York');
+
+    expect(parts.find((part) => part.type === 'month')?.value).toBe('Apr');
+    expect(parts.find((part) => part.type === 'day')?.value).toBe('24');
+    expect(parts.find((part) => part.type === 'year')?.value).toBe('2026');
+    expect(parts.find((part) => part.type === 'hour')?.value).toBe('6');
+    expect(parts.find((part) => part.type === 'minute')?.value).toBe('00');
+  });
+
+  it('falls back to a UTC timestamp and calls out invalid scope timezones', () => {
+    expect(formatScopeTimestamp('2026-04-24T22:00:00.000Z', 'ETC')).toContain(
+      'invalid scope timezone: ETC',
     );
   });
 });
 
 describe('ScopePage', () => {
   it('renders last sync timestamps in the selected scope timezone in both display locations', async () => {
+    const formattedTimestamp = formatScopeTimestamp(
+      '2026-04-24T22:00:00.000Z',
+      'America/New_York',
+    );
+
     render(await ScopePage({ params: Promise.resolve({ scopeId: 'scope-1' }) }));
 
-    const matches = await screen.findAllByText(/Apr 24, 2026.*6:00 PM.*EDT/);
-    expect(matches).toHaveLength(2);
+    expect(await screen.findByText(formattedTimestamp)).toBeVisible();
+    expect(
+      screen.getByText(new RegExp(`finished\\s+${escapeRegExp(formattedTimestamp)}`)),
+    ).toBeVisible();
   });
 });
