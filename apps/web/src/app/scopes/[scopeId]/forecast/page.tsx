@@ -44,6 +44,7 @@ export default function ForecastPage() {
   const [throughputError, setThroughputError] = useState<string | null>(null);
 
   const [forecastResponse, setForecastResponse] = useState<ForecastResponse | null>(null);
+  const [lastForecastRequest, setLastForecastRequest] = useState<ForecastRequest | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
 
@@ -79,6 +80,7 @@ export default function ForecastPage() {
     setForecastLoading(true);
     setForecastError(null);
     setForecastResponse(null);
+    setLastForecastRequest(null);
 
     try {
       const body = {
@@ -96,6 +98,7 @@ export default function ForecastPage() {
       if (!res.ok) {
         throw new Error(getProblemMessage(data as ProblemResponse | null, `HTTP ${res.status}`));
       }
+      setLastForecastRequest(request);
       setForecastResponse(data as ForecastResponse);
     } catch (err) {
       setForecastError(err instanceof Error ? err.message : 'Forecast failed.');
@@ -197,7 +200,11 @@ export default function ForecastPage() {
                 <p style={sectionCopyStyle}>Confidence levels are computed from the current throughput sample pinned to the selected data version.</p>
               </div>
             </div>
-            <ForecastResults response={forecastResponse} />
+            <ForecastResults
+              scopeId={scopeId}
+              request={lastForecastRequest}
+              response={forecastResponse}
+            />
           </section>
         )}
       </div>

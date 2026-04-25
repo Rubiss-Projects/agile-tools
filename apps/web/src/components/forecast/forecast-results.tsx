@@ -1,9 +1,25 @@
 'use client';
 
+import { useState } from 'react';
 import type { ForecastResponse, ForecastResult } from '@agile-tools/shared/contracts/forecast';
-import { codeStyle, insetPanelStyle, noticeStyle, palette, statCardStyle, statLabelStyle, statValueStyle } from '@/components/app/chrome';
+import type { ForecastRequest } from '@agile-tools/shared/contracts/forecast';
+import {
+  buttonStyle,
+  codeStyle,
+  eyebrowStyle,
+  insetPanelStyle,
+  noticeStyle,
+  palette,
+  sectionCopyStyle,
+  statCardStyle,
+  statLabelStyle,
+  statValueStyle,
+} from '@/components/app/chrome';
+import { ForecastCalculationDrawer } from './forecast-calculation-drawer';
 
 interface ForecastResultsProps {
+  scopeId: string;
+  request: ForecastRequest | null;
   response: ForecastResponse;
 }
 
@@ -22,9 +38,10 @@ function formatResult(result: ForecastResult, type: 'when' | 'how_many'): string
   return '—';
 }
 
-export function ForecastResults({ response }: ForecastResultsProps) {
+export function ForecastResults({ scopeId, request, response }: ForecastResultsProps) {
   const { type, results, warnings, sampleSize, iterations, dataVersion, historicalWindowDays } =
     response;
+  const [notebookOpen, setNotebookOpen] = useState(false);
 
   const hasLowSample = warnings.some(
     (w) => w.code === 'LOW_SAMPLE_SIZE' || w.code === 'NO_THROUGHPUT_HISTORY',
@@ -66,6 +83,39 @@ export function ForecastResults({ response }: ForecastResultsProps) {
         </p>
       )}
 
+      {request && (
+        <div
+          style={{
+            ...insetPanelStyle,
+            marginTop: '0.85rem',
+            padding: '1rem 1.1rem',
+            border: `1px solid ${palette.lineStrong}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            background:
+              `linear-gradient(135deg, ${palette.panelStrong} 0%, ${palette.panelAlt} 100%)`,
+          }}
+        >
+          <div style={{ maxWidth: '34rem' }}>
+            <p style={{ ...eyebrowStyle, marginBottom: '0.45rem' }}>Calculation notebook</p>
+            <p style={{ ...sectionCopyStyle, margin: 0 }}>
+              See the exact inputs, historical sample, and Monte Carlo method behind this run
+              without leaving the result view.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotebookOpen(true)}
+            style={buttonStyle('secondary')}
+          >
+            How this forecast was calculated
+          </button>
+        </div>
+      )}
+
       {/* Metadata */}
       <div
         style={{
@@ -91,6 +141,16 @@ export function ForecastResults({ response }: ForecastResultsProps) {
           Data version: <span style={codeStyle}>{dataVersion || '—'}</span>
         </span>
       </div>
+
+      {request && (
+        <ForecastCalculationDrawer
+          open={notebookOpen}
+          scopeId={scopeId}
+          request={request}
+          response={response}
+          onClose={() => setNotebookOpen(false)}
+        />
+      )}
     </div>
   );
 }
