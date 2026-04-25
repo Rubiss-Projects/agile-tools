@@ -126,7 +126,7 @@ export default function ForecastPage() {
             <p style={{ ...statValueStyle, fontSize: '0.92rem' }}><span style={codeStyle}>{scopeId}</span></p>
           </article>
           <article style={statCardStyle}>
-            <p style={statLabelStyle}>Sample Size</p>
+            <p style={statLabelStyle}>Forecast Sample</p>
             <p style={statValueStyle}>{throughput?.sampleSize ?? '—'}</p>
           </article>
           <article style={statCardStyle}>
@@ -147,7 +147,9 @@ export default function ForecastPage() {
           <div style={sectionHeaderRowStyle}>
             <div>
               <h2 style={sectionTitleStyle}>Historical throughput</h2>
-              <p style={sectionCopyStyle}>The chart includes zero-completion days so the Monte Carlo sample reflects real dry-day frequency.</p>
+              <p style={sectionCopyStyle}>
+                The chart includes zero-completion days so the Monte Carlo sample reflects real dry-day frequency. The current partial day can appear on the chart, but it is excluded from the forecast sample.
+              </p>
             </div>
           </div>
         {throughputLoading && (

@@ -12,6 +12,13 @@ vi.mock('@/server/request-security', () => ({
   enforceRateLimit: vi.fn(),
 }));
 
+vi.mock('@agile-tools/analytics', () => ({
+  runWhenForecast: vi.fn(),
+  runHowManyForecast: vi.fn(),
+  DEFAULT_MONTE_CARLO_ITERATIONS: 1000,
+  FORECAST_CACHE_TTL_HOURS: 24,
+}));
+
 vi.mock('@agile-tools/db', () => ({
   getPrismaClient: vi.fn(() => ({
     forecastResultCache: {
@@ -34,7 +41,9 @@ const {
   getFlowScope,
   getLastSucceededSyncRun,
   queryDailyThroughput,
+  storeForecastCache,
 } = await import('@agile-tools/db');
+const { runWhenForecast } = await import('@agile-tools/analytics');
 
 describe('POST /api/v1/scopes/:scopeId/forecasts', () => {
   beforeEach(() => {
@@ -83,5 +92,51 @@ describe('POST /api/v1/scopes/:scopeId/forecasts', () => {
     expect(body.code).toBe('INVALID_SCOPE_TIMEZONE');
     expect(body.message).toContain('ETC');
     expect(body.message).toContain('America/New_York');
+  });
+
+  it('excludes incomplete days from the forecast sample size', async () => {
+    vi.mocked(queryDailyThroughput).mockResolvedValue([
+      { day: '2026-04-19', completedStoryCount: 4, complete: true },
+      { day: '2026-04-20', completedStoryCount: 3, complete: true },
+      { day: '2026-04-21', completedStoryCount: 40, complete: false },
+    ] as never);
+    vi.mocked(runWhenForecast).mockReturnValue({
+      warnings: [],
+      results: [{ confidenceLevel: 85, completionDate: '2026-05-01' }],
+    } as never);
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/v1/scopes/scope-1/forecasts', {
+        method: 'POST',
+        headers: {
+          Origin: 'http://localhost',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'when',
+          remainingStoryCount: 12,
+          historicalWindowDays: 90,
+          confidenceLevels: [85],
+        }),
+      }),
+      { params: Promise.resolve({ scopeId: 'scope-1' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(runWhenForecast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        historicalDailyThroughput: [4, 3],
+        sampleSize: 7,
+      }),
+    );
+    expect(storeForecastCache).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        sampleSize: 7,
+      }),
+    );
+
+    const body = await response.json();
+    expect(body.sampleSize).toBe(7);
   });
 });

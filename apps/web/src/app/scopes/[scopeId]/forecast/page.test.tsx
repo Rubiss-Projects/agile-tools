@@ -51,4 +51,35 @@ describe('ForecastPage', () => {
     ).toBeVisible();
     expect(screen.queryByText(/failed to load throughput \(HTTP 409\)/i)).not.toBeInTheDocument();
   });
+
+  it('explains that the current partial day is excluded from the forecast sample', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        jsonResponse({
+          scopeId: 'scope-1',
+          dataVersion: 'sync-1',
+          syncedAt: '2026-04-21T00:00:00.000Z',
+          historicalWindowDays: 90,
+          sampleSize: 7,
+          warnings: [],
+          days: [
+            { day: '2026-04-19', completedStoryCount: 4, complete: true },
+            { day: '2026-04-20', completedStoryCount: 3, complete: true },
+            { day: '2026-04-21', completedStoryCount: 40, complete: false },
+          ],
+        }),
+      ),
+    );
+
+    render(<ForecastPage />);
+
+    expect(await screen.findByText('Forecast Sample')).toBeVisible();
+    expect(
+      screen.getByText(/the current partial day can appear on the chart, but it is excluded from the forecast sample/i),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/forecast sample: 7 completed stories from the last 90 days/i),
+    ).toBeVisible();
+  });
 });
