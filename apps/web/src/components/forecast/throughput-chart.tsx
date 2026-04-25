@@ -147,7 +147,8 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
       </div>
 
       <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: palette.soft }}>
-        {sampleSize} stories completed over the last {historicalWindowDays} days
+        Forecast sample: {sampleSize} completed stories from the last {historicalWindowDays} days
+        {' '}(current partial day excluded)
       </p>
     </div>
   );

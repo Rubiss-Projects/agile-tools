@@ -59,4 +59,27 @@ describe('GET /api/v1/scopes/:scopeId/throughput', () => {
     expect(body.message).toContain('ETC');
     expect(body.message).toContain('UTC');
   });
+
+  it('excludes incomplete days from sampleSize while preserving the chart series', async () => {
+    vi.mocked(queryDailyThroughput).mockResolvedValue([
+      { day: '2026-04-19', completedStoryCount: 4, complete: true },
+      { day: '2026-04-20', completedStoryCount: 3, complete: true },
+      { day: '2026-04-21', completedStoryCount: 40, complete: false },
+    ] as never);
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/v1/scopes/scope-1/throughput'),
+      { params: Promise.resolve({ scopeId: 'scope-1' }) },
+    );
+
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.sampleSize).toBe(7);
+    expect(body.days).toEqual([
+      { day: '2026-04-19', completedStoryCount: 4, complete: true },
+      { day: '2026-04-20', completedStoryCount: 3, complete: true },
+      { day: '2026-04-21', completedStoryCount: 40, complete: false },
+    ]);
+  });
 });

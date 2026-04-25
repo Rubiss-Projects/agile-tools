@@ -931,6 +931,7 @@ components:
           type: integer
         sampleSize:
           type: integer
+          description: Completed stories in the forecast-usable sample for the selected window, excluding any current incomplete day.
         warnings:
           type: array
           items:
@@ -1018,6 +1019,7 @@ components:
           type: integer
         sampleSize:
           type: integer
+          description: Completed stories included in the Monte Carlo sample for this forecast.
         iterations:
           type: integer
         warnings:

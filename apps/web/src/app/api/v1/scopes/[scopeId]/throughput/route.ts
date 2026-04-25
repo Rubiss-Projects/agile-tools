@@ -10,6 +10,7 @@ import {
 import type { ThroughputResponse, Warning } from '@agile-tools/shared/contracts/api';
 import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
+import { getForecastSampleSize } from '@/server/views/throughput-sample';
 import { buildInvalidScopeTimezoneProblem } from '../../_problems';
 
 const DEFAULT_HISTORICAL_WINDOW = 90;
@@ -87,7 +88,7 @@ export async function GET(
       dataVersion: effectiveDataVersion,
     });
 
-    const sampleSize = days.reduce((acc, d) => acc + d.completedStoryCount, 0);
+    const sampleSize = getForecastSampleSize(days);
 
     return Response.json({
       scopeId,
