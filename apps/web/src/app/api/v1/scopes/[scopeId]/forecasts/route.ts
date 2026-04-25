@@ -29,7 +29,7 @@ import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { buildInvalidScopeTimezoneProblem } from '../../_problems';
 import { shapeForecastResponse } from '@/server/views/forecast-response';
-import { getForecastSampleDays, getForecastSampleSize } from '@/server/views/throughput-sample';
+import { getCompletedStoryCount, getForecastSampleDays } from '@/server/views/throughput-sample';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -170,7 +170,7 @@ export async function POST(
     });
     const completeDays = getForecastSampleDays(allDays);
     const historicalDailyThroughput = completeDays.map((d) => d.completedStoryCount);
-    const sampleSize = getForecastSampleSize(allDays);
+    const sampleSize = getCompletedStoryCount(completeDays);
 
     // Run Monte Carlo simulation.
     let monteCarlo: MonteCarloForecastResult;
