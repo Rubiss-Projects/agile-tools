@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { ThroughputDay, ThroughputResponse } from '@agile-tools/shared/contracts/api';
 import type { ForecastRequest, ForecastResponse } from '@agile-tools/shared/contracts/forecast';
 import {
@@ -103,7 +104,7 @@ function StepCard({
 }: {
   step: number;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section
@@ -156,17 +157,25 @@ export function ForecastCalculationDrawer({
 
   useEffect(() => {
     if (!open) {
+      setLoading(false);
       setThroughput(null);
       setError(null);
       return;
     }
 
+    if (!response.dataVersion) {
+      setLoading(false);
+      setThroughput(null);
+      setError(
+        'Explanation data is unavailable because this forecast was not generated from a synced snapshot.',
+      );
+      return;
+    }
+
     const params = new URLSearchParams({
       historicalWindowDays: String(response.historicalWindowDays),
+      dataVersion: response.dataVersion,
     });
-    if (response.dataVersion) {
-      params.set('dataVersion', response.dataVersion);
-    }
 
     setLoading(true);
     setError(null);
@@ -330,7 +339,7 @@ export function ForecastCalculationDrawer({
               <article style={statCardStyle}>
                 <p style={statLabelStyle}>Pinned snapshot</p>
                 <p style={{ ...statValueStyle, fontSize: '0.92rem' }}>
-                  <span style={codeStyle}>{response.dataVersion || 'latest'}</span>
+                  <span style={codeStyle}>{response.dataVersion || '—'}</span>
                 </p>
               </article>
             </div>
@@ -353,7 +362,7 @@ export function ForecastCalculationDrawer({
               <div style={{ display: 'grid', gap: '0.9rem', marginTop: '0.85rem' }}>
                 <div style={statGridStyle}>
                   <article style={statCardStyle}>
-                    <p style={statLabelStyle}>Sample size</p>
+                    <p style={statLabelStyle}>Completed stories</p>
                     <p style={statValueStyle}>{throughput.sampleSize}</p>
                   </article>
                   <article style={statCardStyle}>
