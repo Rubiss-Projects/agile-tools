@@ -28,7 +28,7 @@ describe('AgingScatterTooltipCard', () => {
     );
 
     expect(screen.getByText('Normal work item').parentElement).toHaveStyle({
-      minWidth: '0',
+      minWidth: '0px',
       flex: '1 1 auto',
     });
     expect(screen.getByText('Normal work item')).toHaveStyle({

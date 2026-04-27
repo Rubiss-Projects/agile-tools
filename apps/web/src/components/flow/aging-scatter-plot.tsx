@@ -20,11 +20,11 @@ const scatterColors = {
   soft: palette.soft,
   line: palette.line,
   lineStrong: palette.lineStrong,
-  panel: palette.panelStrong,
+  panel: palette.panel,
   panelStrong: palette.panelStrong,
 };
 
-const scatterZoneColors: Record<string, string> = {
+const scatterZoneColors: Record<ScatterDatum['agingZone'], string> = {
   normal: scatterColors.positive,
   watch: scatterColors.warning,
   aging: scatterColors.danger,
@@ -44,6 +44,10 @@ const scatterZoneSurfaces: Record<ScatterDatum['agingZone'], { accent: string; g
     glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-danger) 24%, transparent), transparent 68%)',
   },
 };
+
+function isScatterZone(value: string): value is ScatterDatum['agingZone'] {
+  return value === 'normal' || value === 'watch' || value === 'aging';
+}
 
 /** Render dashed vertical reference lines at the p50, p70, and p85 thresholds. */
 function createThresholdLayer(
@@ -313,9 +317,10 @@ export function AgingScatterPlot({
             },
           },
         }}
-        colors={({ serieId }: { serieId: string | number }) =>
-          scatterZoneColors[String(serieId)] ?? scatterColors.neutral
-        }
+        colors={({ serieId }: { serieId: string | number }) => {
+          const zone = String(serieId);
+          return isScatterZone(zone) ? scatterZoneColors[zone] : scatterColors.neutral;
+        }}
         nodeSize={10}
         useMesh={true}
         layers={[
