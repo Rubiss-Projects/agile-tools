@@ -9,6 +9,42 @@ import type { ScatterDatum, FlowAnalyticsViewModel } from '@/server/views/flow-a
 import type { AgingModel } from '@agile-tools/shared/contracts/api';
 import { palette } from '@/components/app/chrome';
 
+const scatterColors = {
+  positive: palette.chartPositive,
+  warning: palette.chartWarning,
+  danger: palette.chartDanger,
+  neutral: palette.chartNeutral,
+  hold: palette.chartHold,
+  ink: palette.ink,
+  text: palette.text,
+  soft: palette.soft,
+  line: palette.line,
+  lineStrong: palette.lineStrong,
+  panel: palette.panelStrong,
+  panelStrong: palette.panelStrong,
+};
+
+const scatterZoneColors: Record<string, string> = {
+  normal: scatterColors.positive,
+  watch: scatterColors.warning,
+  aging: scatterColors.danger,
+};
+
+const scatterZoneSurfaces: Record<ScatterDatum['agingZone'], { accent: string; glow: string }> = {
+  normal: {
+    accent: 'color-mix(in srgb, var(--chart-positive) 30%, transparent)',
+    glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-positive) 22%, transparent), transparent 68%)',
+  },
+  watch: {
+    accent: 'color-mix(in srgb, var(--chart-warning) 34%, transparent)',
+    glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-warning) 24%, transparent), transparent 68%)',
+  },
+  aging: {
+    accent: 'color-mix(in srgb, var(--chart-danger) 32%, transparent)',
+    glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-danger) 24%, transparent), transparent 68%)',
+  },
+};
+
 /** Render dashed vertical reference lines at the p50, p70, and p85 thresholds. */
 function createThresholdLayer(
   agingModel: AgingModel,
@@ -61,6 +97,140 @@ interface AgingScatterPlotProps {
   height?: number;
 }
 
+export function AgingScatterTooltipCard({
+  datum,
+  ageDays,
+}: {
+  datum: ScatterDatum;
+  ageDays: number;
+}) {
+  const surface = scatterZoneSurfaces[datum.agingZone];
+  const zoneLabel =
+    datum.agingZone === 'aging'
+      ? 'Needs attention'
+      : datum.agingZone === 'watch'
+        ? 'Watchlist'
+        : 'Healthy';
+  const statusLine =
+    datum.currentColumn && datum.currentColumn !== datum.currentStatus
+      ? `${datum.currentStatus} · ${datum.currentColumn}`
+      : datum.currentStatus;
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: `radial-gradient(circle at top right, ${surface.accent}, transparent 46%), ${scatterColors.panel}`,
+        border: `1px solid ${scatterColors.lineStrong}`,
+        borderRadius: '18px',
+        padding: '0.95rem 1rem 0.9rem',
+        fontSize: '0.8125rem',
+        boxShadow: palette.shadowCard,
+        maxWidth: '19.5rem',
+        color: scatterColors.text,
+        backdropFilter: 'blur(16px)',
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: surface.glow,
+          pointerEvents: 'none',
+        }}
+      />
+      <div style={{ position: 'relative', display: 'grid', gap: '0.8rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            alignItems: 'flex-start',
+          }}
+        >
+          <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong
+                style={{
+                  color: scatterColors.ink,
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '1rem',
+                  letterSpacing: '-0.03em',
+                }}
+              >
+                {datum.issueKey}
+              </strong>
+              {datum.issueType && (
+                <span
+                  style={{
+                    padding: '0.18rem 0.45rem',
+                    borderRadius: '999px',
+                    border: `1px solid ${scatterColors.line}`,
+                    color: scatterColors.soft,
+                    background: scatterColors.panelStrong,
+                    fontSize: '0.66rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    fontWeight: 700,
+                  }}
+                >
+                  {datum.issueType}
+                </span>
+              )}
+            </div>
+            <div
+              style={{
+                marginTop: '0.34rem',
+                color: scatterColors.text,
+                lineHeight: 1.45,
+                fontSize: '0.86rem',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {datum.summary}
+            </div>
+          </div>
+          <span
+            style={{
+              flexShrink: 0,
+              padding: '0.28rem 0.55rem',
+              borderRadius: '999px',
+              background: surface.accent,
+              color: scatterZoneColors[datum.agingZone],
+              border: `1px solid ${scatterZoneColors[datum.agingZone]}`,
+              fontSize: '0.66rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {zoneLabel}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '0.55rem',
+          }}
+        >
+          <TooltipStat label="Status" value={statusLine} />
+          <TooltipStat label="Assigned" value={datum.assigneeName ?? 'Unassigned'} />
+          <TooltipStat label="Age" value={`${ageDays.toFixed(1)} days`} />
+          <TooltipStat
+            label="Hold"
+            value={datum.onHoldNow ? 'On hold now' : 'Active'}
+            {...(datum.onHoldNow ? { highlight: scatterColors.hold } : {})}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgingScatterPlot({
   viewModel,
   onItemSelect,
@@ -68,43 +238,9 @@ export function AgingScatterPlot({
 }: AgingScatterPlotProps) {
   const { series, agingModel } = viewModel;
   const isEmpty = series.every((s) => s.data.length === 0);
-  const colors = {
-    positive: palette.chartPositive,
-    warning: palette.chartWarning,
-    danger: palette.chartDanger,
-    neutral: palette.chartNeutral,
-    hold: palette.chartHold,
-    ink: palette.ink,
-    text: palette.text,
-    soft: palette.soft,
-    line: palette.line,
-    lineStrong: palette.lineStrong,
-    panel: palette.panelStrong,
-    panelStrong: palette.panelStrong,
-  };
-  const zoneColors: Record<string, string> = {
-    normal: colors.positive,
-    watch: colors.warning,
-    aging: colors.danger,
-  };
-
-  const zoneSurfaces: Record<ScatterDatum['agingZone'], { accent: string; glow: string }> = {
-    normal: {
-      accent: 'color-mix(in srgb, var(--chart-positive) 30%, transparent)',
-      glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-positive) 22%, transparent), transparent 68%)',
-    },
-    watch: {
-      accent: 'color-mix(in srgb, var(--chart-warning) 34%, transparent)',
-      glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-warning) 24%, transparent), transparent 68%)',
-    },
-    aging: {
-      accent: 'color-mix(in srgb, var(--chart-danger) 32%, transparent)',
-      glow: 'linear-gradient(135deg, color-mix(in srgb, var(--chart-danger) 24%, transparent), transparent 68%)',
-    },
-  };
 
   // Recreated on every render; fine because agingModel only changes on new data loads.
-  const thresholdLayer = createThresholdLayer(agingModel, colors);
+  const thresholdLayer = createThresholdLayer(agingModel, scatterColors);
 
   if (isEmpty) {
     return (
@@ -141,43 +277,45 @@ export function AgingScatterPlot({
         enableGridY={false}
         theme={{
           text: {
-            fill: colors.soft,
+            fill: scatterColors.soft,
             fontSize: 12,
           },
           axis: {
             domain: {
               line: {
-                stroke: colors.line,
+                stroke: scatterColors.line,
               },
             },
             ticks: {
               line: {
-                stroke: colors.line,
+                stroke: scatterColors.line,
               },
               text: {
-                fill: colors.soft,
+                fill: scatterColors.soft,
               },
             },
             legend: {
               text: {
-                fill: colors.soft,
+                fill: scatterColors.soft,
               },
             },
           },
           grid: {
             line: {
-              stroke: colors.line,
+              stroke: scatterColors.line,
             },
           },
           crosshair: {
             line: {
-              stroke: colors.soft,
+              stroke: scatterColors.soft,
               strokeWidth: 1,
               strokeOpacity: 0.5,
             },
           },
         }}
-        colors={({ serieId }: { serieId: string | number }) => zoneColors[String(serieId)] ?? colors.neutral}
+        colors={({ serieId }: { serieId: string | number }) =>
+          scatterZoneColors[String(serieId)] ?? scatterColors.neutral
+        }
         nodeSize={10}
         useMesh={true}
         layers={[
@@ -189,119 +327,9 @@ export function AgingScatterPlot({
           'legends',
           'annotations',
         ]}
-        tooltip={({ node }: { node: ScatterPlotNodeData<ScatterDatum> }) => {
-          const d = node.data;
-          const surface = zoneSurfaces[d.agingZone];
-          const zoneLabel = d.agingZone === 'aging' ? 'Needs attention' : d.agingZone === 'watch' ? 'Watchlist' : 'Healthy';
-          const statusLine = d.currentColumn && d.currentColumn !== d.currentStatus
-            ? `${d.currentStatus} · ${d.currentColumn}`
-            : d.currentStatus;
-          return (
-            <div
-              style={{
-                position: 'relative',
-                overflow: 'hidden',
-                background: `radial-gradient(circle at top right, ${surface.accent}, transparent 46%), ${colors.panel}`,
-                border: `1px solid ${colors.lineStrong}`,
-                borderRadius: '18px',
-                padding: '0.95rem 1rem 0.9rem',
-                fontSize: '0.8125rem',
-                boxShadow: palette.shadowCard,
-                maxWidth: '19.5rem',
-                color: colors.text,
-                backdropFilter: 'blur(16px)',
-              }}
-            >
-              <div
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: surface.glow,
-                  pointerEvents: 'none',
-                }}
-              />
-              <div style={{ position: 'relative', display: 'grid', gap: '0.8rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <strong
-                        style={{
-                          color: colors.ink,
-                          fontFamily: 'var(--font-display)',
-                          fontSize: '1rem',
-                          letterSpacing: '-0.03em',
-                        }}
-                      >
-                        {d.issueKey}
-                      </strong>
-                      {d.issueType && (
-                        <span
-                          style={{
-                            padding: '0.18rem 0.45rem',
-                            borderRadius: '999px',
-                            border: `1px solid ${colors.line}`,
-                            color: colors.soft,
-                            background: colors.panelStrong,
-                            fontSize: '0.66rem',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.12em',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {d.issueType}
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: '0.34rem',
-                        color: colors.text,
-                        lineHeight: 1.45,
-                        fontSize: '0.86rem',
-                      }}
-                    >
-                      {d.summary}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      padding: '0.28rem 0.55rem',
-                      borderRadius: '999px',
-                      background: surface.accent,
-                      color: zoneColors[d.agingZone],
-                      border: `1px solid ${zoneColors[d.agingZone]}`,
-                      fontSize: '0.66rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {zoneLabel}
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                    gap: '0.55rem',
-                  }}
-                >
-                  <TooltipStat label="Status" value={statusLine} />
-                  <TooltipStat label="Assigned" value={d.assigneeName ?? 'Unassigned'} />
-                  <TooltipStat label="Age" value={`${node.xValue.toFixed(1)} days`} />
-                  <TooltipStat
-                    label="Hold"
-                    value={d.onHoldNow ? 'On hold now' : 'Active'}
-                    {...(d.onHoldNow ? { highlight: colors.hold } : {})}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        }}
+        tooltip={({ node }: { node: ScatterPlotNodeData<ScatterDatum> }) => (
+          <AgingScatterTooltipCard datum={node.data} ageDays={node.xValue} />
+        )}
         onClick={(node: ScatterPlotNodeData<ScatterDatum>) => {
           onItemSelect?.(node.data.workItemId, node.data.issueKey);
         }}
