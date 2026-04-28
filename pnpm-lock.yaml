@@ -106,7 +106,7 @@ importers:
         version: 16.2.4(@babel/core@7.29.0)(@playwright/test@1.59.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       pg-boss:
         specifier: ^12.15.0
-        version: 12.15.0
+        version: 12.18.1
       react:
         specifier: ^19.2.5
         version: 19.2.5
@@ -149,7 +149,7 @@ importers:
         version: 8.0.0
       pg-boss:
         specifier: ^12.15.0
-        version: 12.15.0
+        version: 12.18.1
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -2514,8 +2514,8 @@ packages:
   perfect-debounce@1.0.0:
     resolution: {integrity: sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA==}
 
-  pg-boss@12.15.0:
-    resolution: {integrity: sha512-xw0n3M6PtAOEtPYAF/PULFqba1a27BTJOJ+tVfbd/kG++GjF5RM1xj24n5xQyek3VwDR9LObftc+ygAJ0V2kVw==}
+  pg-boss@12.18.1:
+    resolution: {integrity: sha512-eh7rRSTxUbPguKNDChWunKd//t4CuPFLqg9mL93sq9fai4YiGMe2HrSDqGF8gQ1Kn7VMxnB5IGRkPGDoMm4yrg==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -5319,7 +5319,7 @@ snapshots:
 
   perfect-debounce@1.0.0: {}
 
-  pg-boss@12.15.0:
+  pg-boss@12.18.1:
     dependencies:
       cron-parser: 5.5.0
       pg: 8.20.0
