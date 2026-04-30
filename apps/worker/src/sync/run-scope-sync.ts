@@ -198,7 +198,6 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
         }
         if (batch.length > 0) {
           await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-          batch = [];
         }
 
         logger.info('Completed-issue sync pass finished', { syncRunId, scopeId: scope.id });
