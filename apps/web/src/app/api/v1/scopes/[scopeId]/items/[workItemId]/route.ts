@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { logger } from '@agile-tools/shared';
+import { differenceInWorkingDays, logger } from '@agile-tools/shared';
 import {
   getPrismaClient,
   getFlowScope,
@@ -12,8 +12,6 @@ import type {
 } from '@agile-tools/shared/contracts/api';
 import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
-
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 export async function GET(
   _req: NextRequest,
@@ -44,7 +42,7 @@ export async function GET(
     const now = new Date();
     const referenceDate = item.startedAt ?? item.createdAt;
     const endDate = item.completedAt ?? now;
-    const ageDays = (endDate.getTime() - referenceDate.getTime()) / MS_PER_DAY;
+    const ageDays = differenceInWorkingDays(referenceDate, endDate, scope.timezone);
 
     const holdPeriods: HoldPeriodResponse[] = item.holdPeriods.map((hp) => ({
       startedAt: hp.startedAt.toISOString(),

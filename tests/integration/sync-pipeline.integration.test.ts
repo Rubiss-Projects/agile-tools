@@ -7,7 +7,7 @@
  *    `queryScopeFilterOptions` using a real Testcontainers Postgres.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { resetConfig } from '@agile-tools/shared';
 import {
   getPrismaClient,
@@ -257,8 +257,8 @@ describe('queryCurrentWorkItems — DB integration', () => {
           currentStatusId: '10',
           currentColumn: 'In Progress',
           directUrl: 'https://jira.example.internal/browse/PROJ-1',
-          createdAt: new Date('2025-01-01T00:00:00Z'),
-          startedAt: new Date('2025-01-02T00:00:00Z'),
+          createdAt: new Date('2025-01-10T00:00:00Z'),
+          startedAt: new Date('2025-01-10T12:00:00Z'),
         },
         {
           scopeId,
@@ -272,7 +272,7 @@ describe('queryCurrentWorkItems — DB integration', () => {
           currentStatusId: '20',
           currentColumn: 'Review',
           directUrl: 'https://jira.example.internal/browse/PROJ-2',
-          createdAt: new Date('2025-01-01T00:00:00Z'),
+          createdAt: new Date('2025-01-11T00:00:00Z'),
         },
         {
           // Completed item — should NOT appear in queryCurrentWorkItems.
@@ -324,23 +324,34 @@ describe('queryCurrentWorkItems — DB integration', () => {
   });
 
   it('computes positive ageInDays from startedAt for items that have started', async () => {
-    const db = getPrismaClient();
-    const items = await queryCurrentWorkItems(db, scopeId);
-    const proj1 = items.find((i) => i.issueKey === 'PROJ-1');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const items = await queryCurrentWorkItems(db, scopeId, { timezone: 'UTC' });
+      const proj1 = items.find((i) => i.issueKey === 'PROJ-1');
 
-    expect(proj1).toBeDefined();
-    expect(proj1!.ageInDays).toBeGreaterThan(0);
+      expect(proj1).toBeDefined();
+      expect(proj1!.ageInDays).toBeCloseTo(1, 5);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('falls back to createdAt for age calculation when startedAt is null', async () => {
-    const db = getPrismaClient();
-    const items = await queryCurrentWorkItems(db, scopeId);
-    const proj2 = items.find((i) => i.issueKey === 'PROJ-2');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const items = await queryCurrentWorkItems(db, scopeId, { timezone: 'UTC' });
+      const proj2 = items.find((i) => i.issueKey === 'PROJ-2');
 
-    expect(proj2).toBeDefined();
-    // PROJ-2 has no startedAt, so age is relative to its createdAt.
-    expect(proj2!.startedAt).toBeNull();
-    expect(proj2!.ageInDays).toBeGreaterThan(0);
+      expect(proj2).toBeDefined();
+      expect(proj2!.startedAt).toBeNull();
+      expect(proj2!.ageInDays).toBeCloseTo(0.5, 5);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('maps currentColumn from the work item record', async () => {

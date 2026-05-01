@@ -9,7 +9,7 @@
  *    and `queryCurrentWorkItems` with aging thresholds.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { resetConfig } from '@agile-tools/shared';
 import { getPrismaClient, disconnectPrisma, queryCurrentWorkItems } from '@agile-tools/db';
 import {
@@ -299,12 +299,12 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
     });
     syncRunId = syncRun.id;
 
-    const now = new Date();
     // Create three items with ages designed to fall into different zones.
     // Thresholds below: p50=5, p85=10.
-    // Item A: started 3 days ago  → age ≈ 3d  → normal
-    // Item B: started 7 days ago  → age ≈ 7d  → watch
-    // Item C: started 15 days ago → age ≈ 15d → aging
+    // With "now" fixed to 2025-01-13T12:00:00Z:
+    // Item A: Fri 2025-01-10 12:00 → Mon 2025-01-13 12:00 = 1 working day
+    // Item B: Mon 2025-01-06 00:00 → Mon 2025-01-13 12:00 = 5.5 working days
+    // Item C: Mon 2024-12-30 00:00 → Mon 2025-01-13 12:00 = 10.5 working days
     await db.workItem.createMany({
       data: [
         {
@@ -321,8 +321,8 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
           currentColumn: 'In Progress',
           assigneeName: 'Riley Chen',
           directUrl: 'https://jira.example.internal/browse/AZ-1',
-          createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
-          startedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
+          createdAt: new Date('2025-01-10T12:00:00Z'),
+          startedAt: new Date('2025-01-10T12:00:00Z'),
         },
         {
           scopeId,
@@ -338,8 +338,8 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
           currentColumn: 'In Progress',
           assigneeName: null,
           directUrl: 'https://jira.example.internal/browse/AZ-2',
-          createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-          startedAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+          createdAt: new Date('2025-01-06T00:00:00Z'),
+          startedAt: new Date('2025-01-06T00:00:00Z'),
         },
         {
           scopeId,
@@ -355,37 +355,53 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
           currentColumn: 'In Progress',
           assigneeName: 'Casey Nguyen',
           directUrl: 'https://jira.example.internal/browse/AZ-3',
-          createdAt: new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000),
-          startedAt: new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000),
+          createdAt: new Date('2024-12-30T00:00:00Z'),
+          startedAt: new Date('2024-12-30T00:00:00Z'),
         },
       ],
     });
   });
 
   it('classifies zones correctly when agingThresholds are supplied', async () => {
-    const db = getPrismaClient();
-    const agingThresholds = { p50: 5, p85: 10 };
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const agingThresholds = { p50: 5, p85: 10 };
 
-    const items = await queryCurrentWorkItems(db, scopeId, {
-      dataVersion: syncRunId,
-      agingThresholds,
-    });
+      const items = await queryCurrentWorkItems(db, scopeId, {
+        dataVersion: syncRunId,
+        agingThresholds,
+        timezone: 'UTC',
+      });
 
-    expect(items).toHaveLength(3);
+      expect(items).toHaveLength(3);
 
-    const byKey = Object.fromEntries(items.map((i) => [i.issueKey, i]));
-    expect(byKey['AZ-1']!.agingZone).toBe('normal');
-    expect(byKey['AZ-2']!.agingZone).toBe('watch');
-    expect(byKey['AZ-3']!.agingZone).toBe('aging');
-    expect(byKey['AZ-1']!.currentStatusName).toBe('In Progress');
-    expect(byKey['AZ-1']!.assigneeName).toBe('Riley Chen');
-    expect(byKey['AZ-2']!.assigneeName).toBeNull();
+      const byKey = Object.fromEntries(items.map((i) => [i.issueKey, i]));
+      expect(byKey['AZ-1']!.agingZone).toBe('normal');
+      expect(byKey['AZ-2']!.agingZone).toBe('watch');
+      expect(byKey['AZ-3']!.agingZone).toBe('aging');
+      expect(byKey['AZ-1']!.currentStatusName).toBe('In Progress');
+      expect(byKey['AZ-1']!.assigneeName).toBe('Riley Chen');
+      expect(byKey['AZ-2']!.assigneeName).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('defaults all items to normal zone when no agingThresholds supplied', async () => {
-    const db = getPrismaClient();
-    const items = await queryCurrentWorkItems(db, scopeId, { dataVersion: syncRunId });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const items = await queryCurrentWorkItems(db, scopeId, {
+        dataVersion: syncRunId,
+        timezone: 'UTC',
+      });
 
-    expect(items.every((i) => i.agingZone === 'normal')).toBe(true);
+      expect(items.every((i) => i.agingZone === 'normal')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

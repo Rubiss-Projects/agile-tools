@@ -81,6 +81,7 @@ export async function GET(
     // Query active work items for this scope.
     const items = await queryCurrentWorkItems(db, scopeId, {
       dataVersion: effectiveDataVersion,
+      timezone: scope.timezone,
       ...(agingThresholds ? { agingThresholds } : {}),
     });
 

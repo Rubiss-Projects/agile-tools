@@ -106,12 +106,12 @@ If validating only the MVP slice, stop after the Connection And Sync journey. Th
 - Open the flow view after the first sync completes.
 - Confirm that active work items appear from local projections rather than live Jira data.
 - Apply historical-window, workflow-status, issue-type, `aging only`, and `on hold only` filters.
-- Open an item detail view and confirm age, hold periods, and lifecycle timeline values are present.
+- Open an item detail view and confirm age is shown in working days, alongside hold periods and lifecycle timeline values.
 
 ### 3. Story-Count Monte Carlo Forecasting
 
 - Open the forecast workflow for the configured scope.
-- Confirm the completed-story throughput view matches the historical window selected for the forecast.
+- Confirm the completed-story throughput view matches the historical window selected for the forecast and excludes weekend buckets.
 - Request a completion-date forecast using a remaining story count.
 - Request a completion-volume forecast using a target date.
 - Confirm that completion-date forecasts return date ranges, completion-volume forecasts return story-count ranges, and both include sample sizes, historical windows, and warnings when confidence is low.

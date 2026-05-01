@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@agile-tools/db';
 import { buildAgingThresholdModel, type AgingThresholdResult } from '@agile-tools/analytics';
-import { logger } from '@agile-tools/shared';
+import { differenceInWorkingDays, logger } from '@agile-tools/shared';
 
 export const DEFAULT_HISTORICAL_WINDOW_DAYS = 90;
 
@@ -24,6 +24,14 @@ export async function rebuildCurrentFlowProjection(
 ): Promise<AgingThresholdResult> {
   const windowDays = options?.historicalWindowDays ?? DEFAULT_HISTORICAL_WINDOW_DAYS;
   const windowStart = new Date(Date.now() - windowDays * MS_PER_DAY);
+  const scope = await db.flowScope.findUnique({
+    where: { id: scopeId },
+    select: { timezone: true },
+  });
+
+  if (!scope) {
+    throw new Error(`Flow scope ${scopeId} not found while rebuilding current flow projection.`);
+  }
 
   const completedItems = await db.workItem.findMany({
     where: {
@@ -41,7 +49,7 @@ export async function rebuildCurrentFlowProjection(
   const completedStories = completedItems.map((item) => {
     const referenceDate = item.startedAt ?? item.createdAt;
     return {
-      cycleTimeDays: (item.completedAt!.getTime() - referenceDate.getTime()) / MS_PER_DAY,
+      cycleTimeDays: differenceInWorkingDays(referenceDate, item.completedAt!, scope.timezone),
     };
   });
 

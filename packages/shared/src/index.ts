@@ -14,3 +14,11 @@ export {
   normalizeTimeZoneOrThrow,
   TimeZoneIdentifierSchema,
 } from './timezones.js';
+
+export {
+  addWorkingDaysToDate,
+  countWorkingDaysBetweenDates,
+  differenceInWorkingDays,
+  formatDateInTimezone,
+  isWeekendDate,
+} from './working-days.js';
