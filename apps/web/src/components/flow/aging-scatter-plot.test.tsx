@@ -27,12 +27,19 @@ describe('AgingScatterTooltipCard', () => {
       />,
     );
 
-    expect(screen.getByText('Normal work item').parentElement).toHaveStyle({
+    const summary = screen.getByText('Normal work item');
+    const card = summary.parentElement?.parentElement?.parentElement?.parentElement;
+
+    expect(card).toHaveStyle({
+      width: '19.5rem',
+      maxWidth: 'calc(100vw - 2rem)',
+    });
+    expect(summary.parentElement).toHaveStyle({
       minWidth: '0px',
       flex: '1 1 auto',
     });
-    expect(screen.getByText('Normal work item')).toHaveStyle({
-      overflowWrap: 'anywhere',
+    expect(summary).toHaveStyle({
+      overflowWrap: 'break-word',
     });
   });
 });

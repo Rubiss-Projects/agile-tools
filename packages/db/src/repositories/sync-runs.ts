@@ -2,6 +2,12 @@ import { Prisma, type PrismaClient, type SyncRun, type SyncRunTrigger, type Sync
 
 type SyncRunClient = PrismaClient | Prisma.TransactionClient;
 
+export const STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS = 60 * 60 * 1000;
+const ACTIVE_SYNC_RUN_STATUSES: SyncRunStatus[] = ['queued', 'running'];
+const STALE_ACTIVE_SYNC_ERROR_CODE = 'SYNC_STALE_TIMEOUT';
+const STALE_ACTIVE_SYNC_ERROR_SUMMARY =
+  'Auto-failed a stale queued or running sync after it exceeded the 60-minute timeout.';
+
 export interface CreateSyncRunInput {
   scopeId: string;
   trigger: SyncRunTrigger;
@@ -138,7 +144,53 @@ export async function getActiveSyncRun(
     where: {
       scopeId,
       scope: { workspaceId },
-      status: { in: ['queued', 'running'] },
+      status: { in: ACTIVE_SYNC_RUN_STATUSES },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Resolve queued/running sync rows for a scope after the per-scope advisory lock
+ * has been acquired. Stale active rows are failed in-place and excluded from the
+ * returned result.
+ */
+export async function resolveActiveSyncRun(
+  client: SyncRunClient,
+  workspaceId: string,
+  scopeId: string,
+  now = new Date(),
+): Promise<SyncRun | null> {
+  const staleCutoff = new Date(now.getTime() - STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS);
+
+  await client.syncRun.updateMany({
+    where: {
+      scopeId,
+      scope: { workspaceId },
+      OR: [
+        {
+          status: 'queued',
+          createdAt: { lte: staleCutoff },
+        },
+        {
+          status: 'running',
+          updatedAt: { lte: staleCutoff },
+        },
+      ],
+    },
+    data: {
+      status: 'failed',
+      finishedAt: now,
+      errorCode: STALE_ACTIVE_SYNC_ERROR_CODE,
+      errorSummary: STALE_ACTIVE_SYNC_ERROR_SUMMARY,
+    },
+  });
+
+  return client.syncRun.findFirst({
+    where: {
+      scopeId,
+      scope: { workspaceId },
+      status: { in: ACTIVE_SYNC_RUN_STATUSES },
     },
     orderBy: { createdAt: 'desc' },
   });

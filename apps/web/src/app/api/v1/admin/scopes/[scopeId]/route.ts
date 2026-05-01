@@ -3,10 +3,10 @@ import {
   acquireScopeSyncLock,
   createSyncRun,
   deleteFlowScope,
-  getActiveSyncRun,
   getFlowScope,
   getJiraConnection,
   getPrismaClient,
+  resolveActiveSyncRun,
   updateFlowScope,
   updateSyncRun,
 } from '@agile-tools/db';
@@ -127,6 +127,17 @@ function toScopeUpdateInput(scope: {
   };
 }
 
+function syncInProgressResponse(syncRunId: string): Response {
+  return Response.json(
+    {
+      code: 'SYNC_IN_PROGRESS',
+      message: 'Wait for the active sync to finish before changing board or flow boundaries.',
+      syncRunId,
+    },
+    { status: 409 },
+  );
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ scopeId: string }> },
@@ -165,21 +176,6 @@ export async function PUT(
       );
     }
 
-    const preflightRequiresSync = hasBoundaryChanges(preflightScope, parsed.data);
-    if (preflightRequiresSync) {
-      const activeRun = await getActiveSyncRun(prisma, ctx.workspaceId, scopeId);
-      if (activeRun) {
-        return Response.json(
-          {
-            code: 'SYNC_IN_PROGRESS',
-            message: 'Wait for the active sync to finish before changing board or flow boundaries.',
-            syncRunId: activeRun.id,
-          },
-          { status: 409 },
-        );
-      }
-    }
-
     const preflightIncludedIssueTypeNames = parseStoredStringArray(
       preflightScope.includedIssueTypeNames,
       'includedIssueTypeNames',
@@ -190,10 +186,21 @@ export async function PUT(
     );
     const boardSelectionChanged = hasBoardSelectionChange(preflightScope, parsed.data);
     const issueTypeSelectionChanged = hasIssueTypeSelectionChange(preflightScope, parsed.data);
+    const boundaryChangesRequested = hasBoundaryChanges(preflightScope, parsed.data);
     const needsIssueTypeLookup =
       boardSelectionChanged ||
       (issueTypeSelectionChanged &&
         !hasNamesForAllIds(parsed.data.includedIssueTypeIds, preflightIncludedIssueTypes));
+
+    if (boundaryChangesRequested) {
+      const preflightActiveRun = await prisma.$transaction(async (tx) => {
+        await acquireScopeSyncLock(tx, scopeId);
+        return resolveActiveSyncRun(tx, ctx.workspaceId, scopeId);
+      });
+      if (preflightActiveRun) {
+        return syncInProgressResponse(preflightActiveRun.id);
+      }
+    }
 
     let prefetchedBoardName: string | null = null;
     let prefetchedIssueTypes: NamedValue[] = [];
@@ -235,7 +242,7 @@ export async function PUT(
       const stillRequiresSync = hasBoundaryChanges(currentScope, parsed.data);
 
       if (stillRequiresSync) {
-        const activeRun = await getActiveSyncRun(tx, ctx.workspaceId, scopeId);
+        const activeRun = await resolveActiveSyncRun(tx, ctx.workspaceId, scopeId);
         if (activeRun) {
           return { kind: 'active' as const, activeRunId: activeRun.id };
         }
@@ -325,14 +332,7 @@ export async function PUT(
     });
 
     if (txResult.kind === 'active') {
-      return Response.json(
-        {
-          code: 'SYNC_IN_PROGRESS',
-          message: 'Wait for the active sync to finish before changing board or flow boundaries.',
-          syncRunId: txResult.activeRunId,
-        },
-        { status: 409 },
-      );
+      return syncInProgressResponse(txResult.activeRunId);
     }
     if (txResult.kind === 'missing-connection') {
       return Response.json(
@@ -466,7 +466,7 @@ export async function DELETE(
         return { kind: 'missing' as const };
       }
 
-      const activeRun = await getActiveSyncRun(tx, ctx.workspaceId, scopeId);
+      const activeRun = await resolveActiveSyncRun(tx, ctx.workspaceId, scopeId);
       if (activeRun) {
         return { kind: 'active' as const, activeRunId: activeRun.id };
       }
