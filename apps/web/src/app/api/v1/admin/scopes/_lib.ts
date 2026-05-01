@@ -6,10 +6,10 @@ import type {
 import {
   acquireScopeSyncLock,
   createSyncRun,
-  getActiveSyncRun,
   getPrismaClient,
   getFlowScope,
   getSyncRun,
+  resolveActiveSyncRun,
   updateSyncRun,
 } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
@@ -156,7 +156,7 @@ export async function queueManualScopeSync(
   const prisma = getPrismaClient();
   const queuedCandidate = await prisma.$transaction(async (tx) => {
     await acquireScopeSyncLock(tx, scopeId);
-    const activeRun = await getActiveSyncRun(tx, workspaceId, scopeId);
+    const activeRun = await resolveActiveSyncRun(tx, workspaceId, scopeId);
     if (activeRun) {
       return { status: 'active' as const, syncRun: activeRun };
     }

@@ -11,7 +11,11 @@ import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { NextRequest } from 'next/server';
 import { resetConfig, encryptSecret } from '@agile-tools/shared';
-import { getPrismaClient, disconnectPrisma } from '@agile-tools/db';
+import {
+  getPrismaClient,
+  disconnectPrisma,
+  STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS,
+} from '@agile-tools/db';
 import {
   FlowScopeSchema,
   SyncRunSchema,
@@ -44,6 +48,9 @@ const { PUT: updateScope } = await import(
 const { POST: triggerSync, GET: listSyncs } = await import(
   '../../apps/web/src/app/api/v1/admin/scopes/[scopeId]/syncs/route'
 );
+const { DELETE: deleteScope } = await import(
+  '../../apps/web/src/app/api/v1/admin/scopes/[scopeId]/route'
+);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,6 +76,20 @@ let workspaceId: string;
 let connectionId: string;
 let scopeId: string;
 let adminCookieValue: string;
+
+function staleActiveSyncTimestamp() {
+  return new Date(Date.now() - STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS - 1_000);
+}
+
+async function markSyncRunAsStaleRunning(syncRunId: string) {
+  const staleAt = staleActiveSyncTimestamp();
+  const db = getPrismaClient();
+  await db.$executeRaw`
+    UPDATE "SyncRun"
+    SET "startedAt" = ${staleAt}, "updatedAt" = ${staleAt}
+    WHERE id = ${syncRunId}
+  `;
+}
 
 function makeCookieStore(cookieValue: string | null) {
   return {
@@ -148,6 +169,21 @@ beforeEach(async () => {
   mswServer.resetHandlers();
   const db = getPrismaClient();
   await db.syncRun.deleteMany({ where: { scopeId } });
+  await db.flowScope.update({
+    where: { id: scopeId },
+    data: {
+      connectionId,
+      boardId: '1',
+      boardName: 'Team Kanban',
+      timezone: 'UTC',
+      includedIssueTypeIds: ['it-1'],
+      includedIssueTypeNames: ['Story'],
+      startStatusIds: ['1'],
+      doneStatusIds: ['3'],
+      syncIntervalMinutes: 10,
+      status: 'active',
+    },
+  });
 });
 
 // ─── POST /v1/admin/scopes ────────────────────────────────────────────────────
@@ -346,6 +382,35 @@ describe('PUT /v1/admin/scopes/:id', () => {
     expect(res.status).toBe(409);
   });
 
+  it('fails a stale active sync before queueing a boundary-changing update', async () => {
+    const db = getPrismaClient();
+    const staleRun = await db.syncRun.create({
+      data: {
+        scopeId,
+        trigger: 'manual',
+        status: 'running',
+      },
+    });
+    await markSyncRunAsStaleRunning(staleRun.id);
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      doneStatusIds: ['4'],
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(200);
+
+    const syncRuns = await db.syncRun.findMany({
+      where: { scopeId },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(syncRuns).toHaveLength(2);
+    expect(syncRuns[0]?.status).toBe('failed');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_STALE_TIMEOUT');
+    expect(syncRuns[1]?.status).toBe('queued');
+  });
+
   it('updates flow boundaries without Jira availability when the board stays the same', async () => {
     mswServer.use(
       http.get(`${JIRA_BASE}/rest/agile/1.0/board/:boardId/project`, () =>
@@ -476,6 +541,33 @@ describe('POST /v1/admin/scopes/:id/syncs', () => {
     expect(res.status).toBe(409);
   });
 
+  it('fails a stale running sync before queueing a fresh manual sync', async () => {
+    const db = getPrismaClient();
+    const staleRun = await db.syncRun.create({
+      data: {
+        scopeId,
+        trigger: 'manual',
+        status: 'running',
+      },
+    });
+    await markSyncRunAsStaleRunning(staleRun.id);
+
+    const res = await triggerSync(
+      makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}/syncs`, 'POST'),
+      { params: Promise.resolve({ scopeId }) },
+    );
+    expect(res.status).toBe(202);
+
+    const syncRuns = await db.syncRun.findMany({
+      where: { scopeId },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(syncRuns).toHaveLength(2);
+    expect(syncRuns[0]?.status).toBe('failed');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_STALE_TIMEOUT');
+    expect(syncRuns[1]?.status).toBe('queued');
+  });
+
   it('returns 503 and cancels the sync run when queue insertion fails', async () => {
     vi.mocked(enqueueScopeSyncJob).mockResolvedValueOnce(null);
 
@@ -528,5 +620,39 @@ describe('GET /v1/admin/scopes/:id/syncs', () => {
     );
     const res = await listSyncs(req, { params: Promise.resolve({ scopeId: missingId }) });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('DELETE /v1/admin/scopes/:id', () => {
+  it('deletes the scope when the only active sync is stale', async () => {
+    const db = getPrismaClient();
+    const scopeToDelete = await db.flowScope.create({
+      data: {
+        workspaceId,
+        connectionId,
+        boardId: '99',
+        boardName: 'Delete Me',
+        timezone: 'UTC',
+        includedIssueTypeIds: ['it-1'],
+        includedIssueTypeNames: ['Story'],
+        startStatusIds: ['1'],
+        doneStatusIds: ['3'],
+        syncIntervalMinutes: 10,
+      },
+    });
+
+    const staleRun = await db.syncRun.create({
+      data: {
+        scopeId: scopeToDelete.id,
+        trigger: 'manual',
+        status: 'running',
+      },
+    });
+    await markSyncRunAsStaleRunning(staleRun.id);
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeToDelete.id}`, 'DELETE');
+    const res = await deleteScope(req, { params: Promise.resolve({ scopeId: scopeToDelete.id }) });
+    expect(res.status).toBe(204);
+    expect(await db.flowScope.findUnique({ where: { id: scopeToDelete.id } })).toBeNull();
   });
 });

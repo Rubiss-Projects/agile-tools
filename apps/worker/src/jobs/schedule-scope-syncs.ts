@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@agile-tools/db';
-import { acquireScopeSyncLock, createSyncRun, updateSyncRun } from '@agile-tools/db';
+import { acquireScopeSyncLock, createSyncRun, resolveActiveSyncRun, updateSyncRun } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import type { PgBoss } from 'pg-boss';
 import { getQueue, QUEUE_NAMES } from '../lib/queue.js';
@@ -40,7 +40,7 @@ async function dispatchDueScopes(boss: PgBoss, db: PrismaClient): Promise<void> 
 
   for (const scope of activeScopes) {
     try {
-      await maybeDispatchScopeSync(boss, db, scope.id, scope.syncIntervalMinutes, now);
+      await maybeDispatchScopeSync(boss, db, scope.workspaceId, scope.id, scope.syncIntervalMinutes, now);
     } catch (err) {
       // Log per-scope failures and continue — don't let one scope block others.
       logger.error('Failed to dispatch sync for scope', {
@@ -54,6 +54,7 @@ async function dispatchDueScopes(boss: PgBoss, db: PrismaClient): Promise<void> 
 async function maybeDispatchScopeSync(
   boss: PgBoss,
   db: PrismaClient,
+  workspaceId: string,
   scopeId: string,
   intervalMinutes: number,
   now: number,
@@ -61,9 +62,7 @@ async function maybeDispatchScopeSync(
   const syncRun = await db.$transaction(async (tx) => {
     await acquireScopeSyncLock(tx, scopeId);
 
-    const activeSyncRun = await tx.syncRun.findFirst({
-      where: { scopeId, status: { in: ['queued', 'running'] } },
-    });
+    const activeSyncRun = await resolveActiveSyncRun(tx, workspaceId, scopeId);
     if (activeSyncRun) return null;
 
     const lastStartedRun = await tx.syncRun.findFirst({

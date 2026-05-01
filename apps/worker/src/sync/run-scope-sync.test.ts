@@ -143,6 +143,22 @@ function createDb(options?: { doneStatusIds?: string[] }) {
     baseUrl: 'https://jira.example.internal',
     encryptedSecretRef: 'encrypted-secret',
   };
+  const workItemUpsert = vi.fn((args: { where: { scopeId_jiraIssueId: { jiraIssueId: string } } }) =>
+    Promise.resolve({
+      id: `work-item-${args.where.scopeId_jiraIssueId.jiraIssueId}`,
+    }),
+  );
+  const workItemLifecycleCreateMany = vi.fn().mockResolvedValue(undefined);
+  const transactionClient = {
+    $executeRaw: vi.fn().mockResolvedValue(0),
+    $queryRaw: vi.fn().mockResolvedValue([{ id: syncRun.id }]),
+    workItem: {
+      upsert: workItemUpsert,
+    },
+    workItemLifecycleEvent: {
+      createMany: workItemLifecycleCreateMany,
+    },
+  };
 
   const db = {
     syncRun: {
@@ -161,15 +177,14 @@ function createDb(options?: { doneStatusIds?: string[] }) {
       update: vi.fn().mockResolvedValue(undefined),
     },
     workItem: {
-      upsert: vi.fn((args: { where: { scopeId_jiraIssueId: { jiraIssueId: string } } }) =>
-        Promise.resolve({
-          id: `work-item-${args.where.scopeId_jiraIssueId.jiraIssueId}`,
-        }),
-      ),
+      upsert: workItemUpsert,
     },
     workItemLifecycleEvent: {
-      createMany: vi.fn().mockResolvedValue(undefined),
+      createMany: workItemLifecycleCreateMany,
     },
+    $transaction: vi.fn(async (callback: (tx: typeof transactionClient) => Promise<unknown>) =>
+      callback(transactionClient),
+    ),
   };
 
   return db;
@@ -380,5 +395,28 @@ describe('runScopeSync', () => {
 
     expect(streamJqlIssuesMock).not.toHaveBeenCalled();
     expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not update connection health when the run has already been superseded', async () => {
+    const db = createDb();
+    db.syncRun.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    getBoardDetailWithFilterIdMock.mockRejectedValueOnce(
+      new MockJiraClientError('unauthorized', 'token expired'),
+    );
+
+    await expect(
+      runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1'),
+    ).resolves.toBeUndefined();
+
+    expect(updateConnectionHealthAfterSyncMock).not.toHaveBeenCalled();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      'SyncRun left running state before terminal update; skipping',
+      expect.objectContaining({
+        syncRunId: 'run-1',
+        nextStatus: 'failed',
+      }),
+    );
   });
 });

@@ -131,7 +131,8 @@ export function AgingScatterTooltipCard({
         padding: '0.95rem 1rem 0.9rem',
         fontSize: '0.8125rem',
         boxShadow: palette.shadowCard,
-        maxWidth: '19.5rem',
+        width: '19.5rem',
+        maxWidth: 'calc(100vw - 2rem)',
         color: scatterColors.text,
         backdropFilter: 'blur(16px)',
       }}
@@ -190,7 +191,7 @@ export function AgingScatterTooltipCard({
                 color: scatterColors.text,
                 lineHeight: 1.45,
                 fontSize: '0.86rem',
-                overflowWrap: 'anywhere',
+                overflowWrap: 'break-word',
               }}
             >
               {datum.summary}
@@ -381,7 +382,7 @@ function TooltipStat({
           fontSize: '0.8rem',
           fontWeight: 600,
           lineHeight: 1.35,
-          overflowWrap: 'anywhere',
+          overflowWrap: 'break-word',
         }}
       >
         {value}
