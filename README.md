@@ -108,7 +108,7 @@ docker build -t agile-tools:local .
 
 ### Use the published GHCR image with consumer Compose
 
-If you are consuming a release image instead of building from source, use [docker-compose.consumer.yml](docker-compose.consumer.yml). It pulls `${AGILE_TOOLS_IMAGE:-ghcr.io/rubiss/agile-tools:latest}` directly from GitHub Container Registry with no local retag step.
+If you are consuming a release image instead of building from source, use [docker-compose.consumer.yml](docker-compose.consumer.yml). It pulls `${AGILE_TOOLS_IMAGE:-ghcr.io/rubiss-projects/agile-tools:latest}` directly from GitHub Container Registry with no local retag step.
 
 ```bash
 docker compose -f docker-compose.consumer.yml up -d postgres
@@ -116,7 +116,7 @@ docker compose -f docker-compose.consumer.yml --profile bootstrap run --rm boots
 docker compose -f docker-compose.consumer.yml --profile runtime up -d
 ```
 
-If you want to pin a specific release instead of following `latest`, set `AGILE_TOOLS_IMAGE` in your shell or `.env`, for example `ghcr.io/rubiss/agile-tools:v0.1.1`.
+If you want to pin a specific release instead of following `latest`, set `AGILE_TOOLS_IMAGE` in your shell or `.env`, for example `ghcr.io/rubiss-projects/agile-tools:v0.1.1`.
 
 The published image runs in production mode, so the dev demo bootstrap remains disabled there. For local image hosting, set `ALLOW_LOCAL_BOOTSTRAP=true` and use the built-in local admin bootstrap action from `/` or `/admin/jira`. The bootstrap flow is intended for loopback hosts such as `localhost` and `127.0.0.1`.
 

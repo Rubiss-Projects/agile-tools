@@ -8,7 +8,7 @@
 
 Repository discussions:
 
-- <https://github.com/Rubiss/agile-tools/discussions>
+- <https://github.com/Rubiss-Projects/agile-tools/discussions>
 
 ## Before Opening an Issue
 

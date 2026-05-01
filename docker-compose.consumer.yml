@@ -1,5 +1,5 @@
 x-agile-tools-runtime: &agile-tools-runtime
-  image: ${AGILE_TOOLS_IMAGE:-ghcr.io/rubiss/agile-tools:latest}
+  image: ${AGILE_TOOLS_IMAGE:-ghcr.io/rubiss-projects/agile-tools:latest}
   pull_policy: always
   env_file:
     - .env
