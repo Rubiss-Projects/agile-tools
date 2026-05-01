@@ -132,8 +132,8 @@ export async function getSyncRunByDataVersion(
 }
 
 /**
- * Return the most recent queued or running sync run for a scope, or null if none.
- * Used to detect active syncs before enqueuing a new manual run.
+ * @deprecated Prefer `resolveActiveSyncRun` after acquiring the per-scope sync
+ * lock so stale active runs are recovered before conflict decisions are made.
  */
 export async function getActiveSyncRun(
   client: SyncRunClient,
