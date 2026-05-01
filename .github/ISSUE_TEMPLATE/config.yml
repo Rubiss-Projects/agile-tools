@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and design discussion
-    url: https://github.com/Rubiss/agile-tools/discussions
+    url: https://github.com/Rubiss-Projects/agile-tools/discussions
     about: Ask for setup help, share design ideas, or start broader conversations.
   - name: Security vulnerabilities
-    url: https://github.com/Rubiss/agile-tools/security/policy
+    url: https://github.com/Rubiss-Projects/agile-tools/security/policy
     about: Review the security policy and use private vulnerability reporting.

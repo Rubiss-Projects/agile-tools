@@ -17,7 +17,7 @@ Pre-release tags may receive fixes when practical, but they should not be treate
 
 Repository security page:
 
-- <https://github.com/Rubiss/agile-tools/security>
+- <https://github.com/Rubiss-Projects/agile-tools/security>
 
 If private vulnerability reporting is unavailable for any reason, contact the maintainer through GitHub directly and keep the report non-public.
 
