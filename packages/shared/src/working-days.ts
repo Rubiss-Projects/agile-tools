@@ -63,6 +63,41 @@ function addCalendarDays(day: string, delta: number): string {
   return formatUtcDate(new Date(Date.UTC(year, month - 1, date + delta)));
 }
 
+function getUtcWeekDay(day: string): number {
+  const { year, month, date } = parseLocalDate(day);
+  return new Date(Date.UTC(year, month - 1, date)).getUTCDay();
+}
+
+function differenceInCalendarDays(startDay: string, endDay: string): number {
+  const { year: startYear, month: startMonth, date: startDate } = parseLocalDate(startDay);
+  const { year: endYear, month: endMonth, date: endDate } = parseLocalDate(endDay);
+  const startMs = Date.UTC(startYear, startMonth - 1, startDate);
+  const endMs = Date.UTC(endYear, endMonth - 1, endDate);
+  return Math.round((endMs - startMs) / MS_PER_DAY);
+}
+
+function countWorkingDaysInClosedRange(startDay: string, endDay: string): number {
+  if (endDay < startDay) {
+    return 0;
+  }
+
+  const totalDays = differenceInCalendarDays(startDay, endDay) + 1;
+  const fullWeeks = Math.floor(totalDays / 7);
+  const remainder = totalDays % 7;
+
+  let count = fullWeeks * 5;
+  let weekDay = getUtcWeekDay(startDay);
+
+  for (let i = 0; i < remainder; i++) {
+    if (weekDay !== 0 && weekDay !== 6) {
+      count += 1;
+    }
+    weekDay = (weekDay + 1) % 7;
+  }
+
+  return count;
+}
+
 function getLocalDay(date: Date, timezone: string): string {
   const parts = getDateFormatter(timezone).formatToParts(date);
   const year = parts.find((part) => part.type === 'year')?.value;
@@ -104,8 +139,7 @@ export function formatDateInTimezone(date: Date, timezone: string): string {
 }
 
 export function isWeekendDate(day: string): boolean {
-  const { year, month, date } = parseLocalDate(day);
-  const weekDay = new Date(Date.UTC(year, month - 1, date)).getUTCDay();
+  const weekDay = getUtcWeekDay(day);
   return weekDay === 0 || weekDay === 6;
 }
 
@@ -122,13 +156,7 @@ export function countWorkingDaysBetweenDates(startDay: string, endDay: string): 
     return 0;
   }
 
-  let count = 0;
-  for (let day = addCalendarDays(startDay, 1); day <= endDay; day = addCalendarDays(day, 1)) {
-    if (!isWeekendDate(day)) {
-      count += 1;
-    }
-  }
-  return count;
+  return countWorkingDaysInClosedRange(addCalendarDays(startDay, 1), endDay);
 }
 
 export function addWorkingDaysToDate(date: Date, workingDays: number, timezone: string): string {
@@ -137,9 +165,25 @@ export function addWorkingDaysToDate(date: Date, workingDays: number, timezone: 
   }
 
   const normalizedTimezone = normalizeTimeZoneOrThrow(timezone);
-  let day = getLocalDay(date, normalizedTimezone);
+  const startDay = getLocalDay(date, normalizedTimezone);
 
-  for (let remaining = workingDays; remaining > 0; ) {
+  if (workingDays === 0) {
+    return startDay;
+  }
+
+  let day = addCalendarDays(startDay, 1);
+  while (isWeekendDate(day)) {
+    day = addCalendarDays(day, 1);
+  }
+
+  let remaining = workingDays - 1;
+  if (remaining >= 5) {
+    const fullWeeks = Math.floor(remaining / 5);
+    day = addCalendarDays(day, fullWeeks * 7);
+    remaining %= 5;
+  }
+
+  while (remaining > 0) {
     day = addCalendarDays(day, 1);
     if (!isWeekendDate(day)) {
       remaining -= 1;

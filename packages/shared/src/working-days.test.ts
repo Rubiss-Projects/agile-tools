@@ -17,11 +17,13 @@ describe('working-day helpers', () => {
   it('counts working days between local dates with weekend exclusion', () => {
     expect(countWorkingDaysBetweenDates('2025-01-10', '2025-01-13')).toBe(1);
     expect(countWorkingDaysBetweenDates('2025-01-13', '2025-01-17')).toBe(4);
+    expect(countWorkingDaysBetweenDates('2025-01-01', '2025-12-31')).toBe(260);
   });
 
   it('advances forecast dates by working days only', () => {
     expect(addWorkingDaysToDate(new Date('2025-01-10T12:00:00Z'), 1, 'UTC')).toBe('2025-01-13');
     expect(addWorkingDaysToDate(new Date('2025-01-10T12:00:00Z'), 5, 'UTC')).toBe('2025-01-17');
+    expect(addWorkingDaysToDate(new Date('2025-01-11T12:00:00Z'), 5, 'UTC')).toBe('2025-01-17');
   });
 
   it('excludes weekend portions from fractional working-day differences', () => {
