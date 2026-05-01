@@ -392,6 +392,8 @@ async function processBatch(
   for (const [index, issue] of issues.entries()) {
     const normalized = normalizeJiraIssue(issue, changelogs[index]!, ctx);
     projectIdsSet.add(normalized.projectId);
+    // Keep guarded writes single-filed: each item transaction coordinates on the
+    // SyncRun row so stale/superseded runs cannot commit additional work-item state.
     await upsertWorkItem(db, normalized, ctx);
   }
 }
