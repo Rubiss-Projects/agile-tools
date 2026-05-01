@@ -9,7 +9,7 @@
  *    `queryCompletedStories`, and the forecast cache round-trip.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { resetConfig } from '@agile-tools/shared';
 import {
   getPrismaClient,
@@ -33,7 +33,7 @@ import { startPostgres, stopPostgres } from './support/postgres';
 describe('runWhenForecast — pure unit', () => {
   it('returns the same completion date for all confidence levels when throughput is deterministic', () => {
     // With throughput always exactly 1 story/day, every trial takes exactly 5 days.
-    // referenceDate 2025-01-01 + 5 days = 2025-01-06.
+    // referenceDate 2025-01-01 + 5 working days = 2025-01-08.
     const result = runWhenForecast({
       historicalDailyThroughput: [1],
       sampleSize: 100,
@@ -41,12 +41,13 @@ describe('runWhenForecast — pure unit', () => {
       confidenceLevels: [50, 85, 95],
       iterations: 200,
       referenceDate: new Date('2025-01-01T12:00:00Z'),
+      timezone: 'UTC',
     });
 
     expect(result.warnings).toHaveLength(0);
     expect(result.results).toHaveLength(3);
     for (const r of result.results) {
-      expect(r.completionDate).toBe('2025-01-06');
+      expect(r.completionDate).toBe('2025-01-08');
     }
   });
 
@@ -92,6 +93,7 @@ describe('runWhenForecast — pure unit', () => {
       confidenceLevels: [50, 70, 85, 95],
       iterations: 500,
       referenceDate: new Date('2025-01-01T12:00:00Z'),
+      timezone: 'UTC',
     });
 
     expect(result.warnings).toHaveLength(0);
@@ -244,8 +246,8 @@ afterAll(async () => {
 describe('queryDailyThroughput — DB integration', () => {
   let scopeId: string;
   let syncRunId: string;
-  let fiveDaysAgoDay: string;
-  let twoDaysAgoDay: string;
+  let wednesdayDay: string;
+  let fridayDay: string;
 
   beforeAll(async () => {
     await ensureDbStarted();
@@ -293,18 +295,13 @@ describe('queryDailyThroughput — DB integration', () => {
     });
     syncRunId = syncRun.id;
 
-    // Seed timestamps at noon UTC to avoid off-by-one edge cases at midnight.
-    const now = new Date();
-    const fiveDaysAgoNoon = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
-    fiveDaysAgoNoon.setUTCHours(12, 0, 0, 0);
-    const twoDaysAgoNoon = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
-    twoDaysAgoNoon.setUTCHours(12, 0, 0, 0);
+    const wednesdayNoon = new Date('2025-01-08T12:00:00Z');
+    const fridayNoon = new Date('2025-01-10T12:00:00Z');
 
-    // Compute the expected YYYY-MM-DD label for assertions.
-    fiveDaysAgoDay = formatDateInTimezone(fiveDaysAgoNoon, 'UTC');
-    twoDaysAgoDay = formatDateInTimezone(twoDaysAgoNoon, 'UTC');
+    wednesdayDay = formatDateInTimezone(wednesdayNoon, 'UTC');
+    fridayDay = formatDateInTimezone(fridayNoon, 'UTC');
 
-    // 1 item completed 5 days ago; 2 items completed 2 days ago.
+    // 1 item completed on Wednesday; 2 items completed on Friday.
     await db.workItem.createMany({
       data: [
         {
@@ -319,9 +316,9 @@ describe('queryDailyThroughput — DB integration', () => {
           currentStatusId: '30',
           currentColumn: 'Done',
           directUrl: 'https://jira.example.internal/browse/TH-1',
-          createdAt: fiveDaysAgoNoon,
-          startedAt: fiveDaysAgoNoon,
-          completedAt: fiveDaysAgoNoon,
+          createdAt: wednesdayNoon,
+          startedAt: wednesdayNoon,
+          completedAt: wednesdayNoon,
         },
         {
           scopeId,
@@ -335,9 +332,9 @@ describe('queryDailyThroughput — DB integration', () => {
           currentStatusId: '30',
           currentColumn: 'Done',
           directUrl: 'https://jira.example.internal/browse/TH-2',
-          createdAt: twoDaysAgoNoon,
-          startedAt: twoDaysAgoNoon,
-          completedAt: twoDaysAgoNoon,
+          createdAt: fridayNoon,
+          startedAt: fridayNoon,
+          completedAt: fridayNoon,
         },
         {
           scopeId,
@@ -351,65 +348,85 @@ describe('queryDailyThroughput — DB integration', () => {
           currentStatusId: '30',
           currentColumn: 'Done',
           directUrl: 'https://jira.example.internal/browse/TH-3',
-          createdAt: twoDaysAgoNoon,
-          startedAt: twoDaysAgoNoon,
-          completedAt: twoDaysAgoNoon,
+          createdAt: fridayNoon,
+          startedAt: fridayNoon,
+          completedAt: fridayNoon,
         },
       ],
     });
   });
 
-  it('returns one row per calendar day with YYYY-MM-DD format', async () => {
-    const db = getPrismaClient();
-    const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
+  it('returns one row per working day with YYYY-MM-DD format', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
 
-    expect(days.length).toBeGreaterThanOrEqual(7);
-    for (const d of days) {
-      expect(d.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(d.completedStoryCount).toBeGreaterThanOrEqual(0);
+      expect(days).toHaveLength(6);
+      expect(days.map((d) => d.day)).not.toEqual(
+        expect.arrayContaining(['2025-01-11', '2025-01-12']),
+      );
+      for (const d of days) {
+        expect(d.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(d.completedStoryCount).toBeGreaterThanOrEqual(0);
+      }
+    } finally {
+      vi.useRealTimers();
     }
   });
 
-  it('buckets completed items into the correct calendar days', async () => {
-    const db = getPrismaClient();
-    const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
+  it('buckets completed items into the correct working days', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
 
-    const byDay = new Map(days.map((d) => [d.day, d.completedStoryCount]));
+      const byDay = new Map(days.map((d) => [d.day, d.completedStoryCount]));
 
-    expect(byDay.get(fiveDaysAgoDay)).toBe(1);
-    expect(byDay.get(twoDaysAgoDay)).toBe(2);
+      expect(byDay.get(wednesdayDay)).toBe(1);
+      expect(byDay.get(fridayDay)).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('all days between the seeded days have zero completions', async () => {
-    const db = getPrismaClient();
-    const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
+  it('keeps zero-throughput weekdays while excluding weekends', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
 
-    const nonZeroDays = days.filter((d) => d.completedStoryCount > 0).map((d) => d.day);
-    // Only fiveDaysAgo and twoDaysAgo should have non-zero counts.
-    expect(nonZeroDays).toEqual(
-      expect.arrayContaining([fiveDaysAgoDay, twoDaysAgoDay]),
-    );
-    // There should be exactly 2 non-zero past days.
-    const nonZeroPastDays = nonZeroDays.filter((day) => {
+      const nonZeroDays = days.filter((d) => d.completedStoryCount > 0).map((d) => d.day);
+      expect(nonZeroDays).toEqual(expect.arrayContaining([wednesdayDay, fridayDay]));
+      expect(nonZeroDays).toHaveLength(2);
+      expect(days.find((d) => d.day === '2025-01-09')?.completedStoryCount).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks the current working day incomplete and past working days complete', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
+
       const today = formatDateInTimezone(new Date(), 'UTC');
-      return day < today;
-    });
-    expect(nonZeroPastDays).toHaveLength(2);
-  });
 
-  it('marks today as complete: false and all past days as complete: true', async () => {
-    const db = getPrismaClient();
-    const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
+      const todayEntry = days.find((d) => d.day === today);
+      expect(todayEntry).toBeDefined();
+      expect(todayEntry!.complete).toBe(false);
 
-    const today = formatDateInTimezone(new Date(), 'UTC');
-
-    const todayEntry = days.find((d) => d.day === today);
-    expect(todayEntry).toBeDefined();
-    expect(todayEntry!.complete).toBe(false);
-
-    const pastDays = days.filter((d) => d.day < today);
-    expect(pastDays.length).toBeGreaterThan(0);
-    expect(pastDays.every((d) => d.complete)).toBe(true);
+      const pastDays = days.filter((d) => d.day < today);
+      expect(pastDays.length).toBeGreaterThan(0);
+      expect(pastDays.every((d) => d.complete)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -465,18 +482,10 @@ describe('queryCompletedStories — DB integration', () => {
     });
     syncRunId = syncRun.id;
 
-    const now = new Date();
-    // CS-1: started 20 days ago, completed 10 days ago → cycle ≈ 10 days
-    const started20 = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
-    started20.setUTCHours(12, 0, 0, 0);
-    const completed10 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
-    completed10.setUTCHours(12, 0, 0, 0);
-
-    // CS-2: started 10 days ago, completed 3 days ago → cycle ≈ 7 days
-    const started10 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
-    started10.setUTCHours(12, 0, 0, 0);
-    const completed3 = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-    completed3.setUTCHours(12, 0, 0, 0);
+    const startedJan1 = new Date('2025-01-01T00:00:00Z');
+    const completedJan8 = new Date('2025-01-08T00:00:00Z');
+    const startedJan9 = new Date('2025-01-09T00:00:00Z');
+    const completedJan14 = new Date('2025-01-14T00:00:00Z');
 
     await db.workItem.createMany({
       data: [
@@ -492,9 +501,9 @@ describe('queryCompletedStories — DB integration', () => {
           currentStatusId: '30',
           currentColumn: 'Done',
           directUrl: 'https://jira.example.internal/browse/CS-1',
-          createdAt: started20,
-          startedAt: started20,
-          completedAt: completed10,
+          createdAt: startedJan1,
+          startedAt: startedJan1,
+          completedAt: completedJan8,
         },
         {
           scopeId,
@@ -508,9 +517,9 @@ describe('queryCompletedStories — DB integration', () => {
           currentStatusId: '30',
           currentColumn: 'Done',
           directUrl: 'https://jira.example.internal/browse/CS-2',
-          createdAt: started10,
-          startedAt: started10,
-          completedAt: completed3,
+          createdAt: startedJan9,
+          startedAt: startedJan9,
+          completedAt: completedJan14,
         },
         // This item should be excluded from results.
         {
@@ -525,9 +534,9 @@ describe('queryCompletedStories — DB integration', () => {
           currentStatusId: '30',
           currentColumn: 'Done',
           directUrl: 'https://jira.example.internal/browse/CS-3',
-          createdAt: started10,
-          startedAt: started10,
-          completedAt: completed3,
+          createdAt: startedJan9,
+          startedAt: startedJan9,
+          completedAt: completedJan14,
           excludedReason: 'manual',
         },
       ],
@@ -535,36 +544,51 @@ describe('queryCompletedStories — DB integration', () => {
   });
 
   it('returns only non-excluded completed stories within the window', async () => {
-    const db = getPrismaClient();
-    const stories = await queryCompletedStories(db, scopeId, { windowDays: 90 });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-17T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const stories = await queryCompletedStories(db, scopeId, { windowDays: 90, timezone: 'UTC' });
 
-    expect(stories).toHaveLength(2);
-    const keys = stories.map((s) => s.issueKey);
-    expect(keys).toContain('CS-1');
-    expect(keys).toContain('CS-2');
-    expect(keys).not.toContain('CS-3');
+      expect(stories).toHaveLength(2);
+      const keys = stories.map((s) => s.issueKey);
+      expect(keys).toContain('CS-1');
+      expect(keys).toContain('CS-2');
+      expect(keys).not.toContain('CS-3');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('computes cycle time correctly for each story', async () => {
-    const db = getPrismaClient();
-    const stories = await queryCompletedStories(db, scopeId, { windowDays: 90 });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-17T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const stories = await queryCompletedStories(db, scopeId, { windowDays: 90, timezone: 'UTC' });
 
-    const cs1 = stories.find((s) => s.issueKey === 'CS-1')!;
-    const cs2 = stories.find((s) => s.issueKey === 'CS-2')!;
+      const cs1 = stories.find((s) => s.issueKey === 'CS-1')!;
+      const cs2 = stories.find((s) => s.issueKey === 'CS-2')!;
 
-    // CS-1: 20 days ago → 10 days ago = 10 days cycle
-    expect(cs1.cycleTimeDays).toBeCloseTo(10, 0);
-    // CS-2: 10 days ago → 3 days ago = 7 days cycle
-    expect(cs2.cycleTimeDays).toBeCloseTo(7, 0);
+      expect(cs1.cycleTimeDays).toBeCloseTo(5, 5);
+      expect(cs2.cycleTimeDays).toBeCloseTo(3, 5);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('excludes stories completed outside the historical window', async () => {
-    const db = getPrismaClient();
-    // Window of only 5 days: only CS-2 (completed 3 days ago) should be returned.
-    const stories = await queryCompletedStories(db, scopeId, { windowDays: 5 });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-17T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const stories = await queryCompletedStories(db, scopeId, { windowDays: 5, timezone: 'UTC' });
 
-    expect(stories).toHaveLength(1);
-    expect(stories[0]!.issueKey).toBe('CS-2');
+      expect(stories).toHaveLength(1);
+      expect(stories[0]!.issueKey).toBe('CS-2');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

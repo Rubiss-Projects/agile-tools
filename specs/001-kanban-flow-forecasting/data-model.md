@@ -238,7 +238,7 @@ The feature stores Jira source facts, local derived analytics, and forecast cach
 ### Current Work Item Projection
 
 - One row per in-scope active work item.
-- Includes current status, current column, age in days, accumulated hold duration, `onHoldNow`, and current aging zone.
+- Includes current status, current column, age in working days, accumulated hold duration, `onHoldNow`, and current aging zone.
 - Optimized for scatter plot and filter requests.
 
 ### Work Item Detail Projection
@@ -248,12 +248,12 @@ The feature stores Jira source facts, local derived analytics, and forecast cach
 
 ### Completed Story Projection
 
-- One row per distinct completed story, with final completion date, cycle time, hold time, reopen count, and exclusion flags.
+- One row per distinct completed story, with final completion date, cycle time in working days, hold time, reopen count, and exclusion flags.
 - Serves as the base dataset for percentile aging thresholds and Monte Carlo forecast sampling.
 
 ### Daily Throughput Projection
 
-- One row per scope and day, with completed story count, timezone-adjusted bucket date, completeness flags, and trailing-window statistics.
+- One row per scope and working day, with completed story count, timezone-adjusted bucket date, completeness flags, and trailing-window statistics.
 - Optimized for throughput charts and forecast sampling.
 
 ### Forecast Result Cache

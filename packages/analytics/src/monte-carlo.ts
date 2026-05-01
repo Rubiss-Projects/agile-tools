@@ -1,4 +1,5 @@
 import type { ForecastResult } from '@agile-tools/shared/contracts/forecast';
+import { addWorkingDaysToDate } from '@agile-tools/shared';
 
 /**
  * Minimum number of completed stories in the historical window before a Monte
@@ -45,8 +46,10 @@ export interface WhenForecastInput {
   remainingStoryCount: number;
   /** Confidence percentiles to compute (e.g. [50, 70, 85, 95]). */
   confidenceLevels: number[];
-  /** Reference date for converting simulation day-offsets to calendar dates. Defaults to today. */
+  /** Reference date for converting simulation working-day offsets to dates. Defaults to today. */
   referenceDate?: Date;
+  /** Scope timezone used when converting working-day offsets to completion dates. */
+  timezone?: string;
   /** Number of Monte Carlo trials. Defaults to DEFAULT_MONTE_CARLO_ITERATIONS. */
   iterations?: number;
 }
@@ -56,8 +59,9 @@ export interface WhenForecastInput {
  *
  * For each trial the engine samples daily throughput values (with replacement)
  * until the cumulative count reaches `remainingStoryCount`, recording the
- * number of days required. The p-th percentile of "days needed" across all
- * trials is then converted to a calendar date for each requested confidence level.
+ * number of working days required. The p-th percentile of "days needed" across
+ * all trials is then converted to a working-day-aware completion date for each
+ * requested confidence level.
  *
  * Higher confidence level → longer (more conservative) completion date.
  */
@@ -69,6 +73,7 @@ export function runWhenForecast(input: WhenForecastInput): MonteCarloForecastRes
     confidenceLevels,
     iterations = DEFAULT_MONTE_CARLO_ITERATIONS,
     referenceDate = new Date(),
+    timezone = 'UTC',
   } = input;
 
   const warnings = buildWarnings(historicalDailyThroughput, sampleSize);
@@ -97,11 +102,9 @@ export function runWhenForecast(input: WhenForecastInput): MonteCarloForecastRes
 
   const results: ForecastResult[] = confidenceLevels.map((cl) => {
     const daysNeeded = nearestRankPercentile(completionDays, cl);
-    const completionDate = new Date(referenceDate);
-    completionDate.setDate(completionDate.getDate() + daysNeeded);
     return {
       confidenceLevel: cl,
-      completionDate: completionDate.toISOString().slice(0, 10),
+      completionDate: addWorkingDaysToDate(referenceDate, daysNeeded, timezone),
     };
   });
 
@@ -115,7 +118,7 @@ export interface HowManyForecastInput {
   historicalDailyThroughput: number[];
   /** Number of completed stories used to build the throughput sample. */
   sampleSize: number;
-  /** Calendar days from today to the target date (inclusive). */
+  /** Working days from today to the target date. */
   targetDays: number;
   /** Confidence percentiles to compute. */
   confidenceLevels: number[];

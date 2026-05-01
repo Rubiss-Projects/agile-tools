@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { InvalidTimeZoneError, logger } from '@agile-tools/shared';
+import { countWorkingDaysBetweenDates, InvalidTimeZoneError, logger } from '@agile-tools/shared';
 import {
   getPrismaClient,
   getFlowScope,
@@ -30,8 +30,6 @@ import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request
 import { buildInvalidScopeTimezoneProblem } from '../../_problems';
 import { shapeForecastResponse } from '@/server/views/forecast-response';
 import { getCompletedStoryCount, getForecastSampleDays } from '@/server/views/throughput-sample';
-
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 export async function POST(
   req: NextRequest,
@@ -181,13 +179,12 @@ export async function POST(
         remainingStoryCount: request.remainingStoryCount,
         confidenceLevels: request.confidenceLevels,
         iterations,
+        timezone: scope.timezone,
       });
     } else {
-      // Compute calendar days from today (scope timezone) to the target date inclusive.
+      // Compute working days from today (scope timezone) to the target date.
       const todayLocal = formatDateInTimezone(new Date(), scope.timezone);
-      const fromMs = new Date(todayLocal + 'T12:00:00').getTime();
-      const toMs = new Date(request.targetDate + 'T12:00:00').getTime();
-      const targetDays = Math.round((toMs - fromMs) / MS_PER_DAY);
+      const targetDays = countWorkingDaysBetweenDates(todayLocal, request.targetDate);
 
       monteCarlo = runHowManyForecast({
         historicalDailyThroughput,

@@ -1,6 +1,10 @@
 import type { PrismaClient } from '@prisma/client';
 
-import { normalizeTimeZoneOrThrow } from '@agile-tools/shared';
+import {
+  differenceInWorkingDays,
+  formatDateInTimezone as sharedFormatDateInTimezone,
+  isWeekendDate,
+} from '@agile-tools/shared';
 
 export const DEFAULT_COMPLETED_WINDOW_DAYS = 90;
 export const DEFAULT_THROUGHPUT_WINDOW_DAYS = 90;
@@ -13,7 +17,7 @@ export interface CompletedStoryRow {
   workItemId: string;
   issueKey: string;
   completedAt: Date;
-  /** Cycle time in fractional days from startedAt (or createdAt) to completedAt. */
+  /** Cycle time in fractional working days from startedAt (or createdAt) to completedAt. */
   cycleTimeDays: number;
   /** Total on-hold duration in fractional days derived from HoldPeriod records. */
   holdTimeDays: number;
@@ -33,10 +37,11 @@ export interface CompletedStoryRow {
 export async function queryCompletedStories(
   db: PrismaClient,
   scopeId: string,
-  options?: { windowDays?: number; dataVersion?: string },
+  options?: { windowDays?: number; dataVersion?: string; timezone?: string },
 ): Promise<CompletedStoryRow[]> {
   const windowDays = options?.windowDays ?? DEFAULT_COMPLETED_WINDOW_DAYS;
   const windowStart = new Date(Date.now() - windowDays * MS_PER_DAY);
+  const timezone = options?.timezone ?? 'UTC';
 
   const items = await db.workItem.findMany({
     where: {
@@ -51,10 +56,7 @@ export async function queryCompletedStories(
 
   return items.map((item) => {
     const referenceDate = item.startedAt ?? item.createdAt;
-    const cycleTimeDays = Math.max(
-      0,
-      (item.completedAt!.getTime() - referenceDate.getTime()) / MS_PER_DAY,
-    );
+    const cycleTimeDays = differenceInWorkingDays(referenceDate, item.completedAt!, timezone);
 
     let totalHoldMs = 0;
     for (const hp of item.holdPeriods) {
@@ -77,46 +79,27 @@ export async function queryCompletedStories(
 // ─── Daily throughput ────────────────────────────────────────────────────────
 
 export interface DailyThroughputRow {
-  /** Calendar date in the scope's timezone, formatted as YYYY-MM-DD. */
+  /** Working-day date in the scope's timezone, formatted as YYYY-MM-DD. */
   day: string;
   completedStoryCount: number;
-  /** True when this day is fully in the past (not the current calendar day). */
+  /** True when this working day is fully in the past (not the current local weekday). */
   complete: boolean;
 }
 
-function formatDateInValidatedTimezone(date: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const y = parts.find((p) => p.type === 'year')!.value;
-  const m = parts.find((p) => p.type === 'month')!.value;
-  const d = parts.find((p) => p.type === 'day')!.value;
-  return `${y}-${m}-${d}`;
-}
-
-/**
- * Format a Date as YYYY-MM-DD in a given IANA timezone.
- * Uses Intl.DateTimeFormat with 'en-CA' locale which produces YYYY-MM-DD natively.
- */
-export function formatDateInTimezone(date: Date, timezone: string): string {
-  return formatDateInValidatedTimezone(date, normalizeTimeZoneOrThrow(timezone));
-}
+export const formatDateInTimezone = sharedFormatDateInTimezone;
 
 /**
  * Build a daily throughput projection for a scope within a historical window.
  *
- * Returns one row per calendar day in the window — including days with zero
- * completions. Zero-completion days must be represented so that Monte Carlo
- * simulations sample realistic "dry day" frequency and avoid over-optimistic
- * forecasts.
+ * Returns one row per working day in the window — including working days with
+ * zero completions. Zero-completion weekdays must be represented so that Monte
+ * Carlo simulations sample realistic "dry day" frequency without diluting the
+ * sample with weekend buckets.
  *
- * The `complete` flag distinguishes fully-past days from the current calendar
- * day (today), which is still in progress. Throughput charts may style the
+ * The `complete` flag distinguishes fully-past working days from the current
+ * local weekday, which is still in progress. Throughput charts may style the
  * current day differently; the Monte Carlo engine should only sample from
- * complete days.
+ * complete working days.
  *
  * Pass `dataVersion` to pin to a specific sync snapshot.
  */
@@ -129,7 +112,6 @@ export async function queryDailyThroughput(
   const windowDays = options?.windowDays ?? DEFAULT_THROUGHPUT_WINDOW_DAYS;
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowDays * MS_PER_DAY);
-  const normalizedTimezone = normalizeTimeZoneOrThrow(timezone);
 
   const completedItems = await db.workItem.findMany({
     where: {
@@ -142,29 +124,35 @@ export async function queryDailyThroughput(
     orderBy: { completedAt: 'asc' },
   });
 
-  // Bucket completions by timezone-local calendar day
+  // Bucket completions by timezone-local working day.
   const countsByDay = new Map<string, number>();
   for (const item of completedItems) {
-    const day = formatDateInValidatedTimezone(item.completedAt!, normalizedTimezone);
+    const day = sharedFormatDateInTimezone(item.completedAt!, timezone);
+    if (isWeekendDate(day)) {
+      continue;
+    }
     countsByDay.set(day, (countsByDay.get(day) ?? 0) + 1);
   }
 
-  const todayLocal = formatDateInValidatedTimezone(now, normalizedTimezone);
+  const todayLocal = sharedFormatDateInTimezone(now, timezone);
 
-  // Generate one entry per calendar day from windowStart → today (inclusive).
+  // Generate one entry per working day from windowStart → today (inclusive).
   // Walk forward 24 h at a time and deduplicate formatted dates to handle DST
-  // transitions (where a 24 h step might land on the same or a skipped calendar day).
+  // transitions (where a 24 h step might land on the same or a skipped local date).
   const days: string[] = [];
   for (let i = windowDays; i >= 0; i--) {
     const d = new Date(now.getTime() - i * MS_PER_DAY);
-    const day = formatDateInValidatedTimezone(d, normalizedTimezone);
-    if (days.length === 0 || days[days.length - 1] !== day) {
+    const day = sharedFormatDateInTimezone(d, timezone);
+    if (!isWeekendDate(day) && (days.length === 0 || days[days.length - 1] !== day)) {
       days.push(day);
     }
   }
 
   // Ensure today is always the last entry
-  if (days.length === 0 || days[days.length - 1] !== todayLocal) {
+  if (
+    !isWeekendDate(todayLocal) &&
+    (days.length === 0 || days[days.length - 1] !== todayLocal)
+  ) {
     days.push(todayLocal);
   }
 

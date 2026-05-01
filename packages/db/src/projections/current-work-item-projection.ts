@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { differenceInWorkingDays } from '@agile-tools/shared';
 
 /**
  * Percentile thresholds used to classify a work item's aging zone.
@@ -24,7 +25,7 @@ export interface CurrentWorkItemRow {
   currentColumn: string;
   /** Human-readable assignee display value; null when the issue is unassigned. */
   assigneeName: string | null;
-  /** Cycle time in fractional days from startedAt (or createdAt if not yet started). */
+  /** Working age in fractional days from startedAt (or createdAt if not yet started). */
   ageInDays: number;
   startedAt: Date | null;
   /** Total hold duration in hours derived from HoldPeriod records. */
@@ -51,7 +52,6 @@ export interface ScopeFilterOptions {
 }
 
 const MS_PER_HOUR = 1000 * 60 * 60;
-const MS_PER_DAY = MS_PER_HOUR * 24;
 
 /**
  * Query active (non-completed, non-excluded) work items for a scope with
@@ -63,9 +63,10 @@ const MS_PER_DAY = MS_PER_HOUR * 24;
 export async function queryCurrentWorkItems(
   db: PrismaClient,
   scopeId: string,
-  options?: { dataVersion?: string; agingThresholds?: AgingThresholds },
+  options?: { dataVersion?: string; agingThresholds?: AgingThresholds; timezone?: string },
 ): Promise<CurrentWorkItemRow[]> {
   const now = new Date();
+  const timezone = options?.timezone ?? 'UTC';
 
   const items = await db.workItem.findMany({
     where: {
@@ -97,7 +98,7 @@ export async function queryCurrentWorkItems(
 
   return items.map((item) => {
     const referenceDate = item.startedAt ?? item.createdAt;
-    const ageInDays = (now.getTime() - referenceDate.getTime()) / MS_PER_DAY;
+    const ageInDays = differenceInWorkingDays(referenceDate, now, timezone);
 
     let totalHoldMs = 0;
     let onHoldNow = false;
