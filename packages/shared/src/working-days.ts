@@ -143,6 +143,20 @@ export function isWeekendDate(day: string): boolean {
   return weekDay === 0 || weekDay === 6;
 }
 
+export function bucketToPreviousWorkingDay(day: string): string {
+  parseLocalDate(day);
+  if (!isWeekendDate(day)) {
+    return day;
+  }
+
+  let bucketDay = addCalendarDays(day, -1);
+  while (isWeekendDate(bucketDay)) {
+    bucketDay = addCalendarDays(bucketDay, -1);
+  }
+
+  return bucketDay;
+}
+
 /**
  * Count working dates between two local dates.
  *

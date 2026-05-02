@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   addWorkingDaysToDate,
+  bucketToPreviousWorkingDay,
   countWorkingDaysBetweenDates,
   differenceInWorkingDays,
   formatDateInTimezone,
@@ -24,6 +25,12 @@ describe('working-day helpers', () => {
     expect(addWorkingDaysToDate(new Date('2025-01-10T12:00:00Z'), 1, 'UTC')).toBe('2025-01-13');
     expect(addWorkingDaysToDate(new Date('2025-01-10T12:00:00Z'), 5, 'UTC')).toBe('2025-01-17');
     expect(addWorkingDaysToDate(new Date('2025-01-11T12:00:00Z'), 5, 'UTC')).toBe('2025-01-17');
+  });
+
+  it('re-buckets weekend dates onto the previous working day', () => {
+    expect(bucketToPreviousWorkingDay('2025-01-10')).toBe('2025-01-10');
+    expect(bucketToPreviousWorkingDay('2025-01-11')).toBe('2025-01-10');
+    expect(bucketToPreviousWorkingDay('2025-01-12')).toBe('2025-01-10');
   });
 
   it('excludes weekend portions from fractional working-day differences', () => {

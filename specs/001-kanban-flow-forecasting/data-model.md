@@ -253,7 +253,7 @@ The feature stores Jira source facts, local derived analytics, and forecast cach
 
 ### Daily Throughput Projection
 
-- One row per scope and working day, with completed story count, timezone-adjusted bucket date, completeness flags, and trailing-window statistics.
+- One row per scope and working day, with completed story count, timezone-adjusted bucket date, completeness flags, and trailing-window statistics. Weekend completions are re-bucketed to the previous working day.
 - Optimized for throughput charts and forecast sampling.
 
 ### Forecast Result Cache

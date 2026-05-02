@@ -248,6 +248,8 @@ describe('queryDailyThroughput — DB integration', () => {
   let syncRunId: string;
   let wednesdayDay: string;
   let fridayDay: string;
+  let saturdayNoon: Date;
+  let sundayNoon: Date;
 
   beforeAll(async () => {
     await ensureDbStarted();
@@ -297,11 +299,14 @@ describe('queryDailyThroughput — DB integration', () => {
 
     const wednesdayNoon = new Date('2025-01-08T12:00:00Z');
     const fridayNoon = new Date('2025-01-10T12:00:00Z');
+    saturdayNoon = new Date('2025-01-11T12:00:00Z');
+    sundayNoon = new Date('2025-01-12T12:00:00Z');
 
     wednesdayDay = formatDateInTimezone(wednesdayNoon, 'UTC');
     fridayDay = formatDateInTimezone(fridayNoon, 'UTC');
 
-    // 1 item completed on Wednesday; 2 items completed on Friday.
+    // 1 item completed on Wednesday; 2 on Friday; weekend completions should
+    // also roll back into Friday's working-day bucket.
     await db.workItem.createMany({
       data: [
         {
@@ -352,6 +357,38 @@ describe('queryDailyThroughput — DB integration', () => {
           startedAt: fridayNoon,
           completedAt: fridayNoon,
         },
+        {
+          scopeId,
+          lastSyncRunId: syncRunId,
+          jiraIssueId: 'TH-4',
+          issueKey: 'TH-4',
+          summary: 'Weekend item saturday',
+          issueTypeId: 'story',
+          issueTypeName: 'Story',
+          projectId: 'TH',
+          currentStatusId: '30',
+          currentColumn: 'Done',
+          directUrl: 'https://jira.example.internal/browse/TH-4',
+          createdAt: saturdayNoon,
+          startedAt: saturdayNoon,
+          completedAt: saturdayNoon,
+        },
+        {
+          scopeId,
+          lastSyncRunId: syncRunId,
+          jiraIssueId: 'TH-5',
+          issueKey: 'TH-5',
+          summary: 'Weekend item sunday',
+          issueTypeId: 'story',
+          issueTypeName: 'Story',
+          projectId: 'TH',
+          currentStatusId: '30',
+          currentColumn: 'Done',
+          directUrl: 'https://jira.example.internal/browse/TH-5',
+          createdAt: sundayNoon,
+          startedAt: sundayNoon,
+          completedAt: sundayNoon,
+        },
       ],
     });
   });
@@ -376,7 +413,7 @@ describe('queryDailyThroughput — DB integration', () => {
     }
   });
 
-  it('buckets completed items into the correct working days', async () => {
+  it('re-buckets weekend completions onto the previous working day', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
     try {
@@ -386,13 +423,13 @@ describe('queryDailyThroughput — DB integration', () => {
       const byDay = new Map(days.map((d) => [d.day, d.completedStoryCount]));
 
       expect(byDay.get(wednesdayDay)).toBe(1);
-      expect(byDay.get(fridayDay)).toBe(2);
+      expect(byDay.get(fridayDay)).toBe(4);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('keeps zero-throughput weekdays while excluding weekends', async () => {
+  it('keeps zero-throughput weekdays while omitting weekend buckets', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
     try {
@@ -402,6 +439,8 @@ describe('queryDailyThroughput — DB integration', () => {
       const nonZeroDays = days.filter((d) => d.completedStoryCount > 0).map((d) => d.day);
       expect(nonZeroDays).toEqual(expect.arrayContaining([wednesdayDay, fridayDay]));
       expect(nonZeroDays).toHaveLength(2);
+      expect(days.find((d) => d.day === '2025-01-11')).toBeUndefined();
+      expect(days.find((d) => d.day === '2025-01-12')).toBeUndefined();
       expect(days.find((d) => d.day === '2025-01-09')?.completedStoryCount).toBe(0);
     } finally {
       vi.useRealTimers();
@@ -424,6 +463,22 @@ describe('queryDailyThroughput — DB integration', () => {
       const pastDays = days.filter((d) => d.day < today);
       expect(pastDays.length).toBeGreaterThan(0);
       expect(pastDays.every((d) => d.complete)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('includes the rebucket target when the calendar window starts on a weekend', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 2 });
+      const byDay = new Map(days.map((d) => [d.day, d.completedStoryCount]));
+
+      expect(days.map((d) => d.day)).toEqual(['2025-01-10', '2025-01-13']);
+      expect(byDay.get('2025-01-10')).toBe(2);
+      expect(byDay.get('2025-01-13')).toBe(0);
     } finally {
       vi.useRealTimers();
     }
