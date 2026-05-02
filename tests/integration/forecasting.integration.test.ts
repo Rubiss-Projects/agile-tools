@@ -468,6 +468,21 @@ describe('queryDailyThroughput — DB integration', () => {
     }
   });
 
+  it('treats the rebucket target as the current working day on weekends', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-12T12:00:00Z'));
+    try {
+      const db = getPrismaClient();
+      const days = await queryDailyThroughput(db, scopeId, 'UTC', { windowDays: 7 });
+
+      expect(days.at(-1)?.day).toBe(fridayDay);
+      expect(days.find((d) => d.day === fridayDay)?.complete).toBe(false);
+      expect(days.filter((d) => d.day < fridayDay).every((d) => d.complete)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('includes the rebucket target when the calendar window starts on a weekend', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-13T12:00:00Z'));

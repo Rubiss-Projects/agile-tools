@@ -4,6 +4,18 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
 const dateTimeFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const normalizedTimezoneCache = new Map<string, string>();
+
+function getNormalizedTimezone(timezone: string): string {
+  const trimmed = timezone.trim();
+  let normalized = normalizedTimezoneCache.get(trimmed);
+  if (!normalized) {
+    normalized = normalizeTimeZoneOrThrow(trimmed);
+    normalizedTimezoneCache.set(trimmed, normalized);
+    normalizedTimezoneCache.set(normalized, normalized);
+  }
+  return normalized;
+}
 
 function getDateFormatter(timezone: string): Intl.DateTimeFormat {
   let formatter = dateFormatterCache.get(timezone);
@@ -135,7 +147,7 @@ function getLocalDayFraction(date: Date, timezone: string): { day: string; fract
 }
 
 export function formatDateInTimezone(date: Date, timezone: string): string {
-  return getLocalDay(date, normalizeTimeZoneOrThrow(timezone));
+  return getLocalDay(date, getNormalizedTimezone(timezone));
 }
 
 export function isWeekendDate(day: string): boolean {
@@ -178,7 +190,7 @@ export function addWorkingDaysToDate(date: Date, workingDays: number, timezone: 
     throw new RangeError(`workingDays must be a non-negative integer, received ${workingDays}`);
   }
 
-  const normalizedTimezone = normalizeTimeZoneOrThrow(timezone);
+  const normalizedTimezone = getNormalizedTimezone(timezone);
   const startDay = getLocalDay(date, normalizedTimezone);
 
   if (workingDays === 0) {
@@ -212,7 +224,7 @@ export function differenceInWorkingDays(start: Date, end: Date, timezone: string
     return 0;
   }
 
-  const normalizedTimezone = normalizeTimeZoneOrThrow(timezone);
+  const normalizedTimezone = getNormalizedTimezone(timezone);
   const startLocal = getLocalDayFraction(start, normalizedTimezone);
   const endLocal = getLocalDayFraction(end, normalizedTimezone);
 

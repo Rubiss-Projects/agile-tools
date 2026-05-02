@@ -99,9 +99,9 @@ export const formatDateInTimezone = sharedFormatDateInTimezone;
  * toward throughput and forecast sampling.
  *
  * The `complete` flag distinguishes fully-past working days from the current
- * local weekday, which is still in progress. Throughput charts may style the
- * current day differently; the Monte Carlo engine should only sample from
- * complete working days.
+ * working-day bucket, which remains in progress. On weekends, the current
+ * working-day bucket is the prior Friday because weekend completions rebucket
+ * there. The Monte Carlo engine should only sample from complete working days.
  *
  * Pass `dataVersion` to pin to a specific sync snapshot.
  */
@@ -136,6 +136,7 @@ export async function queryDailyThroughput(
   }
 
   const todayLocal = sharedFormatDateInTimezone(now, timezone);
+  const currentWorkingDay = bucketToPreviousWorkingDay(todayLocal);
 
   // Generate one entry per working day from windowStart → today (inclusive).
   // Walk forward 24 h at a time and deduplicate formatted dates to handle DST
@@ -154,17 +155,16 @@ export async function queryDailyThroughput(
     days.unshift(earliestBucketDay);
   }
 
-  // Ensure today is always the last entry
-  if (
-    !isWeekendDate(todayLocal) &&
-    (days.length === 0 || days[days.length - 1] !== todayLocal)
-  ) {
-    days.push(todayLocal);
+  // Ensure the current working-day bucket is always the last entry. On
+  // weekends, that bucket is the prior Friday because weekend completions roll
+  // back there.
+  if (days.length === 0 || days[days.length - 1] !== currentWorkingDay) {
+    days.push(currentWorkingDay);
   }
 
   return days.map((day) => ({
     day,
     completedStoryCount: countsByDay.get(day) ?? 0,
-    complete: day < todayLocal,
+    complete: day < currentWorkingDay,
   }));
 }

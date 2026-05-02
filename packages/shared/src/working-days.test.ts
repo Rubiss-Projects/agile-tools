@@ -15,6 +15,16 @@ describe('working-day helpers', () => {
     );
   });
 
+  it('reuses normalized timezone identifiers across helper calls', () => {
+    const date = new Date('2025-01-11T02:00:00Z');
+
+    expect(formatDateInTimezone(date, ' America/Los_Angeles ')).toBe('2025-01-10');
+    expect(formatDateInTimezone(date, 'America/Los_Angeles')).toBe('2025-01-10');
+    expect(addWorkingDaysToDate(new Date('2025-01-10T12:00:00Z'), 1, ' America/Los_Angeles ')).toBe(
+      '2025-01-13',
+    );
+  });
+
   it('counts working days between local dates with weekend exclusion', () => {
     expect(countWorkingDaysBetweenDates('2025-01-10', '2025-01-13')).toBe(1);
     expect(countWorkingDaysBetweenDates('2025-01-13', '2025-01-17')).toBe(4);
