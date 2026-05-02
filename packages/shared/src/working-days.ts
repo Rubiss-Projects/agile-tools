@@ -70,6 +70,15 @@ function parseLocalDate(day: string): { year: number; month: number; date: numbe
   return { year, month, date };
 }
 
+export function isValidLocalDate(day: string): boolean {
+  try {
+    parseLocalDate(day);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function addCalendarDays(day: string, delta: number): string {
   const { year, month, date } = parseLocalDate(day);
   return formatUtcDate(new Date(Date.UTC(year, month - 1, date + delta)));

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidLocalDate } from '../working-days.js';
 import { WarningSchema } from './api.js';
 
 // ─── Request ──────────────────────────────────────────────────────────────────
@@ -19,9 +20,16 @@ export const WhenForecastRequestSchema = z.object({
 });
 export type WhenForecastRequest = z.infer<typeof WhenForecastRequestSchema>;
 
+const LocalDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => isValidLocalDate(value), {
+    message: 'Must be a real calendar date in YYYY-MM-DD format.',
+  });
+
 export const HowManyForecastRequestSchema = z.object({
   type: z.literal('how_many'),
-  targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  targetDate: LocalDateSchema,
   ...baseFields,
 });
 export type HowManyForecastRequest = z.infer<typeof HowManyForecastRequestSchema>;
