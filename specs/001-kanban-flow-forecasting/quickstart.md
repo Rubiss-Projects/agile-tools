@@ -111,7 +111,7 @@ If validating only the MVP slice, stop after the Connection And Sync journey. Th
 ### 3. Story-Count Monte Carlo Forecasting
 
 - Open the forecast workflow for the configured scope.
-- Confirm the completed-story throughput view matches the historical window selected for the forecast and excludes weekend buckets.
+- Confirm the completed-story throughput view matches the historical window selected for the forecast, omits weekend buckets, and rolls weekend completions into the previous working day.
 - Request a completion-date forecast using a remaining story count.
 - Request a completion-volume forecast using a target date.
 - Confirm that completion-date forecasts return date ranges, completion-volume forecasts return story-count ranges, and both include sample sizes, historical windows, and warnings when confidence is low.

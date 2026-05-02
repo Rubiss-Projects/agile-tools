@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import {
+  bucketToPreviousWorkingDay,
   differenceInWorkingDays,
   formatDateInTimezone as sharedFormatDateInTimezone,
   isWeekendDate,
@@ -93,8 +94,9 @@ export const formatDateInTimezone = sharedFormatDateInTimezone;
  *
  * Returns one row per working day in the window — including working days with
  * zero completions. Zero-completion weekdays must be represented so that Monte
- * Carlo simulations sample realistic "dry day" frequency without diluting the
- * sample with weekend buckets.
+ * Carlo simulations sample realistic "dry day" frequency. Weekend completions
+ * are re-bucketed onto the previous working day so weekend work still counts
+ * toward throughput and forecast sampling.
  *
  * The `complete` flag distinguishes fully-past working days from the current
  * local weekday, which is still in progress. Throughput charts may style the
@@ -124,13 +126,12 @@ export async function queryDailyThroughput(
     orderBy: { completedAt: 'asc' },
   });
 
-  // Bucket completions by timezone-local working day.
+  // Bucket completions by timezone-local working day, rolling weekend
+  // completions back onto the prior Friday so weekend work contributes to
+  // working-day throughput without creating weekend buckets.
   const countsByDay = new Map<string, number>();
   for (const item of completedItems) {
-    const day = sharedFormatDateInTimezone(item.completedAt!, timezone);
-    if (isWeekendDate(day)) {
-      continue;
-    }
+    const day = bucketToPreviousWorkingDay(sharedFormatDateInTimezone(item.completedAt!, timezone));
     countsByDay.set(day, (countsByDay.get(day) ?? 0) + 1);
   }
 
@@ -146,6 +147,11 @@ export async function queryDailyThroughput(
     if (!isWeekendDate(day) && (days.length === 0 || days[days.length - 1] !== day)) {
       days.push(day);
     }
+  }
+
+  const earliestBucketDay = Array.from(countsByDay.keys()).sort()[0];
+  if (earliestBucketDay && (days.length === 0 || earliestBucketDay < days[0]!)) {
+    days.unshift(earliestBucketDay);
   }
 
   // Ensure today is always the last entry

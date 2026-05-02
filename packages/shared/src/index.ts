@@ -17,6 +17,7 @@ export {
 
 export {
   addWorkingDaysToDate,
+  bucketToPreviousWorkingDay,
   countWorkingDaysBetweenDates,
   differenceInWorkingDays,
   formatDateInTimezone,
