@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 import { InvalidTimeZoneError } from '@agile-tools/shared';
+import { ForecastRequestSchema } from '@agile-tools/shared/contracts/forecast';
 
 vi.mock('@/server/auth', () => ({
   requireWorkspaceContext: vi.fn(),
@@ -94,6 +95,34 @@ describe('POST /api/v1/scopes/:scopeId/forecasts', () => {
     expect(body.message).toContain('America/New_York');
   });
 
+  it('returns 400 when how_many targetDate is not a real calendar date', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/v1/scopes/scope-1/forecasts', {
+        method: 'POST',
+        headers: {
+          Origin: 'http://localhost',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'how_many',
+          targetDate: '2025-02-30',
+          historicalWindowDays: 90,
+          confidenceLevels: [85],
+        }),
+      }),
+      { params: Promise.resolve({ scopeId: 'scope-1' }) },
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.code).toBe('INVALID_REQUEST');
+    expect(body.details).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('targetDate: Must be a real calendar date in YYYY-MM-DD format.'),
+      ]),
+    );
+  });
+
   it('excludes incomplete days from the forecast sample size', async () => {
     vi.mocked(queryDailyThroughput).mockResolvedValue([
       { day: '2026-04-19', completedStoryCount: 4, complete: true },
@@ -138,5 +167,17 @@ describe('POST /api/v1/scopes/:scopeId/forecasts', () => {
 
     const body = await response.json();
     expect(body.sampleSize).toBe(7);
+  });
+
+  it('rejects impossible dates at the shared forecast request schema boundary', () => {
+    const parsed = ForecastRequestSchema.safeParse({
+      type: 'how_many',
+      targetDate: '2025-02-30',
+      historicalWindowDays: 90,
+      confidenceLevels: [85],
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toContain('real calendar date');
   });
 });

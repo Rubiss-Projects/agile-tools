@@ -6,6 +6,7 @@ import {
   countWorkingDaysBetweenDates,
   differenceInWorkingDays,
   formatDateInTimezone,
+  isValidLocalDate,
 } from './working-days.js';
 
 describe('working-day helpers', () => {
@@ -29,6 +30,12 @@ describe('working-day helpers', () => {
     expect(countWorkingDaysBetweenDates('2025-01-10', '2025-01-13')).toBe(1);
     expect(countWorkingDaysBetweenDates('2025-01-13', '2025-01-17')).toBe(4);
     expect(countWorkingDaysBetweenDates('2025-01-01', '2025-12-31')).toBe(260);
+  });
+
+  it('accepts only real calendar dates', () => {
+    expect(isValidLocalDate('2025-02-28')).toBe(true);
+    expect(isValidLocalDate('2025-02-30')).toBe(false);
+    expect(isValidLocalDate('2025-13-01')).toBe(false);
   });
 
   it('advances forecast dates by working days only', () => {
