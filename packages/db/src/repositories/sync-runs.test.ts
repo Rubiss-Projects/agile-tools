@@ -13,6 +13,7 @@ let workspaceId: string;
 let connectionId: string;
 let scopeId: string;
 let postgresContainer: StartedTestContainer | undefined;
+const POSTGRES_HOOK_TIMEOUT_MS = 120_000;
 
 async function startPostgres() {
   postgresContainer = await new GenericContainer('postgres:16-alpine')
@@ -49,12 +50,12 @@ async function stopPostgres() {
 beforeAll(async () => {
   process.env['DATABASE_URL'] = await startPostgres();
   await disconnectPrisma();
-});
+}, POSTGRES_HOOK_TIMEOUT_MS);
 
 afterAll(async () => {
   await disconnectPrisma();
   await stopPostgres();
-});
+}, POSTGRES_HOOK_TIMEOUT_MS);
 
 beforeEach(async () => {
   const db = getPrismaClient();
