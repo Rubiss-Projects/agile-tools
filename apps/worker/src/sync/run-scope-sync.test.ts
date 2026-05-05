@@ -172,9 +172,53 @@ function createDb(options?: { doneStatusIds?: string[] }) {
     }),
   );
   const workItemLifecycleCreateMany = vi.fn().mockResolvedValue(undefined);
+  const stagedItems: Array<{ id: string; syncRunId: string; jiraIssueId: string }> = [];
+  const syncWorkItemStage = {
+    createMany: vi.fn(
+      (args: { data: Array<Omit<(typeof stagedItems)[number], 'id'>>; skipDuplicates?: boolean }) => {
+        for (const item of args.data) {
+          stagedItems.push({
+            id: `stage-${stagedItems.length + 1}`,
+            ...item,
+          });
+        }
+        return Promise.resolve({ count: args.data.length });
+      },
+    ),
+    findMany: vi.fn(
+      (args: {
+        where: { syncRunId: string };
+        orderBy: { id: 'asc' };
+        take: number;
+        cursor?: { id: string };
+        skip?: number;
+      }) => {
+        let rows = stagedItems
+          .filter((item) => item.syncRunId === args.where.syncRunId)
+          .sort((a, b) => a.id.localeCompare(b.id));
+
+        if (args.cursor) {
+          const cursorIndex = rows.findIndex((item) => item.id === args.cursor?.id);
+          rows = rows.slice(cursorIndex + (args.skip ?? 0));
+        }
+
+        return Promise.resolve(rows.slice(0, args.take));
+      },
+    ),
+    deleteMany: vi.fn((args: { where: { syncRunId: string } }) => {
+      const count = stagedItems.filter((item) => item.syncRunId === args.where.syncRunId).length;
+      for (let index = stagedItems.length - 1; index >= 0; index -= 1) {
+        if (stagedItems[index]?.syncRunId === args.where.syncRunId) {
+          stagedItems.splice(index, 1);
+        }
+      }
+      return Promise.resolve({ count });
+    }),
+  };
   const transactionClient = {
     $executeRaw: vi.fn().mockResolvedValue(0),
     $queryRaw: vi.fn().mockResolvedValue([{ id: syncRun.id }]),
+    syncWorkItemStage,
     workItem: {
       upsert: workItemUpsert,
     },
@@ -208,6 +252,7 @@ function createDb(options?: { doneStatusIds?: string[] }) {
     workItemLifecycleEvent: {
       createMany: workItemLifecycleCreateMany,
     },
+    syncWorkItemStage,
     $transaction: vi.fn(async (callback: (tx: typeof transactionClient) => Promise<unknown>) =>
       callback(transactionClient),
     ),
@@ -445,6 +490,7 @@ describe('runScopeSync', () => {
     await paused.promise;
 
     expect(normalizeJiraIssueMock).toHaveBeenCalledTimes(10);
+    expect(db.syncWorkItemStage.createMany).toHaveBeenCalledTimes(1);
     expect(db.workItem.upsert).not.toHaveBeenCalled();
 
     resume.resolve();

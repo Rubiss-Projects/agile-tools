@@ -166,9 +166,40 @@ model SyncRun {
 
   scope          FlowScope       @relation(fields: [scopeId], references: [id], onDelete: Cascade)
   boardSnapshots BoardSnapshot[]
+  stagedWorkItems SyncWorkItemStage[]
 
   @@index([scopeId, createdAt])
   @@index([scopeId, status])
+}
+
+model SyncWorkItemStage {
+  id                String   @id @default(uuid())
+  syncRunId         String
+  scopeId           String
+  jiraIssueId       String
+  issueKey          String
+  summary           String
+  issueTypeId       String
+  issueTypeName     String?
+  projectId         String
+  currentStatusId   String
+  currentStatusName String?
+  currentColumn     String?
+  assigneeName      String?
+  jiraCreatedAt     DateTime
+  startedAt         DateTime?
+  completedAt       DateTime?
+  reopenedCount     Int      @default(0)
+  directUrl         String
+  excludedReason    String?
+  lifecycleEvents   Json
+  stagedAt          DateTime @default(now())
+
+  syncRun SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+
+  @@unique([syncRunId, jiraIssueId])
+  @@index([syncRunId, id])
+  @@index([scopeId, syncRunId])
 }
 
 model WorkItem {
