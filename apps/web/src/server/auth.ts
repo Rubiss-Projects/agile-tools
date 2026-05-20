@@ -17,8 +17,10 @@ const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 export { serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
 
 /**
- * Parse the opaque session cookie and return the workspace context, or null
- * when the request is unauthenticated.
+ * Parse the opaque session cookie and return the workspace context, or fall
+ * back to an env-gated read-only workspace context when configured. Returns
+ * null only when neither a valid session cookie nor fallback context is
+ * available.
  *
  * In production the session value is a signed JWT or opaque token issued by
  * the workspace auth middleware. For v1 the implementation reads from a signed
@@ -72,8 +74,10 @@ function getReadonlyWorkspaceFallback(): WorkspaceContext | null {
 }
 
 /**
- * Return the workspace context or throw a Response with 401 status.
- * Use this in API route handlers that require authentication.
+ * Return the workspace context or throw a Response with 401 status. The context
+ * may come from the env-gated read-only fallback, so callers must not treat this
+ * as proof of an authenticated user unless they specifically require a valid
+ * session cookie.
  */
 export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
   const ctx = await getWorkspaceContext();
