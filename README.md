@@ -91,6 +91,12 @@ pnpm --filter @agile-tools/worker dev
 
 Open `http://localhost:3000` and navigate to **Admin → Jira Connections** to configure the first connection.
 
+## Operations
+
+The web runtime exposes public OpenTelemetry metrics in Prometheus text format at `http://localhost:3000/metrics`.
+Scrape it from Prometheus, Grafana Alloy, or another compatible collector. If the app is reachable outside a trusted
+network, restrict `/metrics` at the reverse proxy or network layer because metric labels can reveal runtime details.
+
 ## Docker Runtime
 
 The repository now ships a single multi-stage Docker image that contains both runtime roles:
