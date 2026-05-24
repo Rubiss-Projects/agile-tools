@@ -36,13 +36,13 @@ paths:
                 type: string
               description: Always `no-store`.
           content:
-            text/plain; version=0.0.4:
+            text/plain; version=0.0.4; charset=utf-8:
               schema:
                 type: string
         '500':
           description: Metrics collection failed
           content:
-            text/plain; version=0.0.4:
+            text/plain; version=0.0.4; charset=utf-8:
               schema:
                 type: string
                 example: |

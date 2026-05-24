@@ -98,9 +98,9 @@ async function handleGET(
     });
 
     const sampleSize = getForecastSampleSize(days);
-  metricResult = 'success';
-  metricDayCount = days.length;
-  metricSampleSize = sampleSize;
+    metricResult = 'success';
+    metricDayCount = days.length;
+    metricSampleSize = sampleSize;
 
     return Response.json({
       scopeId,
