@@ -13,9 +13,38 @@ tags:
   - name: Admin Scopes
   - name: Flow Analytics
   - name: Forecasting
+  - name: Operations
 security:
   - workspaceAuth: []
 paths:
+  /metrics:
+    get:
+      tags: [Operations]
+      summary: Expose OpenTelemetry metrics for Prometheus scraping
+      description: |
+        Returns public Prometheus text-format metrics emitted by the web runtime. Deployments that do not
+        want this endpoint broadly reachable should restrict access at the network or reverse-proxy layer.
+      security: []
+      responses:
+        '200':
+          description: Prometheus metrics payload
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-store`.
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+        '500':
+          description: Metrics collection failed
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+                example: |
+                  # failed to export metrics
   /v1/admin/jira-connections:
     post:
       tags: [Admin Connections]
