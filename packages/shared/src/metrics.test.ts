@@ -74,15 +74,25 @@ describe('metrics', () => {
     expect(body).not.toContain('agile_tools_jira_request_duration_seconds');
   });
 
-  it('uses second-scale buckets for database query durations', async () => {
+  it('uses explicit fine-grained buckets for database query durations', async () => {
     initializeMetrics({ serviceName: 'agile-tools-test', runtime: 'test' });
 
     recordDatabaseQuery({ operation: 'SELECT', durationSeconds: 0.001 });
 
     const { body } = await collectPrometheusMetrics();
 
-    expect(body).toMatch(/agile_tools_db_query_duration_seconds_bucket\{operation="SELECT",le="0\.005"\} 1/);
-    expect(body).not.toMatch(/agile_tools_db_query_duration_seconds_bucket\{operation="SELECT",le="0"\}/);
+    const dbQueryBucketLines = body
+      .split('\n')
+      .filter((line) => line.startsWith('agile_tools_db_query_duration_seconds_bucket{'));
+
+    expect(
+      dbQueryBucketLines.some(
+        (line) => line.includes('operation="SELECT"') && line.includes('le="0.005"') && line.endsWith(' 1'),
+      ),
+    ).toBe(true);
+    expect(
+      dbQueryBucketLines.some((line) => line.includes('operation="SELECT"') && line.includes('le="0"')),
+    ).toBe(false);
   });
 
   it('serves metrics over HTTP on the requested port', async () => {
