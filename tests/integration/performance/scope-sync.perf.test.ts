@@ -15,10 +15,12 @@
  *
  * Run:
  *   $env:DATABASE_URL='postgresql://postgres:postgres@localhost:5432/agile_tools'
+ *   $env:PERF_RUN_REAL_JIRA_SYNC='true'
  *   pnpm exec vitest run --config tests/integration/performance/vitest.config.ts tests/integration/performance/scope-sync.perf.test.ts --reporter verbose
  */
 
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { disconnectPrisma, getPrismaClient, type PrismaClient } from '@agile-tools/db';
 import {
@@ -34,6 +36,9 @@ const ENCRYPTION_KEY = process.env['ENCRYPTION_KEY'] ?? 'local-dev-encryption-ke
 const BOOTSTRAP_OUTPUT_PATH = process.env['JIRA_BOOTSTRAP_OUTPUT_PATH'] ?? '.jira-local/jira-bootstrap.json';
 const MIN_COMPLETED_STORIES = Number(process.env['PERF_SYNC_MIN_COMPLETED_STORIES'] ?? '1000');
 const SYNC_BUDGET_MS = Number(process.env['PERF_SYNC_BUDGET_MS'] ?? '600000');
+const RUN_REAL_JIRA_SYNC = process.env['PERF_RUN_REAL_JIRA_SYNC'] === 'true';
+const HAS_BOOTSTRAP_OUTPUT = existsSync(BOOTSTRAP_OUTPUT_PATH);
+const describeRealJiraSync = RUN_REAL_JIRA_SYNC && HAS_BOOTSTRAP_OUTPUT ? describe : describe.skip;
 
 interface JiraBootstrapOutput {
   agileToolsConnection: {
@@ -53,28 +58,28 @@ interface SyncBenchmarkScope {
 
 let benchmarkScope: SyncBenchmarkScope | undefined;
 
-beforeAll(async () => {
-  process.env['DATABASE_URL'] = DATABASE_URL;
-  process.env['ENCRYPTION_KEY'] = ENCRYPTION_KEY;
-  process.env['NODE_ENV'] = process.env['NODE_ENV'] ?? 'test';
-  process.env['LOG_LEVEL'] = process.env['LOG_LEVEL'] ?? 'warn';
-  resetConfig();
-  await disconnectPrisma();
+describeRealJiraSync('runScopeSync real Jira benchmark', () => {
+  beforeAll(async () => {
+    process.env['DATABASE_URL'] = DATABASE_URL;
+    process.env['ENCRYPTION_KEY'] = ENCRYPTION_KEY;
+    process.env['NODE_ENV'] = process.env['NODE_ENV'] ?? 'test';
+    process.env['LOG_LEVEL'] = process.env['LOG_LEVEL'] ?? 'warn';
+    resetConfig();
+    await disconnectPrisma();
 
-  const bootstrap = await readBootstrapOutput();
-  const db = getPrismaClient();
-  benchmarkScope = await createBenchmarkScope(db, bootstrap);
-}, 120_000);
+    const bootstrap = await readBootstrapOutput();
+    const db = getPrismaClient();
+    benchmarkScope = await createBenchmarkScope(db, bootstrap);
+  }, 120_000);
 
-afterAll(async () => {
-  const db = getPrismaClient();
-  if (benchmarkScope?.workspaceId) {
-    await db.workspace.delete({ where: { id: benchmarkScope.workspaceId } }).catch(() => undefined);
-  }
-  await disconnectPrisma();
-}, 120_000);
+  afterAll(async () => {
+    const db = getPrismaClient();
+    if (benchmarkScope?.workspaceId) {
+      await db.workspace.delete({ where: { id: benchmarkScope.workspaceId } }).catch(() => undefined);
+    }
+    await disconnectPrisma();
+  }, 120_000);
 
-describe('runScopeSync real Jira benchmark', () => {
   it(`syncs a local Jira board with ${MIN_COMPLETED_STORIES}+ completed stories`, async () => {
     if (!benchmarkScope) throw new Error('Benchmark scope was not initialized');
     const db = getPrismaClient();
