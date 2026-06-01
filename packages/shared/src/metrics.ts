@@ -91,6 +91,7 @@ const HTTP_REQUEST_DURATION_BOUNDARIES_SECONDS = [
 ];
 
 const METRIC_DATABASE_QUERY_DURATION = 'agile_tools_db_query_duration_seconds';
+const WORKER_OPERATION_DURATION_BOUNDARIES_SECONDS = [5, 10, 30, 60, 120, 300, 600, 900];
 
 const STANDARD_HTTP_METHODS = new Set([
   'CONNECT',
@@ -157,6 +158,20 @@ function createMetricsState(options: InitializeMetricsOptions): MetricsState {
         aggregation: {
           type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM,
           options: { boundaries: HTTP_REQUEST_DURATION_BOUNDARIES_SECONDS },
+        },
+      },
+      {
+        instrumentName: 'agile_tools_worker_job_duration_seconds',
+        aggregation: {
+          type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM,
+          options: { boundaries: WORKER_OPERATION_DURATION_BOUNDARIES_SECONDS },
+        },
+      },
+      {
+        instrumentName: 'agile_tools_sync_run_duration_seconds',
+        aggregation: {
+          type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM,
+          options: { boundaries: WORKER_OPERATION_DURATION_BOUNDARIES_SECONDS },
         },
       },
     ],
