@@ -233,6 +233,7 @@ model WorkItem {
   @@unique([scopeId, jiraIssueId])
   @@index([scopeId, completedAt])
   @@index([scopeId, currentColumn])
+  @@index([scopeId, currentStatusId])
   @@index([scopeId, startedAt])
 }
 

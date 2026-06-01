@@ -112,10 +112,12 @@ async function handleGET(
         distinct: ['currentStatusId'],
       });
       for (const row of statusRows) {
-        statusLabelById.set(
-          row.currentStatusId,
-          row.currentStatusName ?? row.currentColumn ?? row.currentStatusId,
-        );
+        if (!statusLabelById.has(row.currentStatusId)) {
+          statusLabelById.set(
+            row.currentStatusId,
+            row.currentStatusName ?? row.currentColumn ?? row.currentStatusId,
+          );
+        }
       }
     }
 
