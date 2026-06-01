@@ -14,6 +14,23 @@ import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { withHttpMetrics } from '@/server/route-metrics';
 
+function collectLifecycleStatusIds(item: Awaited<ReturnType<typeof getWorkItemWithDetail>>): string[] {
+  if (!item) {
+    return [];
+  }
+
+  const statusIds = new Set<string>();
+  for (const event of item.lifecycleEvents) {
+    if (event.fromStatusId) {
+      statusIds.add(event.fromStatusId);
+    }
+    if (event.toStatusId) {
+      statusIds.add(event.toStatusId);
+    }
+  }
+  return Array.from(statusIds);
+}
+
 async function handleGET(
   _req: NextRequest,
   { params }: { params: Promise<{ scopeId: string; workItemId: string }> },
@@ -52,10 +69,41 @@ async function handleGET(
       ...(hp.sourceValue ? { sourceValue: hp.sourceValue } : {}),
     }));
 
+    const statusLabelById = new Map<string, string>();
+    statusLabelById.set(
+      item.currentStatusId,
+      item.currentStatusName ?? item.currentColumn ?? item.currentStatusId,
+    );
+    const lifecycleStatusIds = collectLifecycleStatusIds(item);
+    if (lifecycleStatusIds.length > 0) {
+      const statusRows = await db.workItem.findMany({
+        where: {
+          scopeId,
+          currentStatusId: { in: lifecycleStatusIds },
+        },
+        select: {
+          currentStatusId: true,
+          currentStatusName: true,
+          currentColumn: true,
+        },
+        distinct: ['currentStatusId'],
+      });
+      for (const row of statusRows) {
+        statusLabelById.set(
+          row.currentStatusId,
+          row.currentStatusName ?? row.currentColumn ?? row.currentStatusId,
+        );
+      }
+    }
+
     const lifecycleEvents: LifecycleEventResponse[] = item.lifecycleEvents.map((ev) => ({
       eventType: ev.eventType,
-      ...(ev.fromStatusId ? { fromStatus: ev.fromStatusId } : {}),
-      ...(ev.toStatusId ? { toStatus: ev.toStatusId } : {}),
+      ...(ev.fromStatusId
+        ? { fromStatus: statusLabelById.get(ev.fromStatusId) ?? ev.fromStatusId }
+        : {}),
+      ...(ev.toStatusId
+        ? { toStatus: statusLabelById.get(ev.toStatusId) ?? ev.toStatusId }
+        : {}),
       changedAt: ev.changedAt.toISOString(),
     }));
 
