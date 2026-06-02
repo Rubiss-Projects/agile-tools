@@ -215,12 +215,14 @@ export function ColumnAgingScatterPlot({
                 onMouseLeave={hideTooltip}
                 onFocus={showTooltip}
                 onBlur={hideTooltip}
+                onClick={() => onItemSelect?.(point.workItemId, point.issueKey)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
                     onItemSelect?.(point.workItemId, point.issueKey);
                   }
                 }}
+                style={{ cursor: onItemSelect ? 'pointer' : 'default' }}
               >
                 <circle
                   cx={x}
@@ -229,8 +231,6 @@ export function ColumnAgingScatterPlot({
                   fill={zoneColors[point.agingZone]}
                   stroke={palette.panel}
                   strokeWidth={1.5}
-                  style={{ cursor: onItemSelect ? 'pointer' : 'default' }}
-                  onClick={() => onItemSelect?.(point.workItemId, point.issueKey)}
                 >
                   <title>{buildTooltip(point)}</title>
                 </circle>
@@ -442,13 +442,19 @@ function buildColumnBand(columnCount: number, plotWidth: number): {
     };
   }
 
-  const gutter = clamp(plotWidth * 0.035, 18, 34);
+  const minimumSlotWidth = 12;
+  const preferredGutter = clamp(plotWidth * 0.035, 18, 34);
+  const maxGutterForMinimumSlot = Math.max(
+    0,
+    (plotWidth - minimumSlotWidth * columnCount) / (columnCount - 1),
+  );
+  const gutter = Math.min(preferredGutter, maxGutterForMinimumSlot);
   const slotWidth = (plotWidth - gutter * (columnCount - 1)) / columnCount;
   const centers = Array.from(
     { length: columnCount },
     (_, index) => (slotWidth / 2) + index * (slotWidth + gutter),
   );
-  return { centers, slotWidth };
+  return { centers, slotWidth: Math.max(1, slotWidth) };
 }
 
 function pointLayoutKey(zone: ColumnScatterDatum['agingZone'], point: ColumnScatterDatum): string {
