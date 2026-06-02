@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ColumnAgingScatterPlot } from './column-aging-scatter-plot';
 import type { ColumnScatterDatum, FlowAnalyticsViewModel } from '@/server/views/flow-analytics';
@@ -293,6 +293,67 @@ describe('ColumnAgingScatterPlot', () => {
     for (const x of values('circle', 'cx')) {
       expect(x).toBeGreaterThanOrEqual(minX);
       expect(x).toBeLessThanOrEqual(maxX);
+    }
+  });
+
+  it('selects a point from the same element exposed as the accessible button', () => {
+    const onItemSelect = vi.fn();
+
+    render(
+      <ColumnAgingScatterPlot
+        onItemSelect={onItemSelect}
+        viewModel={viewModel([
+          columnPoint({
+            workItemId: '11111111-1111-4111-8111-111111111111',
+            issueKey: 'AGILE-101',
+            currentColumn: 'In Progress',
+            y: 5,
+          }),
+        ])}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /AGILE-101: 5.0 working days in In Progress/i }));
+
+    expect(onItemSelect).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      'AGILE-101',
+    );
+  });
+
+  it('keeps column band widths positive for boards with many visible columns', () => {
+    const columnNames = Array.from({ length: 80 }, (_, index) => `Column ${index + 1}`);
+    const wideViewModel = {
+      ...viewModel([
+        columnPoint({
+          workItemId: '11111111-1111-4111-8111-111111111111',
+          issueKey: 'AGILE-101',
+          currentColumn: 'Column 80',
+          y: 5,
+        }),
+      ]),
+      columnNames,
+      columnAgingModels: columnNames.map((columnName) => ({
+        columnName,
+        statusIds: [columnName],
+        metricBasis: 'column_working_days' as const,
+        p50: 3,
+        p70: 4,
+        p85: 5,
+        sampleSize: 10,
+      })),
+    };
+    const { container } = render(<ColumnAgingScatterPlot viewModel={wideViewModel} />);
+
+    const thresholdSegments = Array.from(container.querySelectorAll('[data-testid="column-threshold-segment"]'));
+    expect(thresholdSegments).toHaveLength(160);
+
+    for (const segment of thresholdSegments) {
+      const x1 = Number(segment.getAttribute('x1'));
+      const x2 = Number(segment.getAttribute('x2'));
+      expect(Number.isFinite(x1)).toBe(true);
+      expect(Number.isFinite(x2)).toBe(true);
+      expect(x2 - x1).toBeGreaterThan(0);
     }
   });
 
