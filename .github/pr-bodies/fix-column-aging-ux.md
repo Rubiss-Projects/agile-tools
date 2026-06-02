@@ -23,15 +23,15 @@ All screenshots below are from the real app running in local Docker.
 
 Only in-scope columns are shown in the live column-aging chart: `Selected for Development`, `In Progress`, `Done`. The `Done` column remains visible with its low-confidence label and zero dwell points, while out-of-scope board columns do not appear.
 
-![Only in-scope columns](../../docs/evidence/column-aging/column-aging-live.png)
+![Only in-scope columns](https://raw.githubusercontent.com/Rubiss-Projects/agile-tools/aae671a116fc6b8e96bf597b84ff9a2517203ee0/docs/evidence/column-aging/column-aging-live.png)
 
 Hover popup is working on a real Jira dot and shows the work item details.
 
-![Hover popup](../../docs/evidence/column-aging/column-aging-focus-tooltip.png)
+![Hover popup](https://raw.githubusercontent.com/Rubiss-Projects/agile-tools/aae671a116fc6b8e96bf597b84ff9a2517203ee0/docs/evidence/column-aging/column-aging-focus-tooltip.png)
 
 When empty columns are hidden, the remaining columns expand across the available width instead of collapsing to the outer edges. The same screenshot also shows the reduced y-axis labeling for a wide range (`0d`, `100d`, `200d`, `300d`).
 
-![Hide empty columns](../../docs/evidence/column-aging/column-aging-hide-empty-live.png)
+![Hide empty columns](https://raw.githubusercontent.com/Rubiss-Projects/agile-tools/aae671a116fc6b8e96bf597b84ff9a2517203ee0/docs/evidence/column-aging/column-aging-hide-empty-live.png)
 
 Dense-cluster proof from the live chart:
 
