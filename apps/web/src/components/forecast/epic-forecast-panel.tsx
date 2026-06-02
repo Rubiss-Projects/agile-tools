@@ -46,6 +46,15 @@ interface EpicLookupResponse {
   directUrl: string;
 }
 
+interface EpicTargetDraft {
+  jiraIssueKey: string;
+  summary: string;
+  dueDate: string;
+  remainingStoryCount: number;
+  storyCountSource: EpicStoryCountSource;
+  status: 'active' | 'closed';
+}
+
 function getProblemMessage(problem: ProblemResponse | null, fallbackMessage: string): string {
   return problem?.details?.[0] ?? problem?.message ?? fallbackMessage;
 }
@@ -84,6 +93,8 @@ export function EpicForecastPanel({
   const [hoveredChanceTargetId, setHoveredChanceTargetId] = useState<string | null>(null);
   const [draggedTargetId, setDraggedTargetId] = useState<string | null>(null);
   const [dragOverTargetId, setDragOverTargetId] = useState<string | null>(null);
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EpicTargetDraft | null>(null);
   const [jiraIssueKey, setJiraIssueKey] = useState('');
   const [summary, setSummary] = useState('');
   const [dueDate, setDueDate] = useState(dateOffset(60));
@@ -181,7 +192,7 @@ export function EpicForecastPanel({
         setDueDate(epic.dueDate);
       }
       setStoryCountSource('epic_link');
-      setRemainingStoryCount(Math.max(1, epic.epicLinkStoryCount));
+      setRemainingStoryCount(Math.max(0, epic.epicLinkStoryCount));
       setLookupMessage(
         `Loaded summary${epic.dueDate ? ', due date' : ''}, and ${epic.epicLinkStoryCount} Epic Link ${epic.epicLinkStoryCount === 1 ? 'story' : 'stories'} from Jira.`,
       );
@@ -204,6 +215,58 @@ export function EpicForecastPanel({
       await loadEpicForecast();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove epic forecast target.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEditingTarget(target: EpicForecastTarget) {
+    setEditingTargetId(target.id);
+    setEditDraft({
+      jiraIssueKey: target.jiraIssueKey,
+      summary: target.summary,
+      dueDate: target.dueDate,
+      remainingStoryCount: target.remainingStoryCount,
+      storyCountSource: target.storyCountSource,
+      status: target.status,
+    });
+  }
+
+  function cancelEditingTarget() {
+    setEditingTargetId(null);
+    setEditDraft(null);
+  }
+
+  async function saveTargetEdit(target: EpicForecastTarget) {
+    if (!editDraft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jiraIssueKey: editDraft.jiraIssueKey,
+          summary: editDraft.summary,
+          dueDate: editDraft.dueDate,
+          remainingStoryCount: editDraft.remainingStoryCount,
+          storyCountSource: editDraft.storyCountSource,
+          manualStoryCount: editDraft.storyCountSource === 'manual' ? editDraft.remainingStoryCount : null,
+          epicLinkStoryCount: editDraft.storyCountSource === 'epic_link' ? editDraft.remainingStoryCount : null,
+          jiraStoryCount: editDraft.storyCountSource === 'jira_field' ? editDraft.remainingStoryCount : null,
+          status: editDraft.status,
+          closedAt: editDraft.status === 'closed' ? (target.closedAt ?? new Date().toISOString()) : null,
+          sortOrder: target.sortOrder,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as ProblemResponse | null;
+      if (!res.ok) {
+        throw new Error(getProblemMessage(body, `HTTP ${res.status}`));
+      }
+      cancelEditingTarget();
+      await loadEpicForecast();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update epic forecast target.');
     } finally {
       setSaving(false);
     }
@@ -290,7 +353,7 @@ export function EpicForecastPanel({
             <span style={fieldLabelStyle}>Remaining stories</span>
             <input
               type="number"
-              min={1}
+              min={0}
               value={remainingStoryCount}
               onChange={(e) => setRemainingStoryCount(Number(e.target.value))}
               disabled={busy}
@@ -352,6 +415,7 @@ export function EpicForecastPanel({
             const tone = chanceTone(result.completionChance);
             const target = response.targets.find((candidate) => candidate.id === result.targetId);
             const percentileSummary = formatPercentileSummary(result.completionDatePercentiles);
+            const editing = target && editingTargetId === target.id && editDraft;
             return (
               <article
                 key={result.targetId}
@@ -423,6 +487,102 @@ export function EpicForecastPanel({
                 >
                   <DragGripIcon />
                 </div>
+                {editing ? (
+                  <form
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onPointerUp={(event) => event.stopPropagation()}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void saveTargetEdit(target);
+                    }}
+                    style={{
+                      gridColumn: '2 / -1',
+                      display: 'grid',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                      <label>
+                        <span style={fieldLabelStyle}>Epic key</span>
+                        <input
+                          value={editDraft.jiraIssueKey}
+                          onChange={(e) => setEditDraft({ ...editDraft, jiraIssueKey: e.target.value })}
+                          disabled={busy}
+                          required
+                          style={inputStyle}
+                        />
+                      </label>
+                      <label>
+                        <span style={fieldLabelStyle}>Due date</span>
+                        <input
+                          type="date"
+                          value={editDraft.dueDate}
+                          onChange={(e) => setEditDraft({ ...editDraft, dueDate: e.target.value })}
+                          disabled={busy}
+                          required
+                          style={inputStyle}
+                        />
+                      </label>
+                      <label>
+                        <span style={fieldLabelStyle}>Story count source</span>
+                        <select
+                          value={editDraft.storyCountSource}
+                          onChange={(e) => setEditDraft({ ...editDraft, storyCountSource: e.target.value as EpicStoryCountSource })}
+                          disabled={busy}
+                          style={inputStyle}
+                        >
+                          <option value="manual">Manual override</option>
+                          <option value="epic_link">Epic Link children</option>
+                          <option value="jira_field">Jira story-count field</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span style={fieldLabelStyle}>Remaining stories</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editDraft.remainingStoryCount}
+                          onChange={(e) => setEditDraft({ ...editDraft, remainingStoryCount: Number(e.target.value) })}
+                          disabled={busy}
+                          required
+                          style={inputStyle}
+                        />
+                      </label>
+                      <label>
+                        <span style={fieldLabelStyle}>Status</span>
+                        <select
+                          value={editDraft.status}
+                          onChange={(e) => setEditDraft({ ...editDraft, status: e.target.value as 'active' | 'closed' })}
+                          disabled={busy}
+                          style={inputStyle}
+                        >
+                          <option value="active">Active</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label>
+                      <span style={fieldLabelStyle}>Epic summary</span>
+                      <input
+                        value={editDraft.summary}
+                        onChange={(e) => setEditDraft({ ...editDraft, summary: e.target.value })}
+                        disabled={busy}
+                        required
+                        style={inputStyle}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <button type="submit" disabled={busy} style={buttonStyle('primary', busy)}>
+                        Save changes
+                      </button>
+                      <button type="button" disabled={busy} onClick={cancelEditingTarget} style={buttonStyle('secondary', busy)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ ...statLabelStyle, marginBottom: '0.35rem' }}>
                     {target?.directUrl ? (
@@ -470,11 +630,33 @@ export function EpicForecastPanel({
                     {result.completionChance.toFixed(1)}%
                   </p>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem' }}
+                >
+                  {target ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startEditingTarget(target);
+                      }}
+                      style={textIconButtonStyle(busy)}
+                      aria-label={`Edit ${result.jiraIssueKey}`}
+                      title={`Edit ${result.jiraIssueKey}`}
+                    >
+                      Edit
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => { void removeTarget(result.targetId); }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void removeTarget(result.targetId);
+                    }}
                     style={iconButtonStyle(busy)}
                     aria-label={`Remove ${result.jiraIssueKey}`}
                     title={`Remove ${result.jiraIssueKey}`}
@@ -482,6 +664,8 @@ export function EpicForecastPanel({
                     ×
                   </button>
                 </div>
+                  </>
+                )}
                 {hoveredChanceTargetId === result.targetId ? (
                   <div
                     role="tooltip"
@@ -644,6 +828,24 @@ function iconButtonStyle(disabled: boolean): CSSProperties {
     cursor: disabled ? 'not-allowed' : 'pointer',
     padding: 0,
     fontSize: '1.15rem',
+    fontWeight: 800,
+    lineHeight: 1,
+  };
+}
+
+function textIconButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    minWidth: '3.5rem',
+    height: '2.25rem',
+    display: 'inline-grid',
+    placeItems: 'center',
+    borderRadius: '999px',
+    border: `1px solid ${palette.line}`,
+    background: disabled ? palette.buttonDisabled : palette.panelAlt,
+    color: disabled ? palette.buttonDisabledText : palette.accentStrong,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    padding: '0 0.7rem',
+    fontSize: '0.78rem',
     fontWeight: 800,
     lineHeight: 1,
   };

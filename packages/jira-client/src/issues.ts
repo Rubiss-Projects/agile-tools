@@ -258,6 +258,10 @@ interface JiraSearchResponse {
   issues: RawJiraIssue[];
 }
 
+interface JiraSearchCountResponse {
+  total: number;
+}
+
 export interface StreamJqlIssuesOptions {
   /** Page size — Jira default is 50, max 100. */
   maxResults?: number;
@@ -307,4 +311,11 @@ export async function* streamJqlIssues(
     if (page.issues.length === 0 || page.issues.length < pageSize) break;
     startAt += page.issues.length;
   }
+}
+
+export async function fetchJqlIssueCount(client: JiraClient, jql: string): Promise<number> {
+  const page = await client.get<JiraSearchCountResponse>('/rest/api/2/search', {
+    params: { jql, maxResults: 0, fields: 'summary' },
+  });
+  return page.total;
 }

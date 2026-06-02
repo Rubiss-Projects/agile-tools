@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createJiraClient } from './client.js';
-import { fetchIssueChangelog, streamJqlIssues } from './issues.js';
+import { fetchIssueChangelog, fetchJqlIssueCount, streamJqlIssues } from './issues.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -302,5 +302,25 @@ describe('streamJqlIssues', () => {
     expect(results).toEqual([]);
     const calledUrl = String(fetchMock.mock.calls[0]![0]);
     expect(calledUrl).toContain('fields=summary%2Cstatus');
+  });
+});
+
+describe('fetchJqlIssueCount', () => {
+  it('requests only the total for a JQL query', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ startAt: 0, maxResults: 0, total: 7, issues: [] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://jira.example.internal', 'pat-123');
+    await expect(fetchJqlIssueCount(client, '"Epic Link" = "PROJ-1"')).resolves.toBe(7);
+
+    const calledUrl = String(fetchMock.mock.calls[0]![0]);
+    expect(calledUrl).toContain('/rest/api/2/search');
+    expect(calledUrl).toContain('maxResults=0');
+    expect(calledUrl).toContain('fields=summary');
   });
 });

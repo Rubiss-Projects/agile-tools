@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@agile-tools/db';
 import {
   DEFAULT_COMPLETED_WINDOW_DAYS,
+  listEpicForecastTargets,
+  refreshEpicLinkForecastTargetCounts,
   updateJiraConnectionCapabilities,
 } from '@agile-tools/db';
 import {
@@ -18,9 +20,11 @@ import {
   normalizeChangelogFetchStrategy,
   streamBoardIssues,
   streamJqlIssues,
+  fetchJqlIssueCount,
   fetchIssueChangelog,
 } from '@agile-tools/jira-client';
 import type { JiraClient, JiraChangelogFetchStrategy, RawJiraIssue } from '@agile-tools/jira-client';
+import type { BoardColumn } from '@agile-tools/shared/contracts/api';
 import { detectBoardDrift, applyBoardDriftHandling } from './detect-board-drift.js';
 import { updateConnectionHealthAfterSync } from './update-connection-health.js';
 import {
@@ -33,6 +37,52 @@ import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js
 const BATCH_SIZE = 10;
 const STAGED_ITEM_PAGE_SIZE = 100;
 const COMPLETED_ISSUE_SEARCH_FIELDS = 'summary,status,issuetype,project,created,assignee';
+
+function quoteJqlValue(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function jqlList(values: string[]): string {
+  return values.map(quoteJqlValue).join(', ');
+}
+
+function getCountableEpicStatusIds(
+  columns: BoardColumn[],
+  startStatusIds: Set<string>,
+  doneStatusIds: Set<string>,
+): string[] {
+  const statusIds: string[] = [];
+  let reachedStartColumn = startStatusIds.size === 0;
+
+  for (const column of columns) {
+    for (const statusId of column.statusIds) {
+      if (!reachedStartColumn && startStatusIds.has(statusId)) {
+        reachedStartColumn = true;
+      }
+      if (reachedStartColumn && !doneStatusIds.has(statusId)) {
+        statusIds.push(statusId);
+      }
+    }
+  }
+
+  return statusIds;
+}
+
+function buildEpicRemainingStoriesJql(
+  issueKey: string,
+  issueTypeIds: string[],
+  countableStatusIds: string[],
+): string | null {
+  if (issueTypeIds.length === 0 || countableStatusIds.length === 0) {
+    return null;
+  }
+
+  return [
+    `"Epic Link" = ${quoteJqlValue(issueKey)}`,
+    `issuetype in (${jqlList(issueTypeIds)})`,
+    `status in (${jqlList(countableStatusIds)})`,
+  ].join(' AND ');
+}
 
 interface JiraConnectionCapabilityFields {
   id: string;
@@ -373,6 +423,22 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       return;
     }
 
+    await refreshEpicForecastTargetsAfterSync(db, jiraClient, {
+      scopeId: scope.id,
+      issueTypeIds: scope.includedIssueTypeIds,
+      countableStatusIds: getCountableEpicStatusIds(
+        boardDetail.columns,
+        startStatusIds,
+        doneStatusIds,
+      ),
+    }).catch((refreshErr: unknown) => {
+      logger.warn('Epic forecast target refresh failed after sync success', {
+        syncRunId,
+        scopeId: scope.id,
+        error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+      });
+    });
+
     // Rebuild projection data after the sync is marked as succeeded (non-blocking).
     await rebuildScopeProjections(db, scope.id, syncRunId).catch((rebuildErr: unknown) => {
       logger.warn('Projection rebuild failed after sync success', {
@@ -517,6 +583,49 @@ async function ensureJiraServerCapabilities(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+async function refreshEpicForecastTargetsAfterSync(
+  db: PrismaClient,
+  jiraClient: JiraClient,
+  input: {
+    scopeId: string;
+    issueTypeIds: string[];
+    countableStatusIds: string[];
+  },
+): Promise<void> {
+  const targets = await listEpicForecastTargets(db, input.scopeId);
+  const epicLinkTargets = targets.filter(
+    (target) => target.status === 'active' && target.storyCountSource === 'epic_link',
+  );
+  if (epicLinkTargets.length === 0) {
+    return;
+  }
+
+  const countsByIssueKey = new Map<string, number>();
+  await Promise.all(
+    epicLinkTargets.map(async (target) => {
+      const jql = buildEpicRemainingStoriesJql(
+        target.jiraIssueKey,
+        input.issueTypeIds,
+        input.countableStatusIds,
+      );
+      countsByIssueKey.set(
+        target.jiraIssueKey,
+        jql ? await fetchJqlIssueCount(jiraClient, jql) : 0,
+      );
+    }),
+  );
+
+  const updatedCount = await refreshEpicLinkForecastTargetCounts(
+    db,
+    input.scopeId,
+    countsByIssueKey,
+  );
+  logger.info('Epic forecast targets refreshed after sync', {
+    scopeId: input.scopeId,
+    targetCount: updatedCount,
+  });
 }
 
 /**

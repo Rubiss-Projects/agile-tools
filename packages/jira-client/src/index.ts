@@ -14,7 +14,13 @@ export type {
 
 export { listBoards, getBoardDetail, getBoardDetailWithFilterId, getBoardFilterId } from './discovery.js';
 
-export { fetchBoardIssues, streamBoardIssues, fetchIssueChangelog, streamJqlIssues } from './issues.js';
+export {
+  fetchBoardIssues,
+  streamBoardIssues,
+  fetchIssueChangelog,
+  streamJqlIssues,
+  fetchJqlIssueCount,
+} from './issues.js';
 export type {
   RawJiraIssue,
   RawJiraIssueFields,

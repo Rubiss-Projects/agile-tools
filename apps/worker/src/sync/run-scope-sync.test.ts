@@ -6,12 +6,15 @@ const {
   getConfigMock,
   decryptSecretMock,
   updateJiraConnectionCapabilitiesMock,
+  listEpicForecastTargetsMock,
+  refreshEpicLinkForecastTargetCountsMock,
   createJiraClientMock,
   inferChangelogFetchStrategyFromServerInfoMock,
   getBoardDetailWithFilterIdMock,
   normalizeChangelogFetchStrategyMock,
   streamBoardIssuesMock,
   streamJqlIssuesMock,
+  fetchJqlIssueCountMock,
   fetchIssueChangelogMock,
   detectBoardDriftMock,
   applyBoardDriftHandlingMock,
@@ -50,12 +53,15 @@ const {
     })),
     decryptSecretMock: vi.fn(() => 'pat-123'),
     updateJiraConnectionCapabilitiesMock: vi.fn(),
+    listEpicForecastTargetsMock: vi.fn(),
+    refreshEpicLinkForecastTargetCountsMock: vi.fn(),
     createJiraClientMock: vi.fn(() => jiraClientStub),
     inferChangelogFetchStrategyFromServerInfoMock: vi.fn(),
     getBoardDetailWithFilterIdMock: vi.fn(),
     normalizeChangelogFetchStrategyMock: vi.fn(),
     streamBoardIssuesMock: vi.fn(),
     streamJqlIssuesMock: vi.fn(),
+    fetchJqlIssueCountMock: vi.fn(),
     fetchIssueChangelogMock: vi.fn(),
     detectBoardDriftMock: vi.fn(),
     applyBoardDriftHandlingMock: vi.fn(),
@@ -69,6 +75,8 @@ const {
 
 vi.mock('@agile-tools/db', () => ({
   DEFAULT_COMPLETED_WINDOW_DAYS: 90,
+  listEpicForecastTargets: listEpicForecastTargetsMock,
+  refreshEpicLinkForecastTargetCounts: refreshEpicLinkForecastTargetCountsMock,
   updateJiraConnectionCapabilities: updateJiraConnectionCapabilitiesMock,
 }));
 
@@ -91,6 +99,7 @@ vi.mock('@agile-tools/jira-client', () => ({
   normalizeChangelogFetchStrategy: normalizeChangelogFetchStrategyMock,
   streamBoardIssues: streamBoardIssuesMock,
   streamJqlIssues: streamJqlIssuesMock,
+  fetchJqlIssueCount: fetchJqlIssueCountMock,
   fetchIssueChangelog: fetchIssueChangelogMock,
 }));
 
@@ -339,6 +348,9 @@ describe('runScopeSync', () => {
     fetchIssueChangelogMock.mockResolvedValue([]);
     updateConnectionHealthAfterSyncMock.mockResolvedValue(undefined);
     rebuildScopeProjectionsMock.mockResolvedValue(undefined);
+    listEpicForecastTargetsMock.mockResolvedValue([]);
+    refreshEpicLinkForecastTargetCountsMock.mockResolvedValue(0);
+    fetchJqlIssueCountMock.mockResolvedValue(0);
     normalizeJiraIssueMock.mockImplementation(
       (issue: {
         id: string;
@@ -501,6 +513,69 @@ describe('runScopeSync', () => {
       syncRunId: 'run-1',
       scopeId: 'scope-1',
     });
+  });
+
+  it('refreshes active Epic Link forecast targets after a successful sync', async () => {
+    const db = createDb();
+    const boardIssue = makeIssue({
+      id: 'ISSUE-1',
+      key: 'PROJ-1',
+      projectId: 'proj-board',
+      statusId: '10',
+      statusName: 'In Progress',
+    });
+
+    getBoardDetailWithFilterIdMock.mockResolvedValue({
+      detail: {
+        boardId: 42,
+        boardName: 'Payments Board',
+        columns: [
+          { name: 'Backlog', statusIds: ['5'] },
+          { name: 'Doing', statusIds: ['10'] },
+          { name: 'Review', statusIds: ['20'] },
+          { name: 'Done', statusIds: ['30'] },
+        ],
+        statuses: [
+          { id: '5', name: 'Selected' },
+          { id: '10', name: 'In Progress' },
+          { id: '20', name: 'Review' },
+          { id: '30', name: 'Closed' },
+        ],
+        completionStatuses: [{ id: '30', name: 'Closed' }],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      },
+      filterId: null,
+    });
+    streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
+    listEpicForecastTargetsMock.mockResolvedValue([
+      {
+        id: 'target-1',
+        scopeId: 'scope-1',
+        jiraIssueKey: 'PROJ-EPIC-1',
+        storyCountSource: 'epic_link',
+        status: 'active',
+      },
+      {
+        id: 'target-2',
+        scopeId: 'scope-1',
+        jiraIssueKey: 'PROJ-EPIC-2',
+        storyCountSource: 'manual',
+        status: 'active',
+      },
+    ]);
+    fetchJqlIssueCountMock.mockResolvedValue(6);
+
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(fetchJqlIssueCountMock).toHaveBeenCalledWith(
+      jiraClientStub,
+      '"Epic Link" = "PROJ-EPIC-1" AND issuetype in ("story") AND status in ("10", "20")',
+    );
+    expect(refreshEpicLinkForecastTargetCountsMock).toHaveBeenCalledWith(
+      db,
+      'scope-1',
+      new Map([['PROJ-EPIC-1', 6]]),
+    );
   });
 
   it('skips the completed-issue pass when the board exposes no saved filter', async () => {

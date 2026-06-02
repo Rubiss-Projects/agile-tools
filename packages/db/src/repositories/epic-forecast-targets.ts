@@ -37,6 +37,20 @@ export interface UpsertEpicForecastTargetInput {
   sortOrder?: number;
 }
 
+export interface UpdateEpicForecastTargetInput {
+  jiraIssueKey: string;
+  summary: string;
+  dueDate: string;
+  remainingStoryCount: number;
+  storyCountSource: EpicStoryCountSource;
+  epicLinkStoryCount: number | null;
+  jiraStoryCount: number | null;
+  manualStoryCount: number | null;
+  status: EpicForecastTargetStatus;
+  closedAt: Date | null;
+  sortOrder: number;
+}
+
 export async function listEpicForecastTargets(
   db: PrismaClient,
   scopeId: string,
@@ -96,4 +110,49 @@ export async function deleteEpicForecastTarget(
     where: { id: targetId, scopeId },
   });
   return deleted.count > 0;
+}
+
+export async function updateEpicForecastTargetById(
+  db: PrismaClient,
+  scopeId: string,
+  targetId: string,
+  input: UpdateEpicForecastTargetInput,
+): Promise<EpicForecastTargetRow | null> {
+  const updated = await db.epicForecastTarget.updateMany({
+    where: { id: targetId, scopeId },
+    data: input,
+  });
+  if (updated.count === 0) {
+    return null;
+  }
+  return db.epicForecastTarget.findUnique({
+    where: { id: targetId },
+  }) as Promise<EpicForecastTargetRow>;
+}
+
+export async function refreshEpicLinkForecastTargetCounts(
+  db: PrismaClient,
+  scopeId: string,
+  countsByIssueKey: Map<string, number>,
+): Promise<number> {
+  let updatedCount = 0;
+  for (const [jiraIssueKey, remainingStoryCount] of countsByIssueKey) {
+    const updated = await db.epicForecastTarget.updateMany({
+      where: {
+        scopeId,
+        jiraIssueKey,
+        storyCountSource: 'epic_link',
+        status: 'active',
+      },
+      data: {
+        remainingStoryCount,
+        epicLinkStoryCount: remainingStoryCount,
+        ...(remainingStoryCount === 0
+          ? { status: 'closed', closedAt: new Date() }
+          : { closedAt: null }),
+      },
+    });
+    updatedCount += updated.count;
+  }
+  return updatedCount;
 }
