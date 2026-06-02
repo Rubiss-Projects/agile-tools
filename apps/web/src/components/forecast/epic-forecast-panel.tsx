@@ -415,7 +415,7 @@ export function EpicForecastPanel({
             const tone = chanceTone(result.completionChance);
             const target = response.targets.find((candidate) => candidate.id === result.targetId);
             const percentileSummary = formatPercentileSummary(result.completionDatePercentiles);
-            const editing = target && editingTargetId === target.id && editDraft;
+            const draft = target && editingTargetId === target.id ? editDraft : null;
             return (
               <article
                 key={result.targetId}
@@ -487,7 +487,7 @@ export function EpicForecastPanel({
                 >
                   <DragGripIcon />
                 </div>
-                {editing ? (
+                {target && draft ? (
                   <form
                     onPointerDown={(event) => event.stopPropagation()}
                     onPointerUp={(event) => event.stopPropagation()}
@@ -506,8 +506,8 @@ export function EpicForecastPanel({
                       <label>
                         <span style={fieldLabelStyle}>Epic key</span>
                         <input
-                          value={editDraft.jiraIssueKey}
-                          onChange={(e) => setEditDraft({ ...editDraft, jiraIssueKey: e.target.value })}
+                          value={draft.jiraIssueKey}
+                          onChange={(e) => setEditDraft({ ...draft, jiraIssueKey: e.target.value })}
                           disabled={busy}
                           required
                           style={inputStyle}
@@ -517,8 +517,8 @@ export function EpicForecastPanel({
                         <span style={fieldLabelStyle}>Due date</span>
                         <input
                           type="date"
-                          value={editDraft.dueDate}
-                          onChange={(e) => setEditDraft({ ...editDraft, dueDate: e.target.value })}
+                          value={draft.dueDate}
+                          onChange={(e) => setEditDraft({ ...draft, dueDate: e.target.value })}
                           disabled={busy}
                           required
                           style={inputStyle}
@@ -527,8 +527,8 @@ export function EpicForecastPanel({
                       <label>
                         <span style={fieldLabelStyle}>Story count source</span>
                         <select
-                          value={editDraft.storyCountSource}
-                          onChange={(e) => setEditDraft({ ...editDraft, storyCountSource: e.target.value as EpicStoryCountSource })}
+                          value={draft.storyCountSource}
+                          onChange={(e) => setEditDraft({ ...draft, storyCountSource: e.target.value as EpicStoryCountSource })}
                           disabled={busy}
                           style={inputStyle}
                         >
@@ -542,8 +542,8 @@ export function EpicForecastPanel({
                         <input
                           type="number"
                           min={0}
-                          value={editDraft.remainingStoryCount}
-                          onChange={(e) => setEditDraft({ ...editDraft, remainingStoryCount: Number(e.target.value) })}
+                          value={draft.remainingStoryCount}
+                          onChange={(e) => setEditDraft({ ...draft, remainingStoryCount: Number(e.target.value) })}
                           disabled={busy}
                           required
                           style={inputStyle}
@@ -552,8 +552,8 @@ export function EpicForecastPanel({
                       <label>
                         <span style={fieldLabelStyle}>Status</span>
                         <select
-                          value={editDraft.status}
-                          onChange={(e) => setEditDraft({ ...editDraft, status: e.target.value as 'active' | 'closed' })}
+                          value={draft.status}
+                          onChange={(e) => setEditDraft({ ...draft, status: e.target.value as 'active' | 'closed' })}
                           disabled={busy}
                           style={inputStyle}
                         >
@@ -565,8 +565,8 @@ export function EpicForecastPanel({
                     <label>
                       <span style={fieldLabelStyle}>Epic summary</span>
                       <input
-                        value={editDraft.summary}
-                        onChange={(e) => setEditDraft({ ...editDraft, summary: e.target.value })}
+                        value={draft.summary}
+                        onChange={(e) => setEditDraft({ ...draft, summary: e.target.value })}
                         disabled={busy}
                         required
                         style={inputStyle}

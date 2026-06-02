@@ -91,15 +91,19 @@ async function handlePATCH(
       );
     }
 
+    const storyCountSource = parsed.data.storyCountSource ?? 'manual';
     const updated = await updateEpicForecastTargetById(db, scopeId, targetId, {
       jiraIssueKey: parsed.data.jiraIssueKey.toUpperCase(),
       summary: parsed.data.summary,
       dueDate: parsed.data.dueDate,
       remainingStoryCount: parsed.data.remainingStoryCount,
-      storyCountSource: parsed.data.storyCountSource ?? 'manual',
+      storyCountSource,
       epicLinkStoryCount: parsed.data.epicLinkStoryCount ?? null,
       jiraStoryCount: parsed.data.jiraStoryCount ?? null,
-      manualStoryCount: parsed.data.manualStoryCount ?? parsed.data.remainingStoryCount,
+      manualStoryCount:
+        storyCountSource === 'manual'
+          ? parsed.data.manualStoryCount ?? parsed.data.remainingStoryCount
+          : null,
       status: parsed.data.status ?? 'active',
       closedAt: parsed.data.closedAt ? new Date(parsed.data.closedAt) : null,
       sortOrder: parsed.data.sortOrder ?? 0,
