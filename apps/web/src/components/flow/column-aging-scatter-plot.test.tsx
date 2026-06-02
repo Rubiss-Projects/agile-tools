@@ -223,6 +223,36 @@ describe('ColumnAgingScatterPlot', () => {
     expect(cxValues[2]! - cxValues[0]!).toBeGreaterThan(30);
   });
 
+  it('uses most of the plot width for the remaining columns when empty columns are hidden', () => {
+    const { container } = render(
+      <ColumnAgingScatterPlot
+        hideEmptyColumns
+        viewModel={viewModel([
+          columnPoint({
+            workItemId: '11111111-1111-4111-8111-111111111111',
+            issueKey: 'AGILE-101',
+            currentColumn: 'Selected for Development',
+            y: 3,
+          }),
+          columnPoint({
+            workItemId: '22222222-2222-4222-8222-222222222222',
+            issueKey: 'AGILE-102',
+            currentColumn: 'In Progress',
+            y: 5,
+          }),
+        ])}
+      />,
+    );
+
+    const segments = Array.from(container.querySelectorAll('[data-testid="column-threshold-segment"]'));
+    expect(segments).toHaveLength(4);
+
+    const firstRightEdge = Number(segments[0]?.getAttribute('x2'));
+    const lastLeftEdge = Number(segments[3]?.getAttribute('x1'));
+
+    expect(lastLeftEdge - firstRightEdge).toBeLessThan(80);
+  });
+
   it('keeps threshold markers, labels, and points inside the plot bounds', () => {
     const { container } = render(
       <ColumnAgingScatterPlot
@@ -291,5 +321,26 @@ describe('ColumnAgingScatterPlot', () => {
     expect(screen.getByText('Doing · In Progress')).toBeInTheDocument();
     expect(screen.getByText('5.5 days')).toBeInTheDocument();
     expect(screen.getByText('Riley Chen')).toBeInTheDocument();
+  });
+
+  it('uses fewer y-axis labels when the day range is large', () => {
+    render(
+      <ColumnAgingScatterPlot
+        viewModel={viewModel([
+          columnPoint({
+            workItemId: '11111111-1111-4111-8111-111111111111',
+            issueKey: 'AGILE-101',
+            currentColumn: 'In Progress',
+            y: 73,
+          }),
+        ])}
+      />,
+    );
+
+    const tickLabels = screen.getAllByText(/^\d+d$/);
+
+    expect(tickLabels).toHaveLength(5);
+    expect(screen.getByText('20d')).toBeInTheDocument();
+    expect(screen.getByText('80d')).toBeInTheDocument();
   });
 });

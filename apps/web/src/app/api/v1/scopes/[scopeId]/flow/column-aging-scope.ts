@@ -14,12 +14,17 @@ export function selectInScopeColumnAgingModels(
   const doneStatuses = new Set(doneStatusIds);
   const scopedModels: ColumnAgingModel[] = [];
   let reachedStart = false;
+  let foundStartBoundary = startStatuses.size === 0;
 
   for (const column of boardColumns) {
     const hasStartStatus = column.statusIds.some((statusId) => startStatuses.has(statusId));
     const hasDoneStatus = column.statusIds.some((statusId) => doneStatuses.has(statusId));
 
     if (!reachedStart && hasStartStatus) {
+      reachedStart = true;
+      foundStartBoundary = true;
+    }
+    if (!reachedStart && foundStartBoundary) {
       reachedStart = true;
     }
     if (!reachedStart) continue;
@@ -34,5 +39,5 @@ export function selectInScopeColumnAgingModels(
     }
   }
 
-  return scopedModels;
+  return foundStartBoundary ? scopedModels : columnAgingModels;
 }
