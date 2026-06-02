@@ -11,22 +11,21 @@
 
 ## Evidence
 
-Only in-scope columns are shown: `Selected`, `In Progress`, `Review`, `Done`.
+All screenshots below are from the real app running in local Docker after syncing the local Jira dataset.
 
-![Only in-scope columns](../../docs/evidence/column-aging/column-aging-in-scope-columns.png)
+Only in-scope columns are shown in the live column-aging chart: `Selected for Development`, `In Progress`, `Done`.
 
-Hover popup is working on a Jira dot and shows the work item details.
+![Only in-scope columns](../../docs/evidence/column-aging/real-column-aging-28.png)
 
-![Hover popup](../../docs/evidence/column-aging/column-aging-hover-popup.png)
+Hover popup is working on a real Jira dot and shows the work item details.
 
-When empty columns are hidden, the remaining columns expand across the available width and the clustered Jira dots have more separation.
+![Hover popup](../../docs/evidence/column-aging/real-column-aging-hover-chart.png)
 
-![Hide empty columns](../../docs/evidence/column-aging/column-aging-hide-empty.png)
+When empty columns are hidden, the remaining columns expand across the available width.
 
-Measured proof from `docs/evidence/column-aging/column-aging-metrics.json`:
+![Hide empty columns](../../docs/evidence/column-aging/real-column-aging-hide-empty-28.png)
 
-- full visible labels: `Selected`, `In Progress`, `Review`, `Done`
-- hide-empty visible labels: `Selected`, `In Progress`
-- same-width chart area: `1146px`
-- dot spread before hide-empty: `283`
-- dot spread after hide-empty: `548`
+Dense-cluster proof from the live chart:
+
+- `28 active items` are shown in the chart summary
+- the `In Progress` column renders a dense right-side cluster with `16` visible dots in the same area
