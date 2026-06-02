@@ -51,6 +51,17 @@ export interface UpdateEpicForecastTargetInput {
   sortOrder: number;
 }
 
+function resolveManualStoryCount(
+  storyCountSource: EpicStoryCountSource,
+  manualStoryCount: number | null | undefined,
+  remainingStoryCount: number,
+): number | null {
+  if (storyCountSource !== 'manual') {
+    return null;
+  }
+  return manualStoryCount ?? remainingStoryCount;
+}
+
 export async function listEpicForecastTargets(
   db: PrismaClient,
   scopeId: string,
@@ -65,6 +76,7 @@ export async function upsertEpicForecastTarget(
   db: PrismaClient,
   input: UpsertEpicForecastTargetInput,
 ): Promise<EpicForecastTargetRow> {
+  const storyCountSource = input.storyCountSource ?? 'manual';
   return db.epicForecastTarget.upsert({
     where: {
       scopeId_jiraIssueKey: {
@@ -78,10 +90,14 @@ export async function upsertEpicForecastTarget(
       summary: input.summary,
       dueDate: input.dueDate,
       remainingStoryCount: input.remainingStoryCount,
-      storyCountSource: input.storyCountSource ?? 'manual',
+      storyCountSource,
       epicLinkStoryCount: input.epicLinkStoryCount ?? null,
       jiraStoryCount: input.jiraStoryCount ?? null,
-      manualStoryCount: input.manualStoryCount ?? input.remainingStoryCount,
+      manualStoryCount: resolveManualStoryCount(
+        storyCountSource,
+        input.manualStoryCount,
+        input.remainingStoryCount,
+      ),
       status: input.status ?? 'active',
       closedAt: input.closedAt ?? null,
       sortOrder: input.sortOrder ?? 0,
@@ -125,9 +141,9 @@ export async function updateEpicForecastTargetById(
   if (updated.count === 0) {
     return null;
   }
-  return db.epicForecastTarget.findUnique({
-    where: { id: targetId },
-  }) as Promise<EpicForecastTargetRow>;
+  return db.epicForecastTarget.findFirst({
+    where: { id: targetId, scopeId },
+  }) as Promise<EpicForecastTargetRow | null>;
 }
 
 export async function refreshEpicLinkForecastTargetCounts(
