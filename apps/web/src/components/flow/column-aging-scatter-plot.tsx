@@ -75,18 +75,18 @@ export function ColumnAgingScatterPlot({
   const margin = { top: 26, right: 28, bottom: 70, left: 58 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
-  const slotWidth = plotWidth / columns.length;
+  const columnBand = buildColumnBand(columns.length, plotWidth);
   const thresholdModels = viewModel.columnAgingModels.filter((model) => columns.includes(model.columnName));
   const thresholds = thresholdModels.flatMap((model) => [model.p50, model.p85]);
   const maxY = Math.max(1, ...points.map((point) => point.y), ...thresholds);
   const yMax = Math.ceil(maxY * 1.15);
   const yTicks = buildTicks(yMax);
-  const maxPointOffset = Math.max(0, slotWidth * 0.44 - 10);
+  const maxPointOffset = Math.max(0, columnBand.slotWidth * 0.46 - 10);
   const pointLayouts = layoutColumnPoints(viewModel, columns, yForDays, maxPointOffset);
   const columnIndexByName = new Map(columns.map((column, index) => [column, index]));
 
   function xForColumn(index: number): number {
-    return margin.left + slotWidth * (index + 0.5);
+    return margin.left + columnBand.centers[index]!;
   }
 
   function yForDays(days: number): number {
@@ -130,7 +130,7 @@ export function ColumnAgingScatterPlot({
         {columns.map((column, index) => {
           const x = xForColumn(index);
           const model = viewModel.columnAgingModels.find((candidate) => candidate.columnName === column);
-          const halfBand = Math.min(slotWidth * 0.38, 84);
+          const halfBand = Math.min(columnBand.slotWidth * 0.38, 84);
           return (
             <g key={column}>
               <line x1={x} x2={x} y1={margin.top} y2={margin.top + plotHeight} stroke={palette.line} opacity={0.35} />
@@ -273,13 +273,13 @@ function toScatterDatum(point: ColumnScatterDatum): ScatterDatum {
     workItemId: point.workItemId,
     issueKey: point.issueKey,
     summary: point.summary,
-    issueType: point.issueType,
     currentStatus: point.currentStatus,
-    currentColumn: point.currentColumn,
-    assigneeName: point.assigneeName,
+    ...(point.issueType ? { issueType: point.issueType } : {}),
+    ...(point.currentColumn ? { currentColumn: point.currentColumn } : {}),
+    ...(point.assigneeName ? { assigneeName: point.assigneeName } : {}),
     onHoldNow: point.onHoldNow,
     agingZone: point.agingZone,
-    jiraUrl: point.jiraUrl,
+    ...(point.jiraUrl ? { jiraUrl: point.jiraUrl } : {}),
   };
 }
 
@@ -354,6 +354,25 @@ function buildTicks(max: number): number[] {
   return ticks;
 }
 
+function buildColumnBand(columnCount: number, plotWidth: number): {
+  centers: number[];
+  slotWidth: number;
+} {
+  if (columnCount <= 1) {
+    return {
+      centers: [plotWidth / 2],
+      slotWidth: plotWidth,
+    };
+  }
+
+  const outerPadding = Math.min(0.12, 0.28 / columnCount);
+  const usableWidth = plotWidth * (1 - outerPadding * 2);
+  const step = usableWidth / (columnCount - 1);
+  const centers = Array.from({ length: columnCount }, (_, index) => plotWidth * outerPadding + step * index);
+  const slotWidth = Math.max(step, plotWidth / columnCount);
+  return { centers, slotWidth };
+}
+
 function buildTooltip(point: ColumnScatterDatum): string {
   const durations = point.columnDurations
     .map((duration) => `${duration.columnName}: ${duration.workingDays.toFixed(1)}d`)
@@ -414,7 +433,7 @@ function layoutColumnPoints(
 
 function buildOffsets(count: number, maxOffset: number): number[] {
   if (count <= 1 || maxOffset <= 0) return Array.from({ length: count }, () => 0);
-  const spacing = Math.min(18, (maxOffset * 2) / (count - 1));
+  const spacing = Math.min(22, (maxOffset * 2) / (count - 1));
   return Array.from({ length: count }, (_, index) => (index - ((count - 1) / 2)) * spacing);
 }
 
