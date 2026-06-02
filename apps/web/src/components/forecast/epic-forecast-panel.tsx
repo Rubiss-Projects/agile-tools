@@ -456,7 +456,7 @@ export function EpicForecastPanel({
                   ...statCardStyle,
                   display: 'grid',
                   gap: '0.9rem',
-                  gridTemplateColumns: '2.5rem minmax(0, 1.2fr) repeat(3, minmax(110px, 0.35fr)) 2.5rem',
+                  gridTemplateColumns: '2.5rem minmax(0, 1.2fr) repeat(3, minmax(110px, 0.35fr)) minmax(8rem, auto)',
                   alignItems: 'center',
                   outline: dragOverTargetId === result.targetId ? `2px solid ${palette.accentStrong}` : undefined,
                   opacity: draggedTargetId === result.targetId ? 0.72 : 1,
@@ -631,8 +631,16 @@ export function EpicForecastPanel({
                   </p>
                 </div>
                 <div
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onPointerUp={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    setDraggedTargetId(null);
+                    setDragOverTargetId(null);
+                  }}
+                  onPointerUp={(event) => {
+                    event.stopPropagation();
+                    setDraggedTargetId(null);
+                    setDragOverTargetId(null);
+                  }}
                   style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem' }}
                 >
                   {target ? (
@@ -657,11 +665,11 @@ export function EpicForecastPanel({
                       event.stopPropagation();
                       void removeTarget(result.targetId);
                     }}
-                    style={iconButtonStyle(busy)}
-                    aria-label={`Remove ${result.jiraIssueKey}`}
-                    title={`Remove ${result.jiraIssueKey}`}
+                    style={textIconButtonStyle(busy, 'danger')}
+                    aria-label={`Delete ${result.jiraIssueKey}`}
+                    title={`Delete ${result.jiraIssueKey}`}
                   >
-                    ×
+                    Delete
                   </button>
                 </div>
                   </>
@@ -815,34 +823,16 @@ function dragHandleButtonStyle(disabled: boolean): CSSProperties {
   };
 }
 
-function iconButtonStyle(disabled: boolean): CSSProperties {
-  return {
-    width: '2.25rem',
-    height: '2.25rem',
-    display: 'inline-grid',
-    placeItems: 'center',
-    borderRadius: '999px',
-    border: `1px solid ${disabled ? palette.line : palette.danger}`,
-    background: disabled ? palette.buttonDisabled : palette.dangerSoft,
-    color: disabled ? palette.buttonDisabledText : palette.danger,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    padding: 0,
-    fontSize: '1.15rem',
-    fontWeight: 800,
-    lineHeight: 1,
-  };
-}
-
-function textIconButtonStyle(disabled: boolean): CSSProperties {
+function textIconButtonStyle(disabled: boolean, tone: 'default' | 'danger' = 'default'): CSSProperties {
   return {
     minWidth: '3.5rem',
     height: '2.25rem',
     display: 'inline-grid',
     placeItems: 'center',
     borderRadius: '999px',
-    border: `1px solid ${palette.line}`,
-    background: disabled ? palette.buttonDisabled : palette.panelAlt,
-    color: disabled ? palette.buttonDisabledText : palette.accentStrong,
+    border: `1px solid ${tone === 'danger' && !disabled ? palette.danger : palette.line}`,
+    background: disabled ? palette.buttonDisabled : tone === 'danger' ? palette.dangerSoft : palette.panelAlt,
+    color: disabled ? palette.buttonDisabledText : tone === 'danger' ? palette.danger : palette.accentStrong,
     cursor: disabled ? 'not-allowed' : 'pointer',
     padding: '0 0.7rem',
     fontSize: '0.78rem',
