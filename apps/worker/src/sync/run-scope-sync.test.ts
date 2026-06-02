@@ -569,7 +569,7 @@ describe('runScopeSync', () => {
 
     expect(fetchJqlIssueCountMock).toHaveBeenCalledWith(
       jiraClientStub,
-      '"Epic Link" = "PROJ-EPIC-1" AND issuetype in ("story") AND status in ("10", "20")',
+      '"Epic Link" = "PROJ-EPIC-1" AND issuetype in ("story") AND status in ("5", "10", "20")',
     );
     expect(refreshEpicLinkForecastTargetCountsMock).toHaveBeenCalledWith(
       db,

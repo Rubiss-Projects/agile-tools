@@ -220,6 +220,39 @@ export function EpicForecastPanel({
     }
   }
 
+  async function reactivateTarget(target: EpicForecastTarget) {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jiraIssueKey: target.jiraIssueKey,
+          summary: target.summary,
+          dueDate: target.dueDate,
+          remainingStoryCount: target.remainingStoryCount,
+          storyCountSource: target.storyCountSource,
+          manualStoryCount: target.manualStoryCount,
+          epicLinkStoryCount: target.epicLinkStoryCount,
+          jiraStoryCount: target.jiraStoryCount,
+          status: 'active',
+          closedAt: null,
+          sortOrder: target.sortOrder,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as ProblemResponse | null;
+      if (!res.ok) {
+        throw new Error(getProblemMessage(body, `HTTP ${res.status}`));
+      }
+      await loadEpicForecast();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to re-activate epic forecast target.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function startEditingTarget(target: EpicForecastTarget) {
     setEditingTargetId(target.id);
     setEditDraft({
@@ -726,7 +759,7 @@ export function EpicForecastPanel({
                 key={target.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(8rem, 0.3fr) minmax(0, 1fr) minmax(9rem, 0.3fr)',
+                  gridTemplateColumns: 'minmax(8rem, 0.3fr) minmax(0, 1fr) minmax(9rem, 0.3fr) minmax(10rem, auto)',
                   gap: '0.75rem',
                   alignItems: 'center',
                   color: palette.muted,
@@ -741,6 +774,28 @@ export function EpicForecastPanel({
                 </strong>
                 <span>{target.summary}</span>
                 <span>{target.closedAt ? formatDueDate(target.closedAt.slice(0, 10)) : 'Closed'}</span>
+                <span style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => { void reactivateTarget(target); }}
+                    style={textIconButtonStyle(busy)}
+                    aria-label={`Re-activate ${target.jiraIssueKey}`}
+                    title={`Re-activate ${target.jiraIssueKey}`}
+                  >
+                    Re-activate
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => { void removeTarget(target.id); }}
+                    style={textIconButtonStyle(busy, 'danger')}
+                    aria-label={`Delete ${target.jiraIssueKey}`}
+                    title={`Delete ${target.jiraIssueKey}`}
+                  >
+                    Delete
+                  </button>
+                </span>
               </div>
             ))}
           </div>
