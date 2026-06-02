@@ -48,18 +48,13 @@ function jqlList(values: string[]): string {
 
 function getCountableEpicStatusIds(
   columns: BoardColumn[],
-  startStatusIds: Set<string>,
   doneStatusIds: Set<string>,
 ): string[] {
   const statusIds: string[] = [];
-  let reachedStartColumn = startStatusIds.size === 0;
 
   for (const column of columns) {
     for (const statusId of column.statusIds) {
-      if (!reachedStartColumn && startStatusIds.has(statusId)) {
-        reachedStartColumn = true;
-      }
-      if (reachedStartColumn && !doneStatusIds.has(statusId)) {
+      if (!doneStatusIds.has(statusId)) {
         statusIds.push(statusId);
       }
     }
@@ -428,7 +423,6 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       issueTypeIds: scope.includedIssueTypeIds,
       countableStatusIds: getCountableEpicStatusIds(
         boardDetail.columns,
-        startStatusIds,
         doneStatusIds,
       ),
     }).catch((refreshErr: unknown) => {
