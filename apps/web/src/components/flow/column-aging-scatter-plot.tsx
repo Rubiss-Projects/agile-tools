@@ -78,10 +78,9 @@ export function ColumnAgingScatterPlot({
   const columnBand = buildColumnBand(columns.length, plotWidth);
   const thresholdModels = viewModel.columnAgingModels.filter((model) => columns.includes(model.columnName));
   const thresholds = thresholdModels.flatMap((model) => [model.p50, model.p85]);
-  const maxY = Math.max(1, ...points.map((point) => point.y), ...thresholds);
-  const yMax = Math.ceil(maxY * 1.15);
-  const yTicks = buildTicks(yMax);
-  const maxPointOffset = Math.max(0, columnBand.slotWidth * 0.46 - 10);
+  const maxObservedDays = Math.max(1, ...points.map((point) => point.y), ...thresholds);
+  const yAxis = buildYAxis(maxObservedDays);
+  const maxPointOffset = Math.max(0, columnBand.slotWidth * 0.42 - 10);
   const pointLayouts = layoutColumnPoints(viewModel, columns, yForDays, maxPointOffset);
   const columnIndexByName = new Map(columns.map((column, index) => [column, index]));
 
@@ -90,7 +89,7 @@ export function ColumnAgingScatterPlot({
   }
 
   function yForDays(days: number): number {
-    return margin.top + plotHeight - (Math.min(days, yMax) / yMax) * plotHeight;
+    return margin.top + plotHeight - (Math.min(days, yAxis.max) / yAxis.max) * plotHeight;
   }
 
   return (
@@ -111,7 +110,7 @@ export function ColumnAgingScatterPlot({
           stroke={palette.line}
         />
 
-        {yTicks.map((tick) => (
+        {yAxis.ticks.map((tick) => (
           <g key={tick}>
             <line
               x1={margin.left}
@@ -130,7 +129,7 @@ export function ColumnAgingScatterPlot({
         {columns.map((column, index) => {
           const x = xForColumn(index);
           const model = viewModel.columnAgingModels.find((candidate) => candidate.columnName === column);
-          const halfBand = Math.min(columnBand.slotWidth * 0.38, 84);
+          const halfBand = Math.min(columnBand.slotWidth * 0.44, 180);
           return (
             <g key={column}>
               <line x1={x} x2={x} y1={margin.top} y2={margin.top + plotHeight} stroke={palette.line} opacity={0.35} />
@@ -346,33 +345,6 @@ function ThresholdSegment({
   );
 }
 
-function buildTicks(max: number): number[] {
-  const step = max <= 10 ? 2 : max <= 30 ? 5 : 10;
-  const ticks: number[] = [];
-  for (let tick = 0; tick <= max; tick += step) ticks.push(tick);
-  if (ticks[ticks.length - 1] !== max) ticks.push(max);
-  return ticks;
-}
-
-function buildColumnBand(columnCount: number, plotWidth: number): {
-  centers: number[];
-  slotWidth: number;
-} {
-  if (columnCount <= 1) {
-    return {
-      centers: [plotWidth / 2],
-      slotWidth: plotWidth,
-    };
-  }
-
-  const outerPadding = Math.min(0.12, 0.28 / columnCount);
-  const usableWidth = plotWidth * (1 - outerPadding * 2);
-  const step = usableWidth / (columnCount - 1);
-  const centers = Array.from({ length: columnCount }, (_, index) => plotWidth * outerPadding + step * index);
-  const slotWidth = Math.max(step, plotWidth / columnCount);
-  return { centers, slotWidth };
-}
-
 function buildTooltip(point: ColumnScatterDatum): string {
   const durations = point.columnDurations
     .map((duration) => `${duration.columnName}: ${duration.workingDays.toFixed(1)}d`)
@@ -413,7 +385,7 @@ function layoutColumnPoints(
     for (const item of sorted) {
       const currentCluster = clusters[clusters.length - 1];
       const previous = currentCluster?.[currentCluster.length - 1];
-      if (!currentCluster || !previous || Math.abs(item.y - previous.y) > 18) {
+      if (!currentCluster || !previous || Math.abs(item.y - previous.y) > 22) {
         clusters.push([item]);
       } else {
         currentCluster.push(item);
@@ -433,8 +405,50 @@ function layoutColumnPoints(
 
 function buildOffsets(count: number, maxOffset: number): number[] {
   if (count <= 1 || maxOffset <= 0) return Array.from({ length: count }, () => 0);
-  const spacing = Math.min(22, (maxOffset * 2) / (count - 1));
+  const spacing = Math.min(34, (maxOffset * 2) / (count - 1));
   return Array.from({ length: count }, (_, index) => (index - ((count - 1) / 2)) * spacing);
+}
+
+function buildYAxis(maxObservedDays: number): { max: number; ticks: number[] } {
+  const paddedMax = Math.max(1, maxObservedDays * 1.08);
+  const step = niceStep(paddedMax / 5);
+  const max = Math.max(step, Math.ceil(paddedMax / step) * step);
+  return { max, ticks: buildTicks(max, step) };
+}
+
+function buildTicks(max: number, step: number): number[] {
+  const ticks: number[] = [];
+  for (let tick = 0; tick <= max; tick += step) ticks.push(tick);
+  return ticks;
+}
+
+function niceStep(rawStep: number): number {
+  const magnitude = 10 ** Math.floor(Math.log10(Math.max(rawStep, 1)));
+  const normalized = rawStep / magnitude;
+  if (normalized <= 1) return magnitude;
+  if (normalized <= 2) return magnitude * 2;
+  if (normalized <= 5) return magnitude * 5;
+  return magnitude * 10;
+}
+
+function buildColumnBand(columnCount: number, plotWidth: number): {
+  centers: number[];
+  slotWidth: number;
+} {
+  if (columnCount <= 1) {
+    return {
+      centers: [plotWidth / 2],
+      slotWidth: plotWidth,
+    };
+  }
+
+  const gutter = clamp(plotWidth * 0.035, 18, 34);
+  const slotWidth = (plotWidth - gutter * (columnCount - 1)) / columnCount;
+  const centers = Array.from(
+    { length: columnCount },
+    (_, index) => (slotWidth / 2) + index * (slotWidth + gutter),
+  );
+  return { centers, slotWidth };
 }
 
 function pointLayoutKey(zone: ColumnScatterDatum['agingZone'], point: ColumnScatterDatum): string {

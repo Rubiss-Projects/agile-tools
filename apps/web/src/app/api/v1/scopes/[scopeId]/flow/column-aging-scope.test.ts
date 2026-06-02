@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ColumnAgingModel } from '@agile-tools/shared/contracts/api';
 
 import { selectInScopeColumnAgingModels } from './column-aging-scope';
 
@@ -10,7 +11,7 @@ describe('selectInScopeColumnAgingModels', () => {
       { columnName: 'In Progress', statusIds: ['3'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
       { columnName: 'Done', statusIds: ['4'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
       { columnName: 'Archive', statusIds: ['5'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
-    ];
+    ] satisfies ColumnAgingModel[];
 
     const scoped = selectInScopeColumnAgingModels(
       models,
@@ -37,7 +38,7 @@ describe('selectInScopeColumnAgingModels', () => {
       { columnName: 'Selected', statusIds: ['2'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
       { columnName: 'In Progress', statusIds: ['3'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
       { columnName: 'Review', statusIds: ['6'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
-    ];
+    ] satisfies ColumnAgingModel[];
 
     const scoped = selectInScopeColumnAgingModels(
       models,
@@ -56,5 +57,26 @@ describe('selectInScopeColumnAgingModels', () => {
       'In Progress',
       'Review',
     ]);
+  });
+
+  it('falls back to the original models when no configured start status is present on the board', () => {
+    const models = [
+      { columnName: 'Selected', statusIds: ['2'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
+      { columnName: 'In Progress', statusIds: ['3'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
+      { columnName: 'Review', statusIds: ['6'], metricBasis: 'column_working_days', p50: 1, p70: 2, p85: 3, sampleSize: 10 },
+    ] satisfies ColumnAgingModel[];
+
+    const scoped = selectInScopeColumnAgingModels(
+      models,
+      [
+        { name: 'Backlog', statusIds: ['1'] },
+        { name: 'In Progress', statusIds: ['3'] },
+        { name: 'Review', statusIds: ['6'] },
+      ],
+      ['2'],
+      ['4'],
+    );
+
+    expect(scoped).toEqual(models);
   });
 });
