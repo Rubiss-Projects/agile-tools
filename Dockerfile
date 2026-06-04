@@ -77,6 +77,7 @@ COPY --chown=node:node --from=build /workspace/packages/analytics/dist ./package
 
 COPY --chown=node:node --from=build /workspace/packages/db/package.json ./packages/db/package.json
 COPY --chown=node:node --from=build /workspace/packages/db/dist ./packages/db/dist
+COPY --chown=node:node --from=build /workspace/packages/db/prisma.config.ts ./packages/db/prisma.config.ts
 COPY --chown=node:node --from=build /workspace/packages/db/prisma ./packages/db/prisma
 
 COPY --chown=node:node --from=build /workspace/packages/jira-client/package.json ./packages/jira-client/package.json

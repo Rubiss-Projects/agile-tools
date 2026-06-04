@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { recordDatabaseQuery, resolveDatabaseUrlFromEnv } from '@agile-tools/shared';
 
 let _client: PrismaClient | undefined;
@@ -10,12 +11,19 @@ function queryOperation(query: string): string {
 export function getPrismaClient(): PrismaClient {
   if (!_client) {
     // Resolve any DATABASE_URL_ENV_VAR indirection into process.env.DATABASE_URL
-    // before Prisma reads `env("DATABASE_URL")` from the schema at client
-    // construction time. Avoid calling the full getConfig() here so that
-    // contexts which only need database access (e.g. some tests) don't have to
-    // satisfy unrelated config like ENCRYPTION_KEY.
+    // before the PostgreSQL driver adapter reads the connection string. Avoid
+    // calling the full getConfig() here so that contexts which only need
+    // database access (e.g. some tests) don't have to satisfy unrelated config
+    // like ENCRYPTION_KEY.
     resolveDatabaseUrlFromEnv();
+    const connectionString = process.env['DATABASE_URL'];
+    if (!connectionString) {
+      throw new Error('Invalid environment configuration:\n  DATABASE_URL: Required');
+    }
+
+    const adapter = new PrismaPg({ connectionString });
     const client = new PrismaClient({
+      adapter,
       log:
         process.env['NODE_ENV'] === 'development'
           ? [
