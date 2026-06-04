@@ -33,7 +33,7 @@ async function startPostgres() {
 
   const connectionUrl = `postgresql://test:test@${postgresContainer.getHost()}:${postgresContainer.getMappedPort(5432)}/agile_test`;
 
-  execSync('pnpm --filter @agile-tools/db exec prisma migrate dev --skip-generate', {
+  execSync('pnpm --filter @agile-tools/db exec prisma migrate deploy', {
     env: { ...process.env, DATABASE_URL: connectionUrl },
     stdio: 'inherit',
   });
