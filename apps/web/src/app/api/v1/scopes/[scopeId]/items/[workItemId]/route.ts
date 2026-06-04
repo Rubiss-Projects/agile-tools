@@ -64,6 +64,12 @@ async function handleGET(
     const referenceDate = item.startedAt ?? item.createdAt;
     const endDate = item.completedAt ?? now;
     const ageDays = differenceInWorkingDays(referenceDate, endDate, scope.timezone);
+    const jiraUpdatedAgeWorkingDays = item.jiraUpdatedAt
+      ? differenceInWorkingDays(item.jiraUpdatedAt, now, scope.timezone)
+      : null;
+    const latestCommentAgeWorkingDays = item.latestCommentCreatedAt
+      ? differenceInWorkingDays(item.latestCommentCreatedAt, now, scope.timezone)
+      : null;
     const columnMappings = item.lastSyncRunId
       ? await getBoardColumnMappingsForDataVersion(db, scopeId, item.lastSyncRunId)
       : [];
@@ -139,6 +145,22 @@ async function handleGET(
       currentStatus: item.currentStatusName ?? item.currentColumn ?? item.currentStatusId,
       ...(item.assigneeName ? { assigneeName: item.assigneeName } : {}),
       ageDays,
+      ...(item.jiraUpdatedAt
+        ? {
+            jiraUpdatedAt: item.jiraUpdatedAt.toISOString(),
+            jiraUpdatedAgeWorkingDays: jiraUpdatedAgeWorkingDays ?? 0,
+          }
+        : {}),
+      ...(item.latestCommentBody && item.latestCommentCreatedAt
+        ? {
+            latestComment: {
+              ...(item.latestCommentAuthor ? { author: item.latestCommentAuthor } : {}),
+              body: item.latestCommentBody,
+              createdAt: item.latestCommentCreatedAt.toISOString(),
+              ageWorkingDays: latestCommentAgeWorkingDays ?? 0,
+            },
+          }
+        : {}),
       jiraUrl: item.directUrl,
       ...(item.startedAt ? { startedAt: item.startedAt.toISOString() } : {}),
       ...(item.completedAt ? { completedAt: item.completedAt.toISOString() } : {}),

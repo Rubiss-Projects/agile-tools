@@ -196,6 +196,10 @@ model SyncWorkItemStage {
   currentColumn     String?
   assigneeName      String?
   jiraCreatedAt     DateTime
+  jiraUpdatedAt          DateTime?
+  latestCommentAuthor    String?
+  latestCommentBody      String?
+  latestCommentCreatedAt DateTime?
   startedAt         DateTime?
   completedAt       DateTime?
   reopenedCount     Int      @default(0)
@@ -225,6 +229,10 @@ model WorkItem {
   currentColumn   String?
   assigneeName    String?
   createdAt       DateTime  // Jira creation timestamp — NOT auto-generated
+  jiraUpdatedAt          DateTime?
+  latestCommentAuthor    String?
+  latestCommentBody      String?
+  latestCommentCreatedAt DateTime?
   startedAt       DateTime?
   completedAt     DateTime?
   reopenedCount   Int       @default(0)

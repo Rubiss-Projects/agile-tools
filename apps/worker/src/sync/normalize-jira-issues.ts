@@ -33,6 +33,10 @@ export interface NormalizedWorkItem {
   currentColumn: string | null;
   assigneeName: string | null;
   createdAt: Date;
+  jiraUpdatedAt: Date | null;
+  latestCommentAuthor: string | null;
+  latestCommentBody: string | null;
+  latestCommentCreatedAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
   reopenedCount: number;
@@ -57,6 +61,7 @@ export function normalizeJiraIssue(
 
   const lifecycleEvents = deriveLifecycleEvents(changelog, ctx);
   const createdAt = new Date(fields.created);
+  const latestComment = selectLatestComment(fields.comment?.comments ?? []);
   const { startedAt, completedAt } = deriveTimestamps(
     lifecycleEvents,
     currentStatusId,
@@ -77,6 +82,10 @@ export function normalizeJiraIssue(
     currentColumn: ctx.statusIdsByColumn[currentStatusId] ?? null,
     assigneeName,
     createdAt,
+    jiraUpdatedAt: fields.updated ? new Date(fields.updated) : null,
+    latestCommentAuthor: latestComment?.author ?? null,
+    latestCommentBody: latestComment?.body ?? null,
+    latestCommentCreatedAt: latestComment?.createdAt ?? null,
     startedAt,
     completedAt,
     reopenedCount,
@@ -84,6 +93,43 @@ export function normalizeJiraIssue(
     excludedReason,
     lifecycleEvents,
   };
+}
+
+function selectLatestComment(
+  comments: NonNullable<RawJiraIssue['fields']['comment']>['comments'],
+): { author: string | null; body: string; createdAt: Date } | null {
+  if (!comments || comments.length === 0) {
+    return null;
+  }
+
+  const validComments = comments
+    .map((comment) => {
+      const createdAt = comment.created ? new Date(comment.created) : null;
+      if (!comment.body || !createdAt || Number.isNaN(createdAt.getTime())) {
+        return null;
+      }
+
+      return {
+        author:
+          comment.author?.displayName ??
+          comment.author?.name ??
+          comment.author?.accountId ??
+          null,
+        body: comment.body,
+        createdAt,
+      };
+    })
+    .filter((comment): comment is { author: string | null; body: string; createdAt: Date } =>
+      comment !== null,
+    );
+
+  if (validComments.length === 0) {
+    return null;
+  }
+
+  return validComments.reduce((latest, comment) =>
+    comment.createdAt.getTime() > latest.createdAt.getTime() ? comment : latest,
+  );
 }
 
 /**

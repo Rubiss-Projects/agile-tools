@@ -9,6 +9,7 @@ vi.mock('@agile-tools/db', () => ({
   getPrismaClient: vi.fn(),
   getFlowScope: vi.fn(),
   getWorkItemWithDetail: vi.fn(),
+  getBoardColumnMappingsForDataVersion: vi.fn(),
 }));
 
 const { GET } = await import('./route');
@@ -46,6 +47,10 @@ describe('GET /api/v1/scopes/:scopeId/items/:workItemId', () => {
       currentColumn: 'In Progress',
       assigneeName: null,
       createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      jiraUpdatedAt: new Date('2026-05-31T14:00:00.000Z'),
+      latestCommentAuthor: 'Morgan Lee',
+      latestCommentBody: 'I pushed the review fixes and am waiting on validation.',
+      latestCommentCreatedAt: new Date('2026-05-31T13:30:00.000Z'),
       startedAt: new Date('2026-05-02T00:00:00.000Z'),
       completedAt: null,
       directUrl: 'https://jira.example/browse/PROJ-1',
@@ -96,6 +101,14 @@ describe('GET /api/v1/scopes/:scopeId/items/:workItemId', () => {
         toStatus: '99999',
       }),
     ]);
+    expect(body.jiraUpdatedAt).toBe('2026-05-31T14:00:00.000Z');
+    expect(typeof body.jiraUpdatedAgeWorkingDays).toBe('number');
+    expect(body.latestComment).toEqual({
+      author: 'Morgan Lee',
+      body: 'I pushed the review fixes and am waiting on validation.',
+      createdAt: '2026-05-31T13:30:00.000Z',
+      ageWorkingDays: expect.any(Number),
+    });
     expect(findMany).toHaveBeenCalledWith({
       where: { scopeId: 'scope-1', currentStatusId: { in: ['10000', '10001', '3', '99999'] } },
       select: { currentStatusId: true, currentStatusName: true, currentColumn: true },

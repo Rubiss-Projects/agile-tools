@@ -92,7 +92,7 @@ export function WorkItemDetailDrawer({
         ref={dialogRef}
         tabIndex={-1}
         style={{
-          width: 'min(26rem, 100vw)',
+          width: 'min(30rem, 100vw)',
           height: '100%',
           marginLeft: 'auto',
           background: palette.panelStrong,
@@ -154,6 +154,20 @@ function WorkItemDetailContent({ detail }: { detail: WorkItemDetail }) {
         Age:{' '}
         <strong style={{ color: palette.ink }}>{detail.ageDays.toFixed(1)} days</strong>
       </p>
+      {detail.assigneeName && (
+        <p style={{ margin: '0 0 0.25rem', color: palette.soft }}>
+          Assignee:{' '}
+          <strong style={{ color: palette.ink }}>{detail.assigneeName}</strong>
+        </p>
+      )}
+      {detail.jiraUpdatedAt && (
+        <p style={{ margin: '0 0 0.25rem', color: palette.soft }}>
+          Last Jira update:{' '}
+          <strong style={{ color: palette.ink }}>
+            {formatWorkingDaysAgo(detail.jiraUpdatedAgeWorkingDays)}
+          </strong>
+        </p>
+      )}
       {detail.jiraUrl && (
         <p style={{ margin: '0 0 1rem' }}>
           <a
@@ -165,6 +179,49 @@ function WorkItemDetailContent({ detail }: { detail: WorkItemDetail }) {
             View in Jira ↗
           </a>
         </p>
+      )}
+
+      {detail.latestComment && (
+        <section
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            borderRadius: '8px',
+            border: `1px solid ${palette.line}`,
+            background: palette.panel,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+              marginBottom: '0.45rem',
+            }}
+          >
+            <h4 style={{ margin: 0, fontSize: '0.875rem', color: palette.text }}>
+              Latest Comment
+            </h4>
+            <span style={{ color: palette.soft, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+              {formatWorkingDaysAgo(detail.latestComment.ageWorkingDays)}
+            </span>
+          </div>
+          <div style={{ marginBottom: '0.45rem', color: palette.soft, fontSize: '0.75rem' }}>
+            {detail.latestComment.author ?? 'Unknown author'} ·{' '}
+            {new Date(detail.latestComment.createdAt).toLocaleString()}
+          </div>
+          <p
+            style={{
+              margin: 0,
+              color: palette.ink,
+              lineHeight: 1.45,
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {detail.latestComment.body}
+          </p>
+        </section>
       )}
 
       {detail.columnDurations && detail.columnDurations.length > 0 && (
@@ -239,4 +296,17 @@ function WorkItemDetailContent({ detail }: { detail: WorkItemDetail }) {
       )}
     </div>
   );
+}
+
+function formatWorkingDaysAgo(days: number | undefined): string {
+  if (days == null) {
+    return 'unknown';
+  }
+
+  if (days < 0.05) {
+    return 'today';
+  }
+
+  const rounded = Math.round(days * 10) / 10;
+  return `${rounded.toFixed(1)} working day${rounded === 1 ? '' : 's'} ago`;
 }

@@ -989,6 +989,24 @@ components:
           type: string
         ageDays:
           type: number
+        jiraUpdatedAt:
+          type: string
+          format: date-time
+        jiraUpdatedAgeWorkingDays:
+          type: number
+        latestComment:
+          type: object
+          required: [body, createdAt, ageWorkingDays]
+          properties:
+            author:
+              type: string
+            body:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            ageWorkingDays:
+              type: number
         jiraUrl:
           type: string
           format: uri

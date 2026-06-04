@@ -70,4 +70,30 @@ describe('normalizeJiraIssue', () => {
 
     expect(result.startedAt).toEqual(new Date('2025-01-02T09:00:00.000Z'));
   });
+
+  it('keeps Jira update time and the latest comment for standup detail', () => {
+    const issue = makeIssue({ id: '20', name: 'Review' });
+    issue.fields.updated = '2025-01-05T12:00:00.000Z';
+    issue.fields.comment = {
+      comments: [
+        {
+          body: 'Started implementation.',
+          created: '2025-01-03T09:00:00.000Z',
+          author: { displayName: 'Riley Chen' },
+        },
+        {
+          body: 'Pushed fixes and waiting for review.',
+          created: '2025-01-04T15:30:00.000Z',
+          author: { displayName: 'Morgan Lee' },
+        },
+      ],
+    };
+
+    const result = normalizeJiraIssue(issue, [], BASE_CONTEXT);
+
+    expect(result.jiraUpdatedAt).toEqual(new Date('2025-01-05T12:00:00.000Z'));
+    expect(result.latestCommentAuthor).toBe('Morgan Lee');
+    expect(result.latestCommentBody).toBe('Pushed fixes and waiting for review.');
+    expect(result.latestCommentCreatedAt).toEqual(new Date('2025-01-04T15:30:00.000Z'));
+  });
 });
