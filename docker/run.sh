@@ -37,7 +37,8 @@ write_role() {
 }
 
 bootstrap_runtime() {
-  /app/node_modules/.pnpm/node_modules/.bin/prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma
+  cd /app/packages/db
+  /app/node_modules/.pnpm/node_modules/.bin/prisma migrate deploy
   PGBOSS_DATABASE_URL="$DATABASE_URL" /app/node_modules/.pnpm/node_modules/.bin/pg-boss migrate
 }
 

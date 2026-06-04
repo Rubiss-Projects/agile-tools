@@ -101,6 +101,7 @@ export default [
       'coverage/**',
       'playwright-report/**',
       'apps/web/next-env.d.ts',
+      'packages/db/prisma.config.ts',
     ],
   },
 ];
