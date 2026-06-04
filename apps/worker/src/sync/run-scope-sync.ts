@@ -36,7 +36,7 @@ import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js
 
 const BATCH_SIZE = 10;
 const STAGED_ITEM_PAGE_SIZE = 100;
-const COMPLETED_ISSUE_SEARCH_FIELDS = 'summary,status,issuetype,project,created,assignee';
+const SYNC_ISSUE_FIELDS = 'summary,status,issuetype,project,created,updated,assignee,comment';
 
 function quoteJqlValue(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -342,7 +342,9 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     const projectIdsSet = new Set<string>();
     const processedIssueIds = new Set<string>();
 
-    for await (const issue of streamBoardIssues(jiraClient, boardId)) {
+    for await (const issue of streamBoardIssues(jiraClient, boardId, {
+      fields: SYNC_ISSUE_FIELDS,
+    })) {
       if (processedIssueIds.has(issue.id)) {
         continue;
       }
@@ -372,7 +374,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
           `AND updated >= -${DEFAULT_COMPLETED_WINDOW_DAYS}d`;
 
         for await (const issue of streamJqlIssues(jiraClient, completedJql, {
-          fields: COMPLETED_ISSUE_SEARCH_FIELDS,
+          fields: SYNC_ISSUE_FIELDS,
         })) {
           if (processedIssueIds.has(issue.id)) {
             continue;
@@ -766,6 +768,10 @@ async function stageWorkItems(
       currentColumn: item.currentColumn,
       assigneeName: item.assigneeName,
       jiraCreatedAt: item.createdAt,
+      jiraUpdatedAt: item.jiraUpdatedAt,
+      latestCommentAuthor: item.latestCommentAuthor,
+      latestCommentBody: item.latestCommentBody,
+      latestCommentCreatedAt: item.latestCommentCreatedAt,
       startedAt: item.startedAt,
       completedAt: item.completedAt,
       reopenedCount: item.reopenedCount,
@@ -847,6 +853,10 @@ async function publishSyncedWorkItems(
             currentColumn: item.currentColumn,
             assigneeName: item.assigneeName,
             createdAt: item.jiraCreatedAt,
+            jiraUpdatedAt: item.jiraUpdatedAt,
+            latestCommentAuthor: item.latestCommentAuthor,
+            latestCommentBody: item.latestCommentBody,
+            latestCommentCreatedAt: item.latestCommentCreatedAt,
             startedAt: item.startedAt,
             completedAt: item.completedAt,
             reopenedCount: item.reopenedCount,
@@ -865,6 +875,10 @@ async function publishSyncedWorkItems(
             currentStatusName: item.currentStatusName,
             currentColumn: item.currentColumn,
             assigneeName: item.assigneeName,
+            jiraUpdatedAt: item.jiraUpdatedAt,
+            latestCommentAuthor: item.latestCommentAuthor,
+            latestCommentBody: item.latestCommentBody,
+            latestCommentCreatedAt: item.latestCommentCreatedAt,
             startedAt: item.startedAt,
             completedAt: item.completedAt,
             reopenedCount: item.reopenedCount,

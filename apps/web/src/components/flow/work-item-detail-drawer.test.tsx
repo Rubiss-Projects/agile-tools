@@ -29,7 +29,16 @@ describe('WorkItemDetailDrawer', () => {
         issueKey: 'FLOW-123',
         summary: 'Improve flow analytics',
         currentStatus: 'In Progress',
+        assigneeName: 'Morgan Lee',
         ageDays: 7,
+        jiraUpdatedAt: '2026-06-02T14:00:00.000Z',
+        jiraUpdatedAgeWorkingDays: 1,
+        latestComment: {
+          author: 'Morgan Lee',
+          body: 'Finished the API changes; waiting on review feedback.',
+          createdAt: '2026-06-02T13:30:00.000Z',
+          ageWorkingDays: 1,
+        },
         jiraUrl: 'https://jira.example.test/browse/FLOW-123',
         columnDurations: [
           {
@@ -66,6 +75,13 @@ describe('WorkItemDetailDrawer', () => {
     );
 
     expect(await screen.findByText('Column Durations')).toBeVisible();
+    expect(screen.getByText('Assignee:')).toBeVisible();
+    expect(screen.getByText('Morgan Lee')).toBeVisible();
+    expect(screen.getByText('Last Jira update:')).toBeVisible();
+    expect(screen.getAllByText('1.0 working day ago')).toHaveLength(2);
+    expect(screen.getByText('Latest Comment')).toBeVisible();
+    expect(screen.getAllByText(/Morgan Lee/)).toHaveLength(2);
+    expect(screen.getByText('Finished the API changes; waiting on review feedback.')).toBeVisible();
     expect(screen.getByText('To Do')).toBeVisible();
     expect(screen.getByText('1.0d')).toBeVisible();
     expect(screen.getAllByText('In Progress')).toHaveLength(2);

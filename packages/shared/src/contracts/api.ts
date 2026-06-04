@@ -278,6 +278,14 @@ export const LifecycleEventResponseSchema = z.object({
 });
 export type LifecycleEventResponse = z.infer<typeof LifecycleEventResponseSchema>;
 
+export const LatestCommentSchema = z.object({
+  author: z.string().optional(),
+  body: z.string(),
+  createdAt: z.string().datetime(),
+  ageWorkingDays: z.number(),
+});
+export type LatestComment = z.infer<typeof LatestCommentSchema>;
+
 export const WorkItemDetailSchema = z.object({
   workItemId: z.string().uuid(),
   issueKey: z.string(),
@@ -285,6 +293,9 @@ export const WorkItemDetailSchema = z.object({
   currentStatus: z.string(),
   assigneeName: z.string().optional(),
   ageDays: z.number(),
+  jiraUpdatedAt: z.string().datetime().optional(),
+  jiraUpdatedAgeWorkingDays: z.number().optional(),
+  latestComment: LatestCommentSchema.optional(),
   jiraUrl: z.string().url(),
   startedAt: z.string().datetime().optional(),
   completedAt: z.string().datetime().optional(),

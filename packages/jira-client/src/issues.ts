@@ -26,7 +26,22 @@ export interface RawJiraIssueFields {
   status: { id: string; name: string };
   /** ISO 8601 Jira creation timestamp */
   created: string;
+  /** ISO 8601 Jira last-updated timestamp */
+  updated?: string;
   assignee?: { accountId?: string; name?: string } | null;
+  comment?: {
+    comments?: Array<{
+      id?: string;
+      body?: string;
+      created?: string;
+      updated?: string;
+      author?: {
+        displayName?: string;
+        name?: string;
+        accountId?: string;
+      };
+    }>;
+  };
   [key: string]: unknown;
 }
 
@@ -83,6 +98,11 @@ export interface FetchBoardIssuesOptions {
    * Always use `fetchIssueChangelog()` for complete lifecycle history.
    */
   expandChangelog?: boolean;
+  /**
+   * Comma-separated list of fields to include in the response.
+   * Omit to use Jira's board endpoint defaults.
+   */
+  fields?: string;
 }
 
 export interface FetchBoardIssuesResult {
@@ -101,6 +121,7 @@ export async function fetchBoardIssues(
   const { startAt = 0, maxResults = 50, expandChangelog = false } = options;
   const params: Record<string, string | number | boolean> = { startAt, maxResults };
   if (expandChangelog) params['expand'] = 'changelog';
+  if (options.fields) params['fields'] = options.fields;
 
   const result = await client.get<JiraIssueSearchResponse>(
     `/rest/agile/1.0/board/${boardId}/issue`,
