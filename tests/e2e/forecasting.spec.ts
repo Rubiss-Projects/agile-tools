@@ -18,7 +18,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { PrismaClient } from '@agile-tools/db';
+import { disconnectPrisma, getPrismaClient, type PrismaClient } from '@agile-tools/db';
 import { encryptSecret } from '@agile-tools/shared';
 import type { ThroughputResponse } from '@agile-tools/shared/contracts/api';
 import type { ForecastResponse } from '@agile-tools/shared/contracts/forecast';
@@ -128,7 +128,8 @@ test.beforeAll(async () => {
     throw new Error('DATABASE_URL is required for E2E tests. Start docker-compose first.');
   }
 
-  db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  process.env['DATABASE_URL'] = databaseUrl;
+  db = getPrismaClient();
 
   const workspace = await db.workspace.create({
     data: { name: 'Forecasting E2E Workspace', defaultTimezone: 'UTC' },
@@ -216,7 +217,7 @@ test.afterAll(async () => {
   await db.flowScope.deleteMany({ where: { id: scopeId } });
   await db.jiraConnection.deleteMany({ where: { id: connectionId } });
   await db.workspace.deleteMany({ where: { id: workspaceId } });
-  await db.$disconnect();
+  await disconnectPrisma();
 });
 
 async function setAdminSession(page: Page) {
