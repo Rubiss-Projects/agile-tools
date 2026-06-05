@@ -20,19 +20,19 @@
       "installed_at": "2026-04-18T00:00:03.982504+00:00"
     },
     "ralph": {
-      "version": "1.0.1",
+      "version": "1.1.0",
       "source": "local",
-      "manifest_hash": "sha256:dadb35ae475fa198b07194589dffaf634a12085e08e595a7cd64e80d6fd8df14",
+      "manifest_hash": "sha256:acb5f09ce6e4da703493956a8d640f878ebba27462900db9c0ead23eef4a74b1",
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "copilot": [
+        "codex": [
           "speckit.ralph.run",
           "speckit.ralph.iterate"
         ]
       },
       "registered_skills": [],
-      "installed_at": "2026-04-18T00:00:47.241340+00:00"
+      "installed_at": "2026-06-05T02:17:42.468626+00:00"
     }
   }
 }
