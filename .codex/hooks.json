@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^apply_patch$|^Edit$|^Write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/lint-after-edit.mjs\"",
+            "commandWindows": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/lint-after-edit.mjs\"",
+            "timeout": 90,
+            "statusMessage": "Linting edited files"
+          }
+        ]
+      }
+    ]
+  }
+}
