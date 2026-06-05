@@ -18,10 +18,12 @@ export {
   fetchBoardIssues,
   streamBoardIssues,
   fetchIssueChangelog,
+  fetchLatestIssueComment,
   streamJqlIssues,
   fetchJqlIssueCount,
 } from './issues.js';
 export type {
+  JiraComment,
   RawJiraIssue,
   RawJiraIssueFields,
   ChangelogHistory,

@@ -16,6 +16,7 @@ const {
   streamJqlIssuesMock,
   fetchJqlIssueCountMock,
   fetchIssueChangelogMock,
+  fetchLatestIssueCommentMock,
   detectBoardDriftMock,
   applyBoardDriftHandlingMock,
   updateConnectionHealthAfterSyncMock,
@@ -63,6 +64,7 @@ const {
     streamJqlIssuesMock: vi.fn(),
     fetchJqlIssueCountMock: vi.fn(),
     fetchIssueChangelogMock: vi.fn(),
+    fetchLatestIssueCommentMock: vi.fn(),
     detectBoardDriftMock: vi.fn(),
     applyBoardDriftHandlingMock: vi.fn(),
     updateConnectionHealthAfterSyncMock: vi.fn(),
@@ -101,6 +103,7 @@ vi.mock('@agile-tools/jira-client', () => ({
   streamJqlIssues: streamJqlIssuesMock,
   fetchJqlIssueCount: fetchJqlIssueCountMock,
   fetchIssueChangelog: fetchIssueChangelogMock,
+  fetchLatestIssueComment: fetchLatestIssueCommentMock,
 }));
 
 vi.mock('./detect-board-drift.js', () => ({
@@ -121,6 +124,7 @@ vi.mock('../projections/rebuild-scope-summary.js', () => ({
 }));
 
 import { runScopeSync } from './run-scope-sync.js';
+import type { RawJiraIssue } from '@agile-tools/jira-client';
 
 function makeIssue(params: {
   id: string;
@@ -128,17 +132,7 @@ function makeIssue(params: {
   projectId: string;
   statusId: string;
   statusName: string;
-}): {
-  id: string;
-  key: string;
-  fields: {
-    summary: string;
-    issuetype: { id: string; name: string };
-    project: { id: string; key: string };
-    status: { id: string; name: string };
-    created: string;
-  };
-} {
+}): RawJiraIssue {
   return {
     id: params.id,
     key: params.key,
@@ -346,6 +340,7 @@ describe('runScopeSync', () => {
     detectBoardDriftMock.mockReturnValue(null);
     applyBoardDriftHandlingMock.mockResolvedValue(undefined);
     fetchIssueChangelogMock.mockResolvedValue([]);
+    fetchLatestIssueCommentMock.mockResolvedValue(null);
     updateConnectionHealthAfterSyncMock.mockResolvedValue(undefined);
     rebuildScopeProjectionsMock.mockResolvedValue(undefined);
     listEpicForecastTargetsMock.mockResolvedValue([]);
@@ -410,6 +405,50 @@ describe('runScopeSync', () => {
         changelogStrategy: 'issue_expand',
         capabilitiesDetectedAt: expect.any(Date),
       }),
+    );
+  });
+
+  it('passes the resolved latest Jira comment into item normalization', async () => {
+    const db = createDb({ doneStatusIds: [] });
+    const latestComment = {
+      body: 'Validated the latest standup update.',
+      created: '2026-06-03T13:30:00.000Z',
+      author: { displayName: 'Morgan Lee' },
+    };
+    const boardIssue = makeIssue({
+      id: 'ISSUE-1',
+      key: 'PROJ-1',
+      projectId: 'proj-board',
+      statusId: '10',
+      statusName: 'In Progress',
+    });
+    boardIssue.fields.comment = {
+      startAt: 0,
+      maxResults: 1,
+      total: 2,
+      comments: [
+        {
+          body: 'Older inline comment.',
+          created: '2026-06-01T13:30:00.000Z',
+          author: { displayName: 'Morgan Lee' },
+        },
+      ],
+    };
+    streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
+    fetchLatestIssueCommentMock.mockResolvedValue(latestComment);
+
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(fetchLatestIssueCommentMock).toHaveBeenCalledWith(
+      jiraClientStub,
+      'ISSUE-1',
+      boardIssue.fields.comment,
+    );
+    expect(normalizeJiraIssueMock).toHaveBeenCalledWith(
+      boardIssue,
+      [],
+      expect.any(Object),
+      latestComment,
     );
   });
 
@@ -705,6 +744,7 @@ describe('runScopeSync', () => {
           '20': 'Review',
         },
       }),
+      null,
     );
   });
 

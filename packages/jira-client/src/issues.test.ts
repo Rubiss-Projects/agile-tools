@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createJiraClient } from './client.js';
-import { fetchIssueChangelog, fetchJqlIssueCount, streamJqlIssues } from './issues.js';
+import {
+  fetchIssueChangelog,
+  fetchJqlIssueCount,
+  fetchLatestIssueComment,
+  streamJqlIssues,
+} from './issues.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -202,6 +207,74 @@ describe('fetchIssueChangelog', () => {
     );
     expect(changelogCalls).toHaveLength(1);
     expect(issueDetailCalls).toHaveLength(3);
+  });
+});
+
+describe('fetchLatestIssueComment', () => {
+  it('uses the inline comment page when Jira returned every comment', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://jira.example.internal', 'pat-123');
+    const latest = await fetchLatestIssueComment(client, 'PROJ-1', {
+      startAt: 0,
+      maxResults: 2,
+      total: 2,
+      comments: [
+        {
+          body: 'Older update.',
+          created: '2026-06-01T12:00:00.000Z',
+          author: { displayName: 'Riley Chen' },
+        },
+        {
+          body: 'Latest update.',
+          created: '2026-06-03T12:00:00.000Z',
+          author: { displayName: 'Morgan Lee' },
+        },
+      ],
+    });
+
+    expect(latest?.body).toBe('Latest update.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fetches the comment subresource when Jira truncated inline comments', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        startAt: 2,
+        maxResults: 1,
+        total: 3,
+        comments: [
+          {
+            body: 'Latest full-history update.',
+            created: '2026-06-04T12:00:00.000Z',
+            author: { displayName: 'Morgan Lee' },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://jira.example.internal', 'pat-123');
+    const latest = await fetchLatestIssueComment(client, 'PROJ-1', {
+      startAt: 0,
+      maxResults: 1,
+      total: 3,
+      comments: [
+        {
+          body: 'Older inline update.',
+          created: '2026-06-01T12:00:00.000Z',
+          author: { displayName: 'Riley Chen' },
+        },
+      ],
+    });
+
+    expect(latest?.body).toBe('Latest full-history update.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const calledUrl = String(fetchMock.mock.calls[0]![0]);
+    expect(calledUrl).toContain('/rest/api/2/issue/PROJ-1/comment');
+    expect(calledUrl).toContain('startAt=2');
+    expect(calledUrl).toContain('maxResults=1');
   });
 });
 
