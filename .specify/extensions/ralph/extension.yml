@@ -3,17 +3,19 @@ schema_version: "1.0"
 extension:
   id: "ralph"
   name: "Ralph Loop"
-  version: "1.0.1"
+  version: "1.1.0"
   description: "Autonomous implementation loop using AI agent CLI"
   author: "Rubiss"
-  repository: "https://github.com/Rubiss/spec-kit-ralph"
+  repository: "https://github.com/Rubiss-Projects/spec-kit-ralph"
   license: "MIT"
 
 requires:
   speckit_version: ">=0.1.0"
   tools:
     - name: "copilot"
-      required: true
+      required: false
+    - name: "codex"
+      required: false
     - name: "git"
       required: true
 
@@ -45,6 +47,7 @@ tags:
   - "automation"
   - "loop"
   - "copilot"
+  - "codex"
 
 defaults:
   model: "claude-sonnet-4.6"

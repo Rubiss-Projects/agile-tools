@@ -1,11 +1,13 @@
 ---
+name: speckit-ralph-iterate
 description: Execute a single Ralph loop iteration - complete one work unit from tasks.md
   with proper commits and progress tracking
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: ralph:commands/iterate.md
 ---
 
-
-<!-- Extension: ralph -->
-<!-- Config: .specify/extensions/ralph/ -->
 ## User Input
 
 ```text
