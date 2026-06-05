@@ -30,19 +30,24 @@ export interface RawJiraIssueFields {
   updated?: string;
   assignee?: { accountId?: string; name?: string } | null;
   comment?: {
-    comments?: Array<{
-      id?: string;
-      body?: string;
-      created?: string;
-      updated?: string;
-      author?: {
-        displayName?: string;
-        name?: string;
-        accountId?: string;
-      };
-    }>;
+    startAt?: number;
+    maxResults?: number;
+    total?: number;
+    comments?: JiraComment[];
   };
   [key: string]: unknown;
+}
+
+export interface JiraComment {
+  id?: string;
+  body?: string;
+  created?: string;
+  updated?: string;
+  author?: {
+    displayName?: string;
+    name?: string;
+    accountId?: string;
+  };
 }
 
 export interface RawJiraIssue {
@@ -74,6 +79,13 @@ interface JiraChangelogPageResponse {
   total: number;
   isLast?: boolean;
   values: ChangelogHistory[];
+}
+
+interface JiraCommentPageResponse {
+  startAt: number;
+  maxResults: number;
+  total: number;
+  comments: JiraComment[];
 }
 
 interface JiraIssueWithExpandedChangelog {
@@ -192,6 +204,85 @@ export async function fetchIssueChangelog(
   return detectedStrategy === 'issue_expand'
     ? fetchIssueChangelogExpansion(client, issueIdOrKey)
     : fetchIssueChangelogSubresourceWithFallback(client, issueIdOrKey);
+}
+
+// ─── Issue Comments ──────────────────────────────────────────────────────────
+
+export async function fetchLatestIssueComment(
+  client: JiraClient,
+  issueIdOrKey: string,
+  inlineCommentPage?: RawJiraIssueFields['comment'],
+): Promise<JiraComment | null> {
+  const inlineComments = inlineCommentPage?.comments ?? [];
+  const inlineTotal = inlineCommentPage?.total;
+
+  if (inlineComments.length > 0 && (inlineTotal == null || inlineTotal <= inlineComments.length)) {
+    return selectLatestJiraComment(inlineComments);
+  }
+
+  if (inlineTotal === 0) {
+    return null;
+  }
+
+  if (typeof inlineTotal === 'number' && inlineTotal > 0) {
+    const lastPage = await fetchIssueCommentPage(client, issueIdOrKey, inlineTotal - 1, 1);
+    const latestFromLastPage = selectLatestJiraComment(lastPage.comments);
+    if (latestFromLastPage) {
+      return latestFromLastPage;
+    }
+  }
+
+  return fetchLatestIssueCommentByScanning(client, issueIdOrKey);
+}
+
+async function fetchLatestIssueCommentByScanning(
+  client: JiraClient,
+  issueIdOrKey: string,
+): Promise<JiraComment | null> {
+  let startAt = 0;
+  const maxResults = 100;
+  let latest: JiraComment | null = null;
+
+  for (;;) {
+    const page = await fetchIssueCommentPage(client, issueIdOrKey, startAt, maxResults);
+    latest = selectLatestJiraComment([...(latest ? [latest] : []), ...page.comments]);
+
+    if (page.comments.length === 0 || startAt + page.comments.length >= page.total) {
+      break;
+    }
+    startAt += page.comments.length;
+  }
+
+  return latest;
+}
+
+function fetchIssueCommentPage(
+  client: JiraClient,
+  issueIdOrKey: string,
+  startAt: number,
+  maxResults: number,
+): Promise<JiraCommentPageResponse> {
+  return client.get<JiraCommentPageResponse>(
+    `/rest/api/2/issue/${issueIdOrKey}/comment`,
+    { params: { startAt, maxResults } },
+  );
+}
+
+function selectLatestJiraComment(comments: JiraComment[]): JiraComment | null {
+  const validComments = comments.filter((comment) => {
+    if (!comment.created) {
+      return false;
+    }
+    return !Number.isNaN(new Date(comment.created).getTime());
+  });
+
+  if (validComments.length === 0) {
+    return null;
+  }
+
+  return validComments.reduce((latest, comment) =>
+    new Date(comment.created!).getTime() > new Date(latest.created!).getTime() ? comment : latest,
+  );
 }
 
 async function detectChangelogFetchStrategy(

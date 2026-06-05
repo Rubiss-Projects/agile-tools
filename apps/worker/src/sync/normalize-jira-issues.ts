@@ -1,4 +1,4 @@
-import type { RawJiraIssue, ChangelogHistory } from '@agile-tools/jira-client';
+import type { RawJiraIssue, ChangelogHistory, JiraComment } from '@agile-tools/jira-client';
 
 export interface NormalizeContext {
   scopeId: string;
@@ -50,6 +50,7 @@ export function normalizeJiraIssue(
   issue: RawJiraIssue,
   changelog: ChangelogHistory[],
   ctx: NormalizeContext,
+  latestJiraComment?: JiraComment | null,
 ): NormalizedWorkItem {
   const { fields } = issue;
   const currentStatusId = fields.status.id;
@@ -61,7 +62,9 @@ export function normalizeJiraIssue(
 
   const lifecycleEvents = deriveLifecycleEvents(changelog, ctx);
   const createdAt = new Date(fields.created);
-  const latestComment = selectLatestComment(fields.comment?.comments ?? []);
+  const latestComment = selectLatestComment(
+    latestJiraComment ? [latestJiraComment] : (fields.comment?.comments ?? []),
+  );
   const { startedAt, completedAt } = deriveTimestamps(
     lifecycleEvents,
     currentStatusId,

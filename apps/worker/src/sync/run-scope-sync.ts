@@ -22,6 +22,7 @@ import {
   streamJqlIssues,
   fetchJqlIssueCount,
   fetchIssueChangelog,
+  fetchLatestIssueComment,
 } from '@agile-tools/jira-client';
 import type { JiraClient, JiraChangelogFetchStrategy, RawJiraIssue } from '@agile-tools/jira-client';
 import type { BoardColumn } from '@agile-tools/shared/contracts/api';
@@ -638,9 +639,12 @@ async function processBatch(
   const changelogs = await Promise.all(
     issues.map((issue) => fetchIssueChangelog(jiraClient, issue.id)),
   );
+  const latestComments = await Promise.all(
+    issues.map((issue) => fetchLatestIssueComment(jiraClient, issue.id, issue.fields.comment)),
+  );
 
   const normalizedItems = issues.map((issue, index) => {
-    const normalized = normalizeJiraIssue(issue, changelogs[index]!, ctx);
+    const normalized = normalizeJiraIssue(issue, changelogs[index]!, ctx, latestComments[index]);
     projectIdsSet.add(normalized.projectId);
     return normalized;
   });
