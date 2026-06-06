@@ -75,7 +75,7 @@ beforeAll(async () => {
     data: {
       workspaceId: workspace.id,
       baseUrl: 'https://jira.perf.test',
-      authType: 'pat',
+      authType: 'data_center_pat',
       encryptedSecretRef: 'dummy-encrypted',
     },
   });

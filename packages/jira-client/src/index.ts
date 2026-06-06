@@ -10,6 +10,7 @@ export type {
   JiraClientOptions,
   JiraServerInfo,
   FetchOptions,
+  JiraAuthStrategy,
 } from './client.js';
 
 export { listBoards, getBoardDetail, getBoardDetailWithFilterId, getBoardFilterId } from './discovery.js';
@@ -32,3 +33,13 @@ export type {
   FetchBoardIssuesResult,
   StreamJqlIssuesOptions,
 } from './issues.js';
+
+export {
+  exchangeAtlassianOAuthCode,
+  fetchAtlassianAccessibleResources,
+  refreshAtlassianOAuthToken,
+} from './oauth.js';
+export type {
+  AtlassianAccessibleResource,
+  AtlassianOAuthTokenResponse,
+} from './oauth.js';

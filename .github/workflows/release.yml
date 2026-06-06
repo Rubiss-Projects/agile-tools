@@ -174,3 +174,58 @@ jobs:
           fi
 
           gh "${args[@]}"
+
+      - name: Set up pnpm for Vercel production deploy
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js for Vercel production deploy
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install Vercel CLI
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        run: npm install --global vercel@50.25.4
+
+      - name: Install Node dependencies
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Pull Vercel production environment
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Run production database migrations
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .vercel/.env.production.local
+          set +a
+          pnpm --filter @agile-tools/db exec prisma migrate deploy
+
+      - name: Build Vercel production artifact
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy Vercel production artifact
+        if: ${{ steps.vars.outputs.prerelease != 'true' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

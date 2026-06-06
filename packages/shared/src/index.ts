@@ -1,5 +1,21 @@
-export { getConfig, resetConfig, resolveDatabaseUrlFromEnv } from './config.js';
-export type { Config } from './config.js';
+export {
+  AuthProviderSchema,
+  getConfig,
+  getHostedLaunchTier,
+  HostedLaunchTierSchema,
+  isHostedMode,
+  JiraConnectionPolicySchema,
+  resetConfig,
+  resolveDatabaseUrlFromEnv,
+  SyncBackendSchema,
+} from './config.js';
+export type {
+  AuthProvider,
+  Config,
+  HostedLaunchTier,
+  JiraConnectionPolicy,
+  SyncBackend,
+} from './config.js';
 
 export { encryptSecret, decryptSecret, redactCredentials, maskSecret } from './secrets.js';
 

@@ -133,7 +133,7 @@ beforeAll(async () => {
 
   const encryptedSecretRef = encryptSecret(TEST_PAT, TEST_ENCRYPTION_KEY);
   const conn = await db.jiraConnection.create({
-    data: { workspaceId, baseUrl: JIRA_BASE, authType: 'pat', encryptedSecretRef },
+    data: { workspaceId, baseUrl: JIRA_BASE, authType: 'data_center_pat', encryptedSecretRef },
   });
   connectionId = conn.id;
 

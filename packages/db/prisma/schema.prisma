@@ -23,6 +23,11 @@ enum JiraChangelogStrategy {
   issue_expand
 }
 
+enum JiraAuthType {
+  data_center_pat
+  cloud_oauth_3lo
+}
+
 enum FlowScopeStatus {
   active
   paused
@@ -54,36 +59,60 @@ enum HoldPeriodSource {
   blocked_field
 }
 
+enum HostedSyncTaskStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+enum HostedCapacityReservationKind {
+  workspace
+  jira_connection
+  flow_scope
+  org_member
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Workspace {
   id              String   @id @default(uuid())
   name            String   @unique
+  clerkOrgId      String?  @unique
   defaultTimezone String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  connections JiraConnection[]
-  scopes      FlowScope[]
+  connections                JiraConnection[]
+  scopes                     FlowScope[]
+  hostedUsageCounters        HostedUsageCounter[]
+  hostedCapacityReservations HostedCapacityReservation[]
 }
 
 model JiraConnection {
-  id                 String                 @id @default(uuid())
-  workspaceId        String
-  baseUrl            String
-  displayName        String?
-  authType           String                 @default("pat")
-  encryptedSecretRef String
-  healthStatus       ConnectionHealthStatus @default(draft)
-  lastValidatedAt    DateTime?
-  lastHealthyAt      DateTime?
-  lastErrorCode      String?
-  jiraVersion        String?
-  jiraDeploymentType String?
-  changelogStrategy  JiraChangelogStrategy?
+  id                     String                 @id @default(uuid())
+  workspaceId            String
+  baseUrl                String
+  displayName            String?
+  authType               JiraAuthType           @default(data_center_pat)
+  encryptedSecretRef     String?
+  cloudId                String?
+  siteUrl                String?
+  atlassianAccountId     String?
+  oauthScopes            String[]               @default([])
+  accessTokenSecretRef   String?
+  refreshTokenSecretRef  String?
+  accessTokenExpiresAt   DateTime?
+  healthStatus           ConnectionHealthStatus @default(draft)
+  lastValidatedAt        DateTime?
+  lastHealthyAt          DateTime?
+  lastErrorCode          String?
+  jiraVersion            String?
+  jiraDeploymentType     String?
+  changelogStrategy      JiraChangelogStrategy?
   capabilitiesDetectedAt DateTime?
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
   workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   scopes    FlowScope[]
@@ -94,30 +123,31 @@ model JiraConnection {
 }
 
 model FlowScope {
-  id                   String          @id @default(uuid())
-  workspaceId          String
-  connectionId         String
-  boardId              String
-  boardName            String
-  timezone             String
-  includedIssueTypeIds String[]
-  includedIssueTypeNames String[]      @default([])
-  startStatusIds       String[]
-  doneStatusIds        String[]
-  syncIntervalMinutes  Int
-  status               FlowScopeStatus @default(active)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  id                     String          @id @default(uuid())
+  workspaceId            String
+  connectionId           String
+  boardId                String
+  boardName              String
+  timezone               String
+  includedIssueTypeIds   String[]
+  includedIssueTypeNames String[]        @default([])
+  startStatusIds         String[]
+  doneStatusIds          String[]
+  syncIntervalMinutes    Int
+  status                 FlowScopeStatus @default(active)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
-  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   // Composite FK enforces that connectionId belongs to the same workspace
-  connection     JiraConnection        @relation(fields: [workspaceId, connectionId], references: [workspaceId, id])
-  holdDefinitions HoldDefinition[]
-  boardSnapshots  BoardSnapshot[]
-  syncRuns        SyncRun[]
-  workItems       WorkItem[]
-  agingModels     AgingThresholdModel[]
-  forecastCache   ForecastResultCache[]
+  connection          JiraConnection        @relation(fields: [workspaceId, connectionId], references: [workspaceId, id])
+  holdDefinitions     HoldDefinition[]
+  boardSnapshots      BoardSnapshot[]
+  syncRuns            SyncRun[]
+  hostedSyncTasks     HostedSyncTask[]
+  workItems           WorkItem[]
+  agingModels         AgingThresholdModel[]
+  forecastCache       ForecastResultCache[]
   epicForecastTargets EpicForecastTarget[]
 
   @@index([workspaceId])
@@ -173,40 +203,75 @@ model SyncRun {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  scope          FlowScope       @relation(fields: [scopeId], references: [id], onDelete: Cascade)
-  boardSnapshots BoardSnapshot[]
+  scope           FlowScope           @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+  boardSnapshots  BoardSnapshot[]
   stagedWorkItems SyncWorkItemStage[]
+  hostedTasks     HostedSyncTask[]
+  checkpoint      SyncRunCheckpoint?
 
   @@index([scopeId, createdAt])
   @@index([scopeId, status])
 }
 
+model HostedSyncTask {
+  id          String               @id @default(uuid())
+  syncRunId   String
+  scopeId     String
+  phase       String
+  cursor      Json?
+  status      HostedSyncTaskStatus @default(queued)
+  attempt     Int                  @default(0)
+  dedupeKey   String               @unique
+  lockedAt    DateTime?
+  completedAt DateTime?
+  error       String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  syncRun SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  scope   FlowScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@index([syncRunId, status])
+  @@index([scopeId, status])
+}
+
+model SyncRunCheckpoint {
+  id        String   @id @default(uuid())
+  syncRunId String   @unique
+  phase     String
+  cursor    Json?
+  counts    Json
+  updatedAt DateTime @updatedAt
+
+  syncRun SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+}
+
 model SyncWorkItemStage {
-  id                String   @id @default(uuid())
-  syncRunId         String
-  scopeId           String
-  jiraIssueId       String
-  issueKey          String
-  summary           String
-  issueTypeId       String
-  issueTypeName     String?
-  projectId         String
-  currentStatusId   String
-  currentStatusName String?
-  currentColumn     String?
-  assigneeName      String?
-  jiraCreatedAt     DateTime
+  id                     String    @id @default(uuid())
+  syncRunId              String
+  scopeId                String
+  jiraIssueId            String
+  issueKey               String
+  summary                String
+  issueTypeId            String
+  issueTypeName          String?
+  projectId              String
+  currentStatusId        String
+  currentStatusName      String?
+  currentColumn          String?
+  assigneeName           String?
+  jiraCreatedAt          DateTime
   jiraUpdatedAt          DateTime?
   latestCommentAuthor    String?
   latestCommentBody      String?
   latestCommentCreatedAt DateTime?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  reopenedCount     Int      @default(0)
-  directUrl         String
-  excludedReason    String?
-  lifecycleEvents   Json
-  stagedAt          DateTime @default(now())
+  startedAt              DateTime?
+  completedAt            DateTime?
+  reopenedCount          Int       @default(0)
+  directUrl              String
+  excludedReason         String?
+  lifecycleEvents        Json
+  stagedAt               DateTime  @default(now())
 
   syncRun SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
 
@@ -216,32 +281,32 @@ model SyncWorkItemStage {
 }
 
 model WorkItem {
-  id              String    @id @default(uuid())
-  scopeId         String
-  jiraIssueId     String
-  issueKey        String
-  summary         String
-  issueTypeId     String
-  issueTypeName   String?
-  projectId       String
-  currentStatusId String
-  currentStatusName String?
-  currentColumn   String?
-  assigneeName    String?
-  createdAt       DateTime  // Jira creation timestamp — NOT auto-generated
+  id                     String    @id @default(uuid())
+  scopeId                String
+  jiraIssueId            String
+  issueKey               String
+  summary                String
+  issueTypeId            String
+  issueTypeName          String?
+  projectId              String
+  currentStatusId        String
+  currentStatusName      String?
+  currentColumn          String?
+  assigneeName           String?
+  createdAt              DateTime // Jira creation timestamp — NOT auto-generated
   jiraUpdatedAt          DateTime?
   latestCommentAuthor    String?
   latestCommentBody      String?
   latestCommentCreatedAt DateTime?
-  startedAt       DateTime?
-  completedAt     DateTime?
-  reopenedCount   Int       @default(0)
-  directUrl       String
-  excludedReason  String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  reopenedCount          Int       @default(0)
+  directUrl              String
+  excludedReason         String?
   // Provenance fields
-  syncedAt        DateTime  @default(now())
-  lastSyncRunId   String?
-  updatedAt       DateTime  @updatedAt
+  syncedAt               DateTime  @default(now())
+  lastSyncRunId          String?
+  updatedAt              DateTime  @updatedAt
 
   scope           FlowScope                @relation(fields: [scopeId], references: [id], onDelete: Cascade)
   lifecycleEvents WorkItemLifecycleEvent[]
@@ -331,24 +396,62 @@ model ForecastResultCache {
 }
 
 model EpicForecastTarget {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   scopeId             String
   jiraIssueKey        String
   summary             String
   dueDate             String
   remainingStoryCount Int
-  storyCountSource    String   @default("manual")
+  storyCountSource    String    @default("manual")
   epicLinkStoryCount  Int?
   jiraStoryCount      Int?
   manualStoryCount    Int?
-  status              String   @default("active")
+  status              String    @default("active")
   closedAt            DateTime?
-  sortOrder           Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  sortOrder           Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   scope FlowScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
 
   @@unique([scopeId, jiraIssueKey])
   @@index([scopeId, status, dueDate])
+}
+
+model HostedUsageBudget {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  limit     Int
+  warnAt    Int
+  blockAt   Int
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HostedUsageCounter {
+  id          String   @id @default(uuid())
+  workspaceId String?
+  key         String
+  period      String
+  value       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key, period])
+  @@index([key, period])
+}
+
+model HostedCapacityReservation {
+  id          String                        @id @default(uuid())
+  workspaceId String?
+  kind        HostedCapacityReservationKind
+  resourceId  String
+  createdAt   DateTime                      @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([kind, resourceId])
+  @@index([workspaceId, kind])
 }

@@ -181,7 +181,7 @@ async function createBenchmarkScope(
       workspaceId: workspace.id,
       baseUrl,
       displayName: 'Local Jira Sync Perf',
-      authType: 'pat',
+      authType: 'data_center_pat',
       encryptedSecretRef: encryptSecret(token, ENCRYPTION_KEY),
       healthStatus: 'healthy',
       lastValidatedAt: new Date(),

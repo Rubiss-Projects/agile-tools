@@ -221,7 +221,7 @@ describe('queryCurrentWorkItems — DB integration', () => {
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy',
       },
     });
@@ -406,7 +406,7 @@ describe('queryScopeFilterOptions — DB integration', () => {
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy2',
       },
     });

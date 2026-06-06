@@ -8,6 +8,7 @@ import {
   normalizeChangelogFetchStrategy,
   type JiraClient,
 } from '@agile-tools/jira-client';
+import { getCloudAccessTokenForConnection } from '@/server/atlassian-oauth';
 import { ResponseError } from '@/server/errors';
 
 /** The Prisma JiraConnection record shape, inferred from the repository. */
@@ -21,7 +22,10 @@ export function mapConnection(conn: DbConnection): ApiConnection {
   return {
     id: conn.id,
     baseUrl: conn.baseUrl,
+    authType: conn.authType,
     ...(conn.displayName != null && { displayName: conn.displayName }),
+    ...(conn.cloudId != null && { cloudId: conn.cloudId }),
+    ...(conn.siteUrl != null && { siteUrl: conn.siteUrl }),
     healthStatus: conn.healthStatus,
     ...(conn.lastValidatedAt != null && { lastValidatedAt: conn.lastValidatedAt.toISOString() }),
     ...(conn.lastHealthyAt != null && { lastHealthyAt: conn.lastHealthyAt.toISOString() }),
@@ -53,14 +57,32 @@ export async function requireJiraConnection(
 /**
  * Decrypt the stored PAT and return a ready JiraClient for the connection.
  */
-export function createClientForConnection(conn: {
+export async function createClientForConnection(conn: {
+  id: string;
+  workspaceId: string;
+  authType: string;
   baseUrl: string;
-  encryptedSecretRef: string;
+  encryptedSecretRef: string | null;
+  accessTokenSecretRef: string | null;
+  refreshTokenSecretRef: string | null;
+  accessTokenExpiresAt: Date | null;
   jiraVersion?: string | null;
   jiraDeploymentType?: string | null;
   changelogStrategy?: string | null;
-}): JiraClient {
+}): Promise<JiraClient> {
   const { ENCRYPTION_KEY } = getConfig();
+
+  if (conn.authType === 'cloud_oauth_3lo') {
+    const accessToken = await getCloudAccessTokenForConnection(conn);
+    return createJiraClient(conn.baseUrl, accessToken, {
+      changelogFetchStrategy: 'subresource',
+    });
+  }
+
+  if (!conn.encryptedSecretRef) {
+    throw new Error('Data Center Jira connection is missing its encrypted PAT ref.');
+  }
+
   const pat = decryptSecret(conn.encryptedSecretRef, ENCRYPTION_KEY);
   const changelogFetchStrategy =
     normalizeChangelogFetchStrategy(conn.changelogStrategy) ??

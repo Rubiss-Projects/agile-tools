@@ -104,7 +104,7 @@ async function handleGET(
     }
 
     const connection = await requireJiraConnection(ctx.workspaceId, scope.connectionId);
-    const client = createClientForConnection(connection);
+    const client = await createClientForConnection(connection);
     const epic = await client.get<JiraEpicIssue>(`/rest/api/2/issue/${encodeURIComponent(issueKey)}`, {
       params: { fields: 'summary,duedate,status' },
     });

@@ -36,7 +36,7 @@ async function handlePOST(
       healthStatus: 'validating',
     });
 
-    const client = createClientForConnection(conn);
+    const client = await createClientForConnection(conn);
     const validatedAt = new Date();
 
     try {

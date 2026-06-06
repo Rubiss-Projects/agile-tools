@@ -14,10 +14,10 @@ describe('proxy', () => {
     process.env = ORIGINAL_ENV;
   });
 
-  it('redirects forwarded http traffic to https in production', () => {
+  it('redirects forwarded http traffic to https in production', async () => {
     process.env = { ...process.env, NODE_ENV: 'production' };
 
-    const response = proxy(
+    const response = await proxy(
       new NextRequest('http://internal.example.com/admin/jira', {
         headers: {
           'x-forwarded-proto': 'http',
@@ -30,10 +30,10 @@ describe('proxy', () => {
     expect(response.headers.get('location')).toBe('https://agile.example.com/admin/jira');
   });
 
-  it('redirects loopback traffic in production when bypass is disabled', () => {
+  it('redirects loopback traffic in production when bypass is disabled', async () => {
     process.env = { ...process.env, NODE_ENV: 'production' };
 
-    const response = proxy(new NextRequest('http://127.0.0.1:3000/admin/jira'));
+    const response = await proxy(new NextRequest('http://127.0.0.1:3000/admin/jira'));
     const location = response.headers.get('location');
 
     expect(response.status).toBe(308);
@@ -45,32 +45,32 @@ describe('proxy', () => {
     expect(redirectUrl.port).toBe('3000');
   });
 
-  it('passes loopback traffic through in production when bypass is enabled', () => {
+  it('passes loopback traffic through in production when bypass is enabled', async () => {
     process.env = {
       ...process.env,
       NODE_ENV: 'production',
       ALLOW_LOOPBACK_HTTP_BYPASS: 'true',
     };
 
-    const response = proxy(new NextRequest('http://127.0.0.1:3000/admin/jira'));
+    const response = await proxy(new NextRequest('http://127.0.0.1:3000/admin/jira'));
 
     expect(response.status).toBe(200);
     expect(response.headers.get('location')).toBeNull();
   });
 
-  it('passes requests through outside production', () => {
+  it('passes requests through outside production', async () => {
     process.env = { ...process.env, NODE_ENV: 'development' };
 
-    const response = proxy(new NextRequest('http://localhost:3000/admin/jira'));
+    const response = await proxy(new NextRequest('http://localhost:3000/admin/jira'));
 
     expect(response.status).toBe(200);
     expect(response.headers.get('location')).toBeNull();
   });
 
-  it('passes /metrics through in production', () => {
+  it('passes /metrics through in production', async () => {
     process.env = { ...process.env, NODE_ENV: 'production' };
 
-    const response = proxy(
+    const response = await proxy(
       new NextRequest('http://internal.example.com/metrics', {
         headers: {
           'x-forwarded-proto': 'http',
@@ -78,7 +78,7 @@ describe('proxy', () => {
         },
       }),
     );
-    const trailingSlashResponse = proxy(
+    const trailingSlashResponse = await proxy(
       new NextRequest('http://internal.example.com/metrics/', {
         headers: {
           'x-forwarded-proto': 'http',

@@ -85,6 +85,7 @@ describe('JiraConnectionForm', () => {
       jsonResponse({
         id: '11111111-1111-4111-8111-111111111111',
         baseUrl: 'https://jira.example.internal',
+        authType: 'data_center_pat',
         displayName: 'Renamed Jira',
         healthStatus: 'healthy',
       }),
@@ -96,6 +97,7 @@ describe('JiraConnectionForm', () => {
         initialConnection={{
           id: '11111111-1111-4111-8111-111111111111',
           baseUrl: 'https://jira.example.internal',
+          authType: 'data_center_pat',
           displayName: 'Team Jira',
           healthStatus: 'healthy',
         }}

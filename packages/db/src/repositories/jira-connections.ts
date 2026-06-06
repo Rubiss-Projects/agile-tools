@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient, type JiraConnection } from '@prisma/client';
-import type { ConnectionHealthStatus, JiraChangelogStrategy } from '@prisma/client';
+import type { ConnectionHealthStatus, JiraAuthType, JiraChangelogStrategy } from '@prisma/client';
 
 type JiraConnectionClient = PrismaClient | Prisma.TransactionClient;
 
@@ -7,6 +7,17 @@ export interface CreateJiraConnectionInput {
   baseUrl: string;
   encryptedSecretRef: string;
   displayName?: string;
+}
+
+export interface CreateJiraCloudOAuthConnectionInput {
+  cloudId: string;
+  siteUrl: string;
+  displayName?: string;
+  atlassianAccountId?: string;
+  oauthScopes: string[];
+  accessTokenSecretRef: string;
+  refreshTokenSecretRef: string;
+  accessTokenExpiresAt: Date;
 }
 
 export interface UpdateJiraConnectionInput {
@@ -42,7 +53,70 @@ export async function createJiraConnection(
       baseUrl: input.baseUrl,
       displayName: input.displayName ?? null,
       encryptedSecretRef: input.encryptedSecretRef,
-      authType: 'pat',
+      authType: 'data_center_pat',
+    },
+  });
+}
+
+export async function upsertJiraCloudOAuthConnection(
+  client: JiraConnectionClient,
+  workspaceId: string,
+  input: CreateJiraCloudOAuthConnectionInput,
+): Promise<JiraConnection> {
+  const existing = await client.jiraConnection.findFirst({
+    where: {
+      workspaceId,
+      authType: 'cloud_oauth_3lo',
+      cloudId: input.cloudId,
+    },
+  });
+
+  const data: Prisma.JiraConnectionUpdateInput = {
+    baseUrl: `https://api.atlassian.com/ex/jira/${input.cloudId}`,
+    displayName: input.displayName ?? input.siteUrl,
+    siteUrl: input.siteUrl,
+    atlassianAccountId: input.atlassianAccountId ?? null,
+    oauthScopes: input.oauthScopes,
+    accessTokenSecretRef: input.accessTokenSecretRef,
+    refreshTokenSecretRef: input.refreshTokenSecretRef,
+    accessTokenExpiresAt: input.accessTokenExpiresAt,
+    healthStatus: 'healthy',
+    lastValidatedAt: new Date(),
+    lastHealthyAt: new Date(),
+    lastErrorCode: null,
+    jiraDeploymentType: 'Cloud',
+    changelogStrategy: 'subresource',
+    capabilitiesDetectedAt: new Date(),
+  };
+
+  if (existing) {
+    return client.jiraConnection.update({
+      where: { workspaceId_id: { workspaceId, id: existing.id } },
+      data,
+    });
+  }
+
+  return client.jiraConnection.create({
+    data: {
+      workspaceId,
+      baseUrl: `https://api.atlassian.com/ex/jira/${input.cloudId}`,
+      displayName: input.displayName ?? input.siteUrl,
+      authType: 'cloud_oauth_3lo',
+      encryptedSecretRef: null,
+      cloudId: input.cloudId,
+      siteUrl: input.siteUrl,
+      atlassianAccountId: input.atlassianAccountId ?? null,
+      oauthScopes: input.oauthScopes,
+      accessTokenSecretRef: input.accessTokenSecretRef,
+      refreshTokenSecretRef: input.refreshTokenSecretRef,
+      accessTokenExpiresAt: input.accessTokenExpiresAt,
+      healthStatus: 'healthy',
+      lastValidatedAt: new Date(),
+      lastHealthyAt: new Date(),
+      lastErrorCode: null,
+      jiraDeploymentType: 'Cloud',
+      changelogStrategy: 'subresource',
+      capabilitiesDetectedAt: new Date(),
     },
   });
 }
@@ -60,9 +134,13 @@ export async function getJiraConnection(
 export async function listJiraConnections(
   client: JiraConnectionClient,
   workspaceId: string,
+  options?: { authType?: JiraAuthType },
 ): Promise<JiraConnection[]> {
   return client.jiraConnection.findMany({
-    where: { workspaceId },
+    where: {
+      workspaceId,
+      ...(options?.authType !== undefined ? { authType: options.authType } : {}),
+    },
     orderBy: { createdAt: 'asc' },
   });
 }

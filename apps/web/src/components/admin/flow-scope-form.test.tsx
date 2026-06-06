@@ -83,6 +83,7 @@ describe('FlowScopeForm', () => {
           {
             id: '22222222-2222-4222-8222-222222222222',
             baseUrl: 'https://jira.example.internal',
+            authType: 'data_center_pat',
             displayName: 'Team Jira',
             healthStatus: 'healthy',
           },
@@ -171,6 +172,7 @@ describe('FlowScopeForm', () => {
           {
             id: '22222222-2222-4222-8222-222222222222',
             baseUrl: 'https://jira.example.internal',
+            authType: 'data_center_pat',
             displayName: 'Team Jira',
             healthStatus: 'healthy',
           },
@@ -238,6 +240,7 @@ describe('FlowScopeForm', () => {
           {
             id: '22222222-2222-4222-8222-222222222222',
             baseUrl: 'https://jira.example.internal',
+            authType: 'data_center_pat',
             displayName: 'Team Jira',
             healthStatus: 'healthy',
           },
@@ -312,6 +315,7 @@ describe('FlowScopeForm', () => {
           {
             id: '22222222-2222-4222-8222-222222222222',
             baseUrl: 'https://jira.example.internal',
+            authType: 'data_center_pat',
             displayName: 'Team Jira',
             healthStatus: 'healthy',
           },
@@ -372,6 +376,7 @@ describe('FlowScopeForm', () => {
           {
             id: '22222222-2222-4222-8222-222222222222',
             baseUrl: 'https://jira.example.internal',
+            authType: 'data_center_pat',
             displayName: 'Team Jira',
             healthStatus: 'healthy',
           },
@@ -437,6 +442,7 @@ describe('FlowScopeForm', () => {
           {
             id: '22222222-2222-4222-8222-222222222222',
             baseUrl: 'https://jira.example.internal',
+            authType: 'data_center_pat',
             displayName: 'Team Jira',
             healthStatus: 'healthy',
           },

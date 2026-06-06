@@ -28,6 +28,10 @@ import {
 interface Props {
   connections: JiraConnection[];
   initialScope?: FlowScope;
+  syncIntervalMin?: number;
+  syncIntervalMax?: number;
+  syncIntervalDefault?: number;
+  syncIntervalHelpText?: string;
 }
 
 interface SubmitResult {
@@ -55,7 +59,14 @@ function filterSelectedIds(candidates: string[], allowedIds: Set<string>): strin
   return candidates.filter((candidate) => allowedIds.has(candidate));
 }
 
-export function FlowScopeForm({ connections, initialScope }: Props) {
+export function FlowScopeForm({
+  connections,
+  initialScope,
+  syncIntervalMin = 5,
+  syncIntervalMax = 15,
+  syncIntervalDefault = 5,
+  syncIntervalHelpText = 'Use a 5 to 15 minute cadence to stay within the default guard rails.',
+}: Props) {
   const router = useRouter();
   const isEditMode = initialScope !== undefined;
   const initializedEditRef = useRef(false);
@@ -76,7 +87,7 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
   const [includedIssueTypeIds, setIncludedIssueTypeIds] = useState<string[]>(initialScope?.includedIssueTypeIds ?? []);
   const [startStatusIds, setStartStatusIds] = useState<string[]>(initialScope?.startStatusIds ?? []);
   const [doneStatusIds, setDoneStatusIds] = useState<string[]>(initialScope?.doneStatusIds ?? []);
-  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(initialScope?.syncIntervalMinutes ?? 5);
+  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(initialScope?.syncIntervalMinutes ?? syncIntervalDefault);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -542,14 +553,14 @@ export function FlowScopeForm({ connections, initialScope }: Props) {
               <input
                 type="number"
                 value={syncIntervalMinutes}
-                min={5}
-                max={15}
+                min={syncIntervalMin}
+                max={syncIntervalMax}
                 onChange={(e) => setSyncIntervalMinutes(Number(e.target.value))}
                 required
                 style={{ ...inputStyle, maxWidth: '8rem' }}
               />
             </label>
-            <p style={helperTextStyle}>Use a 5 to 15 minute cadence to stay within the default guard rails.</p>
+            <p style={helperTextStyle}>{syncIntervalHelpText}</p>
           </div>
 
           {submitError && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{submitError}</p></div>}

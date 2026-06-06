@@ -14,6 +14,12 @@ async function handlePUT(
 ): Promise<Response> {
   try {
     const ctx = await requireAdminContext();
+    if (getConfig().JIRA_CONNECTION_POLICY === 'cloud_oauth_only') {
+      return Response.json(
+        { code: 'NOT_FOUND', message: 'PAT connections are not available in hosted mode.' },
+        { status: 404 },
+      );
+    }
     assertTrustedMutationRequest(req);
     enforceRateLimit(req, {
       bucket: 'admin-jira-connections:update',

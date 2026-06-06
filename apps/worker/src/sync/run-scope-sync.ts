@@ -8,6 +8,7 @@ import {
 import {
   getConfig,
   decryptSecret,
+  encryptSecret,
   logger,
   metricsClock,
   recordSyncRun,
@@ -23,6 +24,7 @@ import {
   fetchJqlIssueCount,
   fetchIssueChangelog,
   fetchLatestIssueComment,
+  refreshAtlassianOAuthToken,
 } from '@agile-tools/jira-client';
 import type { JiraClient, JiraChangelogFetchStrategy, RawJiraIssue } from '@agile-tools/jira-client';
 import type { BoardColumn } from '@agile-tools/shared/contracts/api';
@@ -254,10 +256,9 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       );
     }
 
-    const { ENCRYPTION_KEY } = getConfig();
-    const pat = decryptSecret(connection.encryptedSecretRef, ENCRYPTION_KEY);
+    const token = await resolveJiraAccessToken(db, connection);
     const initialChangelogStrategy = getInitialChangelogFetchStrategy(connection);
-    const jiraClient = createJiraClient(connection.baseUrl, pat, {
+    const jiraClient = createJiraClient(connection.baseUrl, token, {
       ...(initialChangelogStrategy !== undefined
         ? { changelogFetchStrategy: initialChangelogStrategy }
         : {}),
@@ -517,6 +518,81 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     recordSyncMetric('failed', errorCode);
     throw err;
   }
+}
+
+async function resolveJiraAccessToken(
+  db: PrismaClient,
+  connection: {
+    id: string;
+    workspaceId: string;
+    authType: string;
+    encryptedSecretRef: string | null;
+    accessTokenSecretRef: string | null;
+    refreshTokenSecretRef: string | null;
+    accessTokenExpiresAt: Date | null;
+  },
+): Promise<string> {
+  const config = getConfig();
+  if (connection.authType !== 'cloud_oauth_3lo') {
+    if (!connection.encryptedSecretRef) {
+      throw new SyncError('JIRA_SECRET_MISSING', 'Data Center Jira connection is missing its encrypted PAT ref');
+    }
+    return decryptSecret(connection.encryptedSecretRef, config.ENCRYPTION_KEY);
+  }
+
+  if (!connection.accessTokenSecretRef || !connection.refreshTokenSecretRef) {
+    throw new SyncError('JIRA_OAUTH_TOKEN_MISSING', 'Jira Cloud OAuth connection is missing encrypted token refs');
+  }
+
+  if (
+    connection.accessTokenExpiresAt &&
+    connection.accessTokenExpiresAt.getTime() - Date.now() > 2 * 60 * 1000
+  ) {
+    return decryptSecret(connection.accessTokenSecretRef, config.ENCRYPTION_KEY);
+  }
+
+  try {
+    const refreshed = await refreshAtlassianOAuthToken({
+      clientId: requireHostedConfig('ATLASSIAN_CLIENT_ID'),
+      clientSecret: requireHostedConfig('ATLASSIAN_CLIENT_SECRET'),
+      refreshToken: decryptSecret(connection.refreshTokenSecretRef, config.ENCRYPTION_KEY),
+    });
+
+    await db.jiraConnection.update({
+      where: { workspaceId_id: { workspaceId: connection.workspaceId, id: connection.id } },
+      data: {
+        accessTokenSecretRef: encryptSecret(refreshed.accessToken, config.ENCRYPTION_KEY),
+        refreshTokenSecretRef: encryptSecret(refreshed.refreshToken, config.ENCRYPTION_KEY),
+        accessTokenExpiresAt: refreshed.expiresAt,
+        oauthScopes: refreshed.scopes,
+        healthStatus: 'healthy',
+        lastHealthyAt: new Date(),
+        lastErrorCode: null,
+      },
+    });
+
+    return refreshed.accessToken;
+  } catch (err) {
+    await db.jiraConnection.update({
+      where: { workspaceId_id: { workspaceId: connection.workspaceId, id: connection.id } },
+      data: {
+        healthStatus: 'unhealthy',
+        lastErrorCode: 'ATLASSIAN_TOKEN_REFRESH_FAILED',
+      },
+    }).catch(() => undefined);
+    throw new SyncError(
+      'ATLASSIAN_TOKEN_REFRESH_FAILED',
+      err instanceof Error ? err.message : 'Failed to refresh Atlassian OAuth token',
+    );
+  }
+}
+
+function requireHostedConfig(key: 'ATLASSIAN_CLIENT_ID' | 'ATLASSIAN_CLIENT_SECRET'): string {
+  const value = getConfig()[key];
+  if (!value) {
+    throw new SyncError('HOSTED_CONFIG_MISSING', `${key} is required for Jira Cloud OAuth sync`);
+  }
+  return value;
 }
 
 function getInitialChangelogFetchStrategy(

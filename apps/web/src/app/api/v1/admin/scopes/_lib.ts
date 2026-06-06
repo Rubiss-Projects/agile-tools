@@ -12,11 +12,15 @@ import {
   resolveActiveSyncRun,
   updateSyncRun,
 } from '@agile-tools/db';
-import { logger } from '@agile-tools/shared';
+import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
 import { z } from 'zod';
 import { NamedValueSchema } from '@agile-tools/shared/contracts/api';
 import { ResponseError } from '@/server/errors';
 import { enqueueScopeSyncJob } from '@/server/queue';
+import {
+  assertHostedManualSyncCapacity,
+  assertHostedWriteAllowed,
+} from '@/server/hosted-policy';
 import { buildJiraBoardUrl } from '@/lib/jira-links';
 
 type DbFlowScope = NonNullable<Awaited<ReturnType<typeof getFlowScope>>>;
@@ -158,9 +162,35 @@ export async function queueManualScopeSync(
 ): Promise<
   | { status: 'active'; syncRun: DbSyncRun }
   | { status: 'queued'; syncRun: DbSyncRun }
+  | { status: 'cooldown'; message: string }
   | { status: 'failed'; message: string }
 > {
   const prisma = getPrismaClient();
+  if (isHostedMode()) {
+    await assertHostedWriteAllowed('manual_sync');
+    await assertHostedManualSyncCapacity(workspaceId);
+
+    const cooldownMinutes = getConfig().HOSTED_BETA_MANUAL_SYNC_COOLDOWN_MINUTES;
+    if (cooldownMinutes > 0) {
+      const cooldownCutoff = new Date(Date.now() - cooldownMinutes * 60 * 1000);
+      const recentManualRun = await prisma.syncRun.findFirst({
+        where: {
+          scopeId,
+          scope: { workspaceId },
+          trigger: 'manual',
+          createdAt: { gte: cooldownCutoff },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (recentManualRun) {
+        return {
+          status: 'cooldown',
+          message: `Manual sync is cooling down. Hosted beta allows one manual sync every ${cooldownMinutes} minutes.`,
+        };
+      }
+    }
+  }
+
   const queuedCandidate = await prisma.$transaction(async (tx) => {
     await acquireScopeSyncLock(tx, scopeId);
     const activeRun = await resolveActiveSyncRun(tx, workspaceId, scopeId);

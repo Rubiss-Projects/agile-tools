@@ -273,7 +273,7 @@ describe('queryDailyThroughput — DB integration', () => {
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy',
       },
     });
@@ -528,7 +528,7 @@ describe('queryCompletedStories — DB integration', () => {
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy',
       },
     });
@@ -689,7 +689,7 @@ describe('forecast cache round-trip — DB integration', () => {
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy',
       },
     });
