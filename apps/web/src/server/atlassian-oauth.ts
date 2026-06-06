@@ -18,6 +18,14 @@ import { decryptSecret, encryptSecret, getConfig } from '@agile-tools/shared';
 const STATE_VERSION = 'v1';
 const STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000;
+const ATLASSIAN_OAUTH_CONFIG_KEYS = [
+  'ATLASSIAN_CLIENT_ID',
+  'ATLASSIAN_CLIENT_SECRET',
+  'ATLASSIAN_REDIRECT_URI',
+  'ATLASSIAN_SCOPES',
+] as const;
+
+type AtlassianOAuthConfigKey = (typeof ATLASSIAN_OAUTH_CONFIG_KEYS)[number];
 
 interface OAuthStatePayload {
   userId: string;
@@ -28,6 +36,11 @@ interface OAuthStatePayload {
 }
 
 export type ValidatedOAuthState = OAuthStatePayload;
+
+export function getMissingAtlassianOAuthConfig(): AtlassianOAuthConfigKey[] {
+  const config = getConfig();
+  return ATLASSIAN_OAUTH_CONFIG_KEYS.filter((key) => !config[key]);
+}
 
 export function buildAtlassianAuthorizationUrl(input: {
   userId: string;
@@ -186,7 +199,7 @@ function isOAuthStatePayload(value: unknown): value is OAuthStatePayload {
   );
 }
 
-function requireHostedConfigValue(key: 'ATLASSIAN_CLIENT_ID' | 'ATLASSIAN_CLIENT_SECRET' | 'ATLASSIAN_REDIRECT_URI' | 'ATLASSIAN_SCOPES'): string {
+function requireHostedConfigValue(key: AtlassianOAuthConfigKey): string {
   const value = getConfig()[key];
   if (!value) {
     throw new Error(`${key} is required for Jira Cloud OAuth.`);

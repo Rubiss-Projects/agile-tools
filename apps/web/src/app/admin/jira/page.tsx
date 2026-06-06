@@ -8,6 +8,7 @@ import { JiraConnectionForm, ValidateConnectionButton } from '@/components/admin
 import { FlowScopeForm } from '@/components/admin/flow-scope-form';
 import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import { Breadcrumbs } from '@/components/app/breadcrumbs';
+import { getMissingAtlassianOAuthConfig } from '@/server/atlassian-oauth';
 import { getHostedBudgetWarnings } from '@/server/hosted-policy';
 import {
   codeStyle,
@@ -85,6 +86,11 @@ export default async function AdminJiraPage() {
     listFlowScopes(db, ctx.workspaceId),
   ]);
   const hostedWarnings = hostedCloudOnly ? await getHostedBudgetWarnings() : [];
+  const missingAtlassianOAuthConfig = hostedCloudOnly ? getMissingAtlassianOAuthConfig() : [];
+  const jiraCloudDisabledReason =
+    missingAtlassianOAuthConfig.length > 0
+      ? 'Atlassian OAuth is not configured for this deployment yet.'
+      : undefined;
   const scopeIntervalProps = hostedCloudOnly
     ? {
         syncIntervalMin: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
@@ -213,7 +219,11 @@ export default async function AdminJiraPage() {
           </ul>
         )}
 
-        {hostedCloudOnly ? <JiraCloudConnectButton /> : <JiraConnectionForm />}
+        {hostedCloudOnly ? (
+          <JiraCloudConnectButton disabledReason={jiraCloudDisabledReason} />
+        ) : (
+          <JiraConnectionForm />
+        )}
         </section>
 
         <section style={sectionCardStyle}>

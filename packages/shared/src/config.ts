@@ -127,10 +127,6 @@ const configSchema = z.object({
     for (const key of [
       'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
       'CLERK_SECRET_KEY',
-      'ATLASSIAN_CLIENT_ID',
-      'ATLASSIAN_CLIENT_SECRET',
-      'ATLASSIAN_REDIRECT_URI',
-      'ATLASSIAN_SCOPES',
       'CRON_SECRET',
     ] as const) {
       if (!value[key]) {

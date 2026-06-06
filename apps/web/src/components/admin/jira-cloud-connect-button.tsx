@@ -4,11 +4,16 @@ import { useState } from 'react';
 
 import { buttonStyle, noticeStyle, tonePillStyle } from '@/components/app/chrome';
 
-export function JiraCloudConnectButton() {
+interface JiraCloudConnectButtonProps {
+  disabledReason?: string | undefined;
+}
+
+export function JiraCloudConnectButton({ disabledReason }: JiraCloudConnectButtonProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function startOAuth() {
+    if (disabledReason) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -36,12 +41,17 @@ export function JiraCloudConnectButton() {
       <button
         type="button"
         onClick={() => { void startOAuth(); }}
-        disabled={submitting}
-        style={buttonStyle('primary', submitting)}
+        disabled={submitting || Boolean(disabledReason)}
+        style={buttonStyle('primary', submitting || Boolean(disabledReason))}
       >
         {submitting ? 'Opening Atlassian...' : 'Connect Jira Cloud'}
       </button>
       <span style={tonePillStyle('info')}>OAuth 2.0</span>
+      {disabledReason && (
+        <div style={noticeStyle('warning')}>
+          <p style={{ margin: 0 }}>{disabledReason}</p>
+        </div>
+      )}
       {error && (
         <div style={noticeStyle('danger')}>
           <p style={{ margin: 0 }}>{error}</p>
