@@ -1,6 +1,9 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
 
+const appRoot = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.resolve(appRoot, '../..');
 const isProduction = process.env['NODE_ENV'] === 'production';
 const isClerkEnabled =
   process.env['AUTH_PROVIDER'] === 'clerk' ||
@@ -54,12 +57,17 @@ const config: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
 
   turbopack: {
-    // Keep module resolution anchored at the monorepo root for `next dev`.
-    root: path.resolve(process.cwd(), '../..'),
+    // Keep module resolution anchored at the monorepo root across local and Vercel builds.
+    root: monorepoRoot,
   },
 
   // Transpile workspace packages so Next.js can resolve them.
-  transpilePackages: ['@agile-tools/shared', '@agile-tools/db', '@agile-tools/worker'],
+  transpilePackages: [
+    '@agile-tools/analytics',
+    '@agile-tools/shared',
+    '@agile-tools/db',
+    '@agile-tools/worker',
+  ],
 
   // Packages with native bindings or ESM-only deps that Node.js should load
   // directly rather than having Next.js bundle them.
