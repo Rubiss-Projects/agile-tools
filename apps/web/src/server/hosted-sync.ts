@@ -39,7 +39,7 @@ export async function processHostedScopeSyncMessage(message: unknown): Promise<v
   const claimed = await db.hostedSyncTask.updateMany({
     where: {
       dedupeKey: parsed.dedupeKey,
-      status: 'queued',
+      status: { in: ['queued', 'failed'] },
     },
     data: {
       status: 'running',
@@ -53,12 +53,19 @@ export async function processHostedScopeSyncMessage(message: unknown): Promise<v
       where: { dedupeKey: parsed.dedupeKey },
       select: { status: true },
     });
-    if (existing?.status === 'completed') {
-      logger.debug('Hosted sync task already completed; acknowledging duplicate', {
+    if (existing) {
+      logger.debug('Hosted sync task already claimed; acknowledging duplicate', {
         dedupeKey: parsed.dedupeKey,
+        status: existing.status,
       });
       return;
     }
+
+    logger.warn('Hosted sync task missing; acknowledging queue message', {
+      dedupeKey: parsed.dedupeKey,
+      syncRunId: parsed.syncRunId,
+    });
+    return;
   }
 
   try {
