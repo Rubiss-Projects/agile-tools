@@ -2,14 +2,30 @@ import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const isProduction = process.env['NODE_ENV'] === 'production';
+const isClerkEnabled =
+  process.env['AUTH_PROVIDER'] === 'clerk' ||
+  Boolean(process.env['NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY']);
+
+const clerkSources = isClerkEnabled
+  ? [
+      'https://*.clerk.accounts.dev',
+      'https://*.clerk.com',
+      'https://*.clerk.dev',
+    ]
+  : [];
+
+const clerkImageSources = isClerkEnabled
+  ? ['https://img.clerk.com', 'https://images.clerk.dev']
+  : [];
 
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isProduction ? '' : " 'unsafe-eval'"}`,
+  `script-src 'self' 'unsafe-inline'${isProduction ? '' : " 'unsafe-eval'"}${clerkSources.length ? ` ${clerkSources.join(' ')}` : ''}`,
   "style-src 'self' 'unsafe-inline'",
-  `connect-src 'self'${isProduction ? '' : ' http: https: ws:'}`,
-  "img-src 'self' data: blob:",
+  `connect-src 'self'${isProduction ? '' : ' http: https: ws:'}${clerkSources.length ? ` ${clerkSources.join(' ')}` : ''}`,
+  `img-src 'self' data: blob:${clerkImageSources.length ? ` ${clerkImageSources.join(' ')}` : ''}`,
   "font-src 'self' data:",
+  `frame-src 'self'${clerkSources.length ? ` ${clerkSources.join(' ')}` : ''}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
