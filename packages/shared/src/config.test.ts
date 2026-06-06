@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { getConfig, resetConfig, resolveDatabaseUrlFromEnv } from './config.js';
+import { getConfig, isHostedMode, resetConfig, resolveDatabaseUrlFromEnv } from './config.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -152,6 +152,26 @@ describe('getConfig', () => {
     const config = getConfig();
 
     expect(config.DATABASE_URL).toBe('postgresql://localhost:5432/agile_tools');
+  });
+
+  it('allows hosted mode to boot before Atlassian OAuth credentials are configured', () => {
+    process.env['DATABASE_URL'] = 'postgresql://localhost:5432/agile_tools';
+    process.env['ENCRYPTION_KEY'] = '12345678901234567890123456789012';
+    process.env['AUTH_PROVIDER'] = 'clerk';
+    process.env['SYNC_BACKEND'] = 'vercel_queues';
+    process.env['JIRA_CONNECTION_POLICY'] = 'cloud_oauth_only';
+    process.env['NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'] = 'pk_test_example';
+    process.env['CLERK_SECRET_KEY'] = 'sk_test_example';
+    process.env['CRON_SECRET'] = 'cron-secret-for-tests';
+    delete process.env['ATLASSIAN_CLIENT_ID'];
+    delete process.env['ATLASSIAN_CLIENT_SECRET'];
+    delete process.env['ATLASSIAN_REDIRECT_URI'];
+    delete process.env['ATLASSIAN_SCOPES'];
+
+    const config = getConfig();
+
+    expect(isHostedMode(config)).toBe(true);
+    expect(config.ATLASSIAN_CLIENT_ID).toBeUndefined();
   });
 });
 

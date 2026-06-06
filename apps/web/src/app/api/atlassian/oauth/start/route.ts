@@ -1,7 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
 
-import { buildAtlassianAuthorizationUrl } from '@/server/atlassian-oauth';
+import {
+  buildAtlassianAuthorizationUrl,
+  getMissingAtlassianOAuthConfig,
+} from '@/server/atlassian-oauth';
 import { getHostedClerkIdentity, requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import {
@@ -24,6 +27,17 @@ export async function POST(request: NextRequest): Promise<Response> {
       return Response.json(
         { code: 'NOT_FOUND', message: 'Jira Cloud OAuth is only available in hosted mode.' },
         { status: 404 },
+      );
+    }
+
+    const missingOAuthConfig = getMissingAtlassianOAuthConfig();
+    if (missingOAuthConfig.length > 0) {
+      return Response.json(
+        {
+          code: 'ATLASSIAN_OAUTH_NOT_CONFIGURED',
+          message: 'Atlassian OAuth is not configured for this deployment.',
+        },
+        { status: 503 },
       );
     }
 
