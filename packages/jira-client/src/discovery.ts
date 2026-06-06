@@ -187,7 +187,7 @@ async function buildBoardDetail(
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * List all Kanban boards visible to the service account.
+ * List all Jira Software boards visible to the connected user.
  * Paginates through the full result set.
  */
 export async function listBoards(client: JiraClient): Promise<BoardSummary[]> {
@@ -197,7 +197,7 @@ export async function listBoards(client: JiraClient): Promise<BoardSummary[]> {
 
   for (;;) {
     const page = await client.get<JiraBoardListResponse>('/rest/agile/1.0/board', {
-      params: { type: 'kanban', startAt, maxResults },
+      params: { startAt, maxResults },
     });
 
     for (const board of page.values) {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createJiraClient } from './client.js';
-import { getBoardDetail, getBoardDetailWithFilterId, getBoardFilterId } from './discovery.js';
+import { getBoardDetail, getBoardDetailWithFilterId, getBoardFilterId, listBoards } from './discovery.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -17,6 +17,45 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe('listBoards', () => {
+  it('lists all visible board types instead of only Kanban boards', async () => {
+    const fetchMock = vi.fn((input: string | URL) => {
+      const url = new URL(String(input));
+
+      expect(url.pathname).toBe('/rest/agile/1.0/board');
+      expect(url.searchParams.get('type')).toBeNull();
+
+      return Promise.resolve(
+        jsonResponse({
+          maxResults: 50,
+          startAt: 0,
+          total: 2,
+          isLast: true,
+          values: [
+            {
+              id: 1,
+              name: 'Team-managed board',
+              type: 'simple',
+              location: { projectKey: 'TM' },
+            },
+            {
+              id: 2,
+              name: 'Flow board',
+              type: 'kanban',
+            },
+          ],
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(listBoards(createJiraClient('https://jira.example.internal', 'pat-123'))).resolves.toEqual([
+      { boardId: 1, boardName: 'Team-managed board', projectKeys: ['TM'] },
+      { boardId: 2, boardName: 'Flow board' },
+    ]);
+  });
 });
 
 describe('getBoardDetail', () => {
