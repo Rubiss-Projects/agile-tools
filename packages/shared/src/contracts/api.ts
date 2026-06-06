@@ -36,6 +36,9 @@ export const ConnectionHealthStatusSchema = z.enum([
 ]);
 export type ConnectionHealthStatus = z.infer<typeof ConnectionHealthStatusSchema>;
 
+export const JiraAuthTypeSchema = z.enum(['data_center_pat', 'cloud_oauth_3lo']);
+export type JiraAuthType = z.infer<typeof JiraAuthTypeSchema>;
+
 const HttpUrlSchema = z.string().url().refine((value) => {
   try {
     const protocol = new URL(value).protocol;
@@ -48,7 +51,10 @@ const HttpUrlSchema = z.string().url().refine((value) => {
 export const JiraConnectionSchema = z.object({
   id: z.string().uuid(),
   baseUrl: HttpUrlSchema,
+  authType: JiraAuthTypeSchema,
   displayName: z.string().optional(),
+  cloudId: z.string().optional(),
+  siteUrl: HttpUrlSchema.optional(),
   healthStatus: ConnectionHealthStatusSchema,
   lastValidatedAt: z.string().datetime().optional(),
   lastHealthyAt: z.string().datetime().optional(),
@@ -132,7 +138,7 @@ export const CreateFlowScopeRequestSchema = z.object({
   includedIssueTypeIds: z.array(z.string()).min(1),
   startStatusIds: z.array(z.string()).min(1),
   doneStatusIds: z.array(z.string()).min(1),
-  syncIntervalMinutes: z.number().int().min(5).max(15),
+  syncIntervalMinutes: z.number().int().min(5).max(1440),
 });
 export type CreateFlowScopeRequest = z.infer<typeof CreateFlowScopeRequestSchema>;
 

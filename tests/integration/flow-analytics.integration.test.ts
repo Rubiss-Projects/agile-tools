@@ -139,7 +139,7 @@ describe('rebuildHoldPeriods — DB integration', () => {
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy',
       },
     });
@@ -268,7 +268,7 @@ describe('queryCurrentWorkItems — aging zone classification — DB integration
       data: {
         workspaceId: workspace.id,
         baseUrl: 'https://jira.example.internal',
-        authType: 'pat',
+        authType: 'data_center_pat',
         encryptedSecretRef: 'dummy',
       },
     });

@@ -15,14 +15,24 @@ vi.mock('pg-boss', () => ({
 }));
 
 vi.mock('@agile-tools/shared', () => ({
-  getConfig: () => ({ DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/agile_tools' }),
+  getConfig: () => ({
+    DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/agile_tools',
+    SYNC_BACKEND: 'pgboss',
+  }),
   logger: {
     error: vi.fn(),
   },
   QUEUE_NAMES: {
     SCOPE_SYNC: 'scope-sync',
     PROJECTION_REBUILD: 'scope-rebuild-projections',
+    HOSTED_SYNC: 'hosted-sync',
+    HOSTED_SYNC_TICK: 'hosted-sync-tick',
   },
+}));
+
+vi.mock('@agile-tools/db', () => ({
+  getPrismaClient: vi.fn(),
+  incrementHostedUsageCounter: vi.fn(),
 }));
 
 describe('enqueueScopeSyncJob', () => {

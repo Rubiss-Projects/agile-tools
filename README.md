@@ -2,6 +2,8 @@
 
 A self-hosted web application for kanban teams. Connects to a self-hosted Jira Data Center instance via a service-account PAT, synchronizes issue data on a local PostgreSQL database, and serves flow visibility, aging analysis, and story-count Monte Carlo forecasts entirely from local read models.
 
+Hosted Vercel beta support is available for Jira Cloud with Clerk Organizations, Atlassian OAuth, Prisma Postgres, and Vercel Queues. The Docker/self-hosted path remains the default; see [docs/hosted-vercel.md](docs/hosted-vercel.md) for hosted setup and release gates.
+
 ## Features
 
 - **Jira sync** — scheduled and manual synchronization of board issues, lifecycle events, and hold periods, with graceful worker shutdown canceling in-flight syncs and stale queued/running syncs auto-failed after 60 minutes so scopes can recover without manual database cleanup

@@ -73,7 +73,7 @@ beforeEach(async () => {
     data: {
       workspaceId,
       baseUrl: 'https://jira.example.internal',
-      authType: 'pat',
+      authType: 'data_center_pat',
       encryptedSecretRef: 'encrypted-secret',
     },
   });

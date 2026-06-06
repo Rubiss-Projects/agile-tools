@@ -43,7 +43,7 @@ const config: NextConfig = {
   },
 
   // Transpile workspace packages so Next.js can resolve them.
-  transpilePackages: ['@agile-tools/shared', '@agile-tools/db'],
+  transpilePackages: ['@agile-tools/shared', '@agile-tools/db', '@agile-tools/worker'],
 
   // Packages with native bindings or ESM-only deps that Node.js should load
   // directly rather than having Next.js bundle them.

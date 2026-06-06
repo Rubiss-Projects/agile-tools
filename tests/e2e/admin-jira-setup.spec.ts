@@ -56,7 +56,7 @@ test.beforeAll(async () => {
       workspaceId,
       baseUrl: JIRA_BASE,
       displayName: 'E2E Jira Connection',
-      authType: 'pat',
+      authType: 'data_center_pat',
       encryptedSecretRef,
       healthStatus: 'healthy',
     },

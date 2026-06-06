@@ -3,6 +3,13 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./sync": {
+      "types": "./src/sync/run-scope-sync.ts",
+      "import": "./dist/sync/run-scope-sync.js",
+      "default": "./dist/sync/run-scope-sync.js"
+    }
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",

@@ -1,11 +1,14 @@
 import { getPrismaClient, listJiraConnections, listFlowScopes } from '@agile-tools/db';
+import { getConfig } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { mapConnection } from '@/app/api/v1/admin/jira-connections/_lib';
 import { mapScope } from '@/app/api/v1/admin/scopes/_lib';
+import { JiraCloudConnectButton } from '@/components/admin/jira-cloud-connect-button';
 import { JiraConnectionForm, ValidateConnectionButton } from '@/components/admin/jira-connection-form';
 import { FlowScopeForm } from '@/components/admin/flow-scope-form';
 import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import { Breadcrumbs } from '@/components/app/breadcrumbs';
+import { getHostedBudgetWarnings } from '@/server/hosted-policy';
 import {
   codeStyle,
   eyebrowStyle,
@@ -29,10 +32,30 @@ import {
   palette,
 } from '@/components/app/chrome';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminJiraPage() {
+  const config = getConfig();
+  const hostedCloudOnly = config.JIRA_CONNECTION_POLICY === 'cloud_oauth_only';
   const ctx = await getWorkspaceContext();
 
   if (!ctx) {
+    if (hostedCloudOnly) {
+      return (
+        <main style={pageShellStyle}>
+          <Breadcrumbs items={[{ label: 'Jira Setup' }]} />
+          <section style={sectionCardStyle}>
+            <p style={eyebrowStyle}>Hosted Setup</p>
+            <h1 style={{ ...heroTitleStyle, fontSize: '2rem' }}>Workspace onboarding required</h1>
+            <p style={heroCopyStyle}>Select a Clerk organization and create a hosted workspace before connecting Jira Cloud.</p>
+            <a href="/onboarding" style={{ ...linkStyle, display: 'inline-flex', marginTop: '1rem' }}>
+              Open onboarding
+            </a>
+          </section>
+        </main>
+      );
+    }
+
     return (
       <AuthRequiredPanel
         title="Jira setup requires a workspace session"
@@ -61,9 +84,20 @@ export default async function AdminJiraPage() {
     listJiraConnections(db, ctx.workspaceId),
     listFlowScopes(db, ctx.workspaceId),
   ]);
+  const hostedWarnings = hostedCloudOnly ? await getHostedBudgetWarnings() : [];
+  const scopeIntervalProps = hostedCloudOnly
+    ? {
+        syncIntervalMin: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
+        syncIntervalMax: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
+        syncIntervalDefault: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
+        syncIntervalHelpText: `Hosted beta schedules each scope at most once every ${config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES} minutes.`,
+      }
+    : {};
 
   const connectionSummaries = connections.map(mapConnection);
-  const jiraBaseUrlByConnectionId = new Map(connections.map((connection) => [connection.id, connection.baseUrl]));
+  const jiraBaseUrlByConnectionId = new Map(
+    connections.map((connection) => [connection.id, connection.siteUrl ?? connection.baseUrl]),
+  );
   const scopeSummaries = scopes.map((scope) => {
     const jiraBaseUrl = jiraBaseUrlByConnectionId.get(scope.connectionId);
     return mapScope(scope, jiraBaseUrl ? { jiraBaseUrl } : undefined);
@@ -91,7 +125,9 @@ export default async function AdminJiraPage() {
         <p style={eyebrowStyle}>Workspace Admin</p>
         <h1 style={heroTitleStyle}>Jira setup</h1>
         <p style={heroCopyStyle}>
-          Manage Jira connections, validate access, and create, edit, or delete the flow scopes that feed analytics and forecasting.
+          {hostedCloudOnly
+            ? 'Connect Jira Cloud with Atlassian OAuth, then create the flow scope that feeds analytics and forecasting.'
+            : 'Manage Jira connections, validate access, and create, edit, or delete the flow scopes that feed analytics and forecasting.'}
         </p>
         <div style={statGridStyle}>
           <article style={statCardStyle}>
@@ -112,11 +148,30 @@ export default async function AdminJiraPage() {
       </section>
 
       <div style={sectionStackStyle}>
+        {hostedWarnings.length > 0 && (
+          <section style={sectionCardStyle}>
+            <h2 style={sectionTitleStyle}>Hosted beta budget</h2>
+            <ul style={listStyle}>
+              {hostedWarnings.map((warning) => (
+                <li key={`${warning.code}-${warning.message}`} style={itemCardStyle}>
+                  <span style={tonePillStyle(warning.code === 'HOSTED_BUDGET_BLOCKED' ? 'danger' : 'warning')}>
+                    {warning.code}
+                  </span>
+                  <p style={{ ...sectionCopyStyle, marginTop: '0.5rem' }}>{warning.message}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <section style={sectionCardStyle}>
           <div style={sectionHeaderRowStyle}>
             <div>
               <h2 style={sectionTitleStyle}>Connections</h2>
-              <p style={sectionCopyStyle}>Each connection stores the Jira base URL and PAT used for discovery and sync.</p>
+              <p style={sectionCopyStyle}>
+                {hostedCloudOnly
+                  ? 'Hosted beta uses Atlassian OAuth for Jira Cloud connections.'
+                  : 'Each connection stores the Jira base URL and PAT used for discovery and sync.'}
+              </p>
             </div>
           </div>
         {connectionSummaries.length === 0 ? (
@@ -133,7 +188,9 @@ export default async function AdminJiraPage() {
                     <strong style={{ display: 'block', fontSize: '1rem', color: palette.ink }}>
                       {conn.displayName ?? conn.baseUrl}
                     </strong>
-                    <p style={{ margin: '0.45rem 0 0', color: palette.muted, fontSize: '0.92rem' }}>{conn.baseUrl}</p>
+                    <p style={{ margin: '0.45rem 0 0', color: palette.muted, fontSize: '0.92rem' }}>
+                      {conn.siteUrl ?? conn.baseUrl}
+                    </p>
                   </div>
                   <span style={tonePillStyle(connectionTone(conn.healthStatus))}>{conn.healthStatus}</span>
                 </div>
@@ -145,16 +202,18 @@ export default async function AdminJiraPage() {
                 <div style={{ marginTop: '0.5rem' }}>
                   <ValidateConnectionButton connectionId={conn.id} />
                 </div>
-                <JiraConnectionForm
-                  key={`connection-${conn.id}-${conn.baseUrl}-${conn.displayName ?? ''}-${conn.healthStatus}`}
-                  initialConnection={conn}
-                />
+                {!hostedCloudOnly && (
+                  <JiraConnectionForm
+                    key={`connection-${conn.id}-${conn.baseUrl}-${conn.displayName ?? ''}-${conn.healthStatus}`}
+                    initialConnection={conn}
+                  />
+                )}
               </li>
             ))}
           </ul>
         )}
 
-        <JiraConnectionForm />
+        {hostedCloudOnly ? <JiraCloudConnectButton /> : <JiraConnectionForm />}
         </section>
 
         <section style={sectionCardStyle}>
@@ -202,6 +261,7 @@ export default async function AdminJiraPage() {
                     key={`scope-${scope.id}-${scope.connectionId}-${scope.boardId}-${scope.timezone}-${scope.syncIntervalMinutes}`}
                     connections={connectionSummaries}
                     initialScope={scope}
+                    {...scopeIntervalProps}
                   />
                 </div>
               </li>
@@ -210,7 +270,7 @@ export default async function AdminJiraPage() {
         )}
 
         {connectionSummaries.length > 0 && (
-          <FlowScopeForm connections={connectionSummaries} />
+          <FlowScopeForm connections={connectionSummaries} {...scopeIntervalProps} />
         )}
         {connectionSummaries.length === 0 && (
           <p style={sectionCopyStyle}>

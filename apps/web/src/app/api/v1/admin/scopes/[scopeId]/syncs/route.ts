@@ -44,6 +44,13 @@ async function handlePOST(
         { status: 503 },
       );
     }
+    if (queueResult.status === 'cooldown') {
+      enqueueResult = 'cooldown';
+      return Response.json(
+        { code: 'MANUAL_SYNC_COOLDOWN', message: queueResult.message },
+        { status: 429 },
+      );
+    }
 
     enqueueResult = 'queued';
     return Response.json(mapSyncRun(queueResult.syncRun), { status: 202 });

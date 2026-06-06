@@ -23,7 +23,7 @@ async function handleGET(
   try {
     const ctx = await requireAdminContext();
     const conn = await requireJiraConnection(ctx.workspaceId, connectionId);
-    const client = createClientForConnection(conn);
+    const client = await createClientForConnection(conn);
 
     try {
       const detail = await getBoardDetail(client, boardId);

@@ -142,7 +142,7 @@ test.beforeAll(async () => {
       workspaceId,
       baseUrl: JIRA_BASE,
       displayName: 'Forecast E2E Connection',
-      authType: 'pat',
+      authType: 'data_center_pat',
       encryptedSecretRef,
       healthStatus: 'healthy',
     },

@@ -129,7 +129,7 @@ beforeAll(async () => {
       workspaceId,
       baseUrl: JIRA_BASE,
       displayName: 'Test Jira',
-      authType: 'pat',
+      authType: 'data_center_pat',
       encryptedSecretRef,
     },
   });

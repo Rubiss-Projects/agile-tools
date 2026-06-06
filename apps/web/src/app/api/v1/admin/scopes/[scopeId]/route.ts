@@ -10,13 +10,14 @@ import {
   updateFlowScope,
   updateSyncRun,
 } from '@agile-tools/db';
-import { logger } from '@agile-tools/shared';
+import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
 import { type NamedValue, UpdateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api';
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { z } from 'zod';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
+import { assertHostedWriteAllowed } from '@/server/hosted-policy';
 import { createClientForConnection, normalizeJiraError } from '../../jira-connections/_lib';
 import {
   buildIncludedIssueTypes,
@@ -168,6 +169,28 @@ async function handlePUT(
       );
     }
 
+    const config = getConfig();
+    if (isHostedMode(config)) {
+      await assertHostedWriteAllowed('scope_create');
+      if (parsed.data.syncIntervalMinutes < config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES) {
+        return Response.json(
+          {
+            code: 'HOSTED_SYNC_INTERVAL_TOO_LOW',
+            message: `Hosted beta scheduled sync interval must be at least ${config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES} minutes.`,
+          },
+          { status: 400 },
+        );
+      }
+    } else if (parsed.data.syncIntervalMinutes > 15) {
+      return Response.json(
+        {
+          code: 'INVALID_REQUEST',
+          message: 'Self-hosted sync interval must be between 5 and 15 minutes.',
+        },
+        { status: 400 },
+      );
+    }
+
     const prisma = getPrismaClient();
     const preflightScope = await getFlowScope(prisma, ctx.workspaceId, scopeId);
     if (!preflightScope) {
@@ -214,7 +237,7 @@ async function handlePUT(
         );
       }
 
-      const client = createClientForConnection(connection);
+      const client = await createClientForConnection(connection);
       try {
         const boardDetail = await getBoardDetail(client, parsed.data.boardId);
         prefetchedBoardName = boardDetail.boardName;
@@ -433,7 +456,7 @@ async function handlePUT(
     const responseConnection = await getJiraConnection(prisma, ctx.workspaceId, txResult.updated.connectionId);
     return Response.json(mapScope(
       txResult.updated,
-      responseConnection ? { jiraBaseUrl: responseConnection.baseUrl } : undefined,
+      responseConnection ? { jiraBaseUrl: responseConnection.siteUrl ?? responseConnection.baseUrl } : undefined,
     ));
   } catch (err) {
     if (err instanceof ResponseError) return err.response;

@@ -7,6 +7,22 @@ const RETRY_ATTEMPTS = 3;
 
 export type JiraChangelogFetchStrategy = 'subresource' | 'issue_expand';
 
+export type JiraAuthStrategy =
+  | {
+      type: 'data_center_pat';
+      baseUrl: string;
+      patSecretRef: string;
+    }
+  | {
+      type: 'cloud_oauth_3lo';
+      cloudId: string;
+      siteUrl: string;
+      accessTokenSecretRef: string;
+      refreshTokenSecretRef: string;
+      accessTokenExpiresAt: Date;
+      scopes: string[];
+    };
+
 export interface JiraClientOptions {
   changelogFetchStrategy?: JiraChangelogFetchStrategy | null;
   onChangelogFetchStrategyDetected?: (strategy: JiraChangelogFetchStrategy) => void | Promise<void>;
@@ -107,7 +123,8 @@ export class JiraClient {
   }
 
   async get<T>(path: string, options: FetchOptions = {}): Promise<T> {
-    const url = new URL(path, this.baseUrl + '/');
+    const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+    const url = new URL(normalizedPath, this.baseUrl + '/');
     if (options.params) {
       for (const [k, v] of Object.entries(options.params)) {
         url.searchParams.set(k, String(v));

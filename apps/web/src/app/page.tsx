@@ -1,4 +1,6 @@
+import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import { getPrismaClient, listFlowScopes, listJiraConnections } from '@agile-tools/db';
+import { getConfig, isHostedMode } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
@@ -25,12 +27,40 @@ import {
   statValueStyle,
 } from '@/components/app/chrome';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
+  const hosted = isHostedMode(getConfig());
   const ctx = await getWorkspaceContext();
   const demoEnabled = isLocalDemoEnabled();
   const adminBootstrapEnabled = isLocalAdminBootstrapAvailable();
 
   if (!ctx) {
+    if (hosted) {
+      return (
+        <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
+          <section style={heroCardStyle}>
+            <p style={eyebrowStyle}>Hosted Beta</p>
+            <h1 style={heroTitleStyle}>Agile Tools</h1>
+            <p style={heroCopyStyle}>
+              Sign in with Clerk, choose an organization, and create a hosted workspace before connecting Jira Cloud.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+              <SignInButton>
+                <button type="button" style={buttonStyle('primary')}>Sign In</button>
+              </SignInButton>
+              <SignUpButton>
+                <button type="button" style={buttonStyle('secondary')}>Sign Up</button>
+              </SignUpButton>
+              <a href="/onboarding" style={{ ...buttonStyle('secondary'), textDecoration: 'none' }}>
+                Onboarding
+              </a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
     return (
       <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
         <section style={heroCardStyle}>

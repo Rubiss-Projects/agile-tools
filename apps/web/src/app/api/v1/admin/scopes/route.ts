@@ -1,11 +1,12 @@
 import { type NextRequest } from 'next/server';
-import { getPrismaClient, createFlowScope } from '@agile-tools/db';
-import { logger } from '@agile-tools/shared';
+import { getPrismaClient, createFlowScope, reserveHostedCapacity } from '@agile-tools/db';
+import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
 import { CreateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api';
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { requireAdminContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
+import { assertHostedScopeCapacity, assertHostedWriteAllowed } from '@/server/hosted-policy';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../jira-connections/_lib';
 import { formatIssueDetails, mapScope, selectNamedValues } from './_lib';
 import { withHttpMetrics } from '@/server/route-metrics';
@@ -35,8 +36,31 @@ async function handlePOST(req: NextRequest): Promise<Response> {
       );
     }
 
+    const config = getConfig();
+    if (isHostedMode(config)) {
+      await assertHostedWriteAllowed('scope_create');
+      await assertHostedScopeCapacity(ctx.workspaceId);
+      if (parsed.data.syncIntervalMinutes < config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES) {
+        return Response.json(
+          {
+            code: 'HOSTED_SYNC_INTERVAL_TOO_LOW',
+            message: `Hosted beta scheduled sync interval must be at least ${config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES} minutes.`,
+          },
+          { status: 400 },
+        );
+      }
+    } else if (parsed.data.syncIntervalMinutes > 15) {
+      return Response.json(
+        {
+          code: 'INVALID_REQUEST',
+          message: 'Self-hosted sync interval must be between 5 and 15 minutes.',
+        },
+        { status: 400 },
+      );
+    }
+
     const conn = await requireJiraConnection(ctx.workspaceId, parsed.data.connectionId);
-    const client = createClientForConnection(conn);
+    const client = await createClientForConnection(conn);
 
     let boardName: string;
     let includedIssueTypeNames: string[];
@@ -82,7 +106,11 @@ async function handlePOST(req: NextRequest): Promise<Response> {
       throw err;
     }
 
-    return Response.json(mapScope(scope, { jiraBaseUrl: conn.baseUrl }), { status: 201 });
+    if (isHostedMode(config)) {
+      await reserveHostedCapacity(prisma, 'flow_scope', scope.id, ctx.workspaceId);
+    }
+
+    return Response.json(mapScope(scope, { jiraBaseUrl: conn.siteUrl ?? conn.baseUrl }), { status: 201 });
   } catch (err) {
     if (err instanceof ResponseError) return err.response;
     logger.error('Failed to create flow scope', {

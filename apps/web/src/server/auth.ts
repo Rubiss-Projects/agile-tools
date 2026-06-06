@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import type { NextRequest, NextResponse } from 'next/server';
-import { logger } from '@agile-tools/shared';
+import { getConfig, logger } from '@agile-tools/shared';
+import { getPrismaClient, getWorkspaceByClerkOrgId } from '@agile-tools/db';
 import { ResponseError } from './errors';
 import {
   parseWorkspaceContextCookie,
@@ -16,6 +17,12 @@ const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
 export { serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
 
+export interface HostedClerkIdentity {
+  userId: string;
+  orgId: string | null;
+  orgRole: string | null;
+}
+
 /**
  * Parse the opaque session cookie and return the workspace context, or fall
  * back to an env-gated read-only workspace context when configured. Returns
@@ -28,6 +35,14 @@ export { serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
  * contract.
  */
 export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
+  if (getConfig().AUTH_PROVIDER === 'clerk') {
+    return getClerkWorkspaceContext();
+  }
+
+  return getLocalSessionWorkspaceContext();
+}
+
+async function getLocalSessionWorkspaceContext(): Promise<WorkspaceContext | null> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
   if (sessionCookie?.value) {
@@ -42,6 +57,35 @@ export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
   }
 
   return getReadonlyWorkspaceFallback();
+}
+
+export async function getHostedClerkIdentity(): Promise<HostedClerkIdentity | null> {
+  const { auth } = await import('@clerk/nextjs/server');
+  const session = await auth();
+  if (!session.userId) return null;
+  return {
+    userId: session.userId,
+    orgId: session.orgId ?? null,
+    orgRole: session.orgRole ?? null,
+  };
+}
+
+async function getClerkWorkspaceContext(): Promise<WorkspaceContext | null> {
+  const identity = await getHostedClerkIdentity();
+  if (!identity?.orgId) return null;
+
+  const workspace = await getWorkspaceByClerkOrgId(getPrismaClient(), identity.orgId);
+  if (!workspace) return null;
+
+  return {
+    workspaceId: workspace.id,
+    userId: identity.userId,
+    role: mapClerkOrgRole(identity.orgRole),
+  };
+}
+
+function mapClerkOrgRole(orgRole: string | null): WorkspaceRole {
+  return orgRole === 'org:admin' || orgRole === 'admin' ? 'admin' : 'member';
 }
 
 /**
