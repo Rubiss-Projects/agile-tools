@@ -60,6 +60,8 @@ vercel build --prod --token="$VERCEL_TOKEN"
 vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
 ```
 
+The Vercel project build command generates Prisma Client, builds the web app's workspace dependency closure with `pnpm --filter @agile-tools/web^... build`, then runs `pnpm --filter @agile-tools/web build`. This is required because workspace package exports point at `dist/` files that are not present in a clean Vercel clone until those packages are built.
+
 ## Prisma Postgres
 
 Create separate Prisma Postgres databases:
