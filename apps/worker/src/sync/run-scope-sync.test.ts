@@ -4,6 +4,7 @@ const {
   jiraClientStub,
   loggerMock,
   getConfigMock,
+  isHostedModeMock,
   decryptSecretMock,
   updateJiraConnectionCapabilitiesMock,
   listEpicForecastTargetsMock,
@@ -12,6 +13,7 @@ const {
   inferChangelogFetchStrategyFromServerInfoMock,
   getBoardDetailWithFilterIdMock,
   normalizeChangelogFetchStrategyMock,
+  fetchBoardIssuesMock,
   streamBoardIssuesMock,
   streamJqlIssuesMock,
   fetchJqlIssueCountMock,
@@ -43,15 +45,22 @@ const {
     info: vi.fn(),
     warn: vi.fn(),
   };
+  const getConfigMock = vi.fn((): Record<string, unknown> => ({
+    ENCRYPTION_KEY: 'test-encryption-key',
+    SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: 600_000,
+    SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS: 30_000,
+  }));
+  const isHostedModeMock = vi.fn((config: Record<string, unknown>) =>
+    config['AUTH_PROVIDER'] === 'clerk' &&
+    config['SYNC_BACKEND'] === 'vercel_queues' &&
+    config['JIRA_CONNECTION_POLICY'] === 'cloud_oauth_only',
+  );
 
   return {
     jiraClientStub,
     loggerMock,
-    getConfigMock: vi.fn(() => ({
-      ENCRYPTION_KEY: 'test-encryption-key',
-      SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: 600_000,
-      SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS: 30_000,
-    })),
+    getConfigMock,
+    isHostedModeMock,
     decryptSecretMock: vi.fn(() => 'pat-123'),
     updateJiraConnectionCapabilitiesMock: vi.fn(),
     listEpicForecastTargetsMock: vi.fn(),
@@ -60,6 +69,7 @@ const {
     inferChangelogFetchStrategyFromServerInfoMock: vi.fn(),
     getBoardDetailWithFilterIdMock: vi.fn(),
     normalizeChangelogFetchStrategyMock: vi.fn(),
+    fetchBoardIssuesMock: vi.fn(),
     streamBoardIssuesMock: vi.fn(),
     streamJqlIssuesMock: vi.fn(),
     fetchJqlIssueCountMock: vi.fn(),
@@ -84,6 +94,7 @@ vi.mock('@agile-tools/db', () => ({
 
 vi.mock('@agile-tools/shared', () => ({
   getConfig: getConfigMock,
+  isHostedMode: isHostedModeMock,
   decryptSecret: decryptSecretMock,
   logger: loggerMock,
   metricsClock: {
@@ -99,6 +110,7 @@ vi.mock('@agile-tools/jira-client', () => ({
   inferChangelogFetchStrategyFromServerInfo: inferChangelogFetchStrategyFromServerInfoMock,
   getBoardDetailWithFilterId: getBoardDetailWithFilterIdMock,
   normalizeChangelogFetchStrategy: normalizeChangelogFetchStrategyMock,
+  fetchBoardIssues: fetchBoardIssuesMock,
   streamBoardIssues: streamBoardIssuesMock,
   streamJqlIssues: streamJqlIssuesMock,
   fetchJqlIssueCount: fetchJqlIssueCountMock,
@@ -310,6 +322,11 @@ describe('runScopeSync', () => {
       SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: 600_000,
       SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS: 30_000,
     });
+    isHostedModeMock.mockImplementation((config: Record<string, unknown>) =>
+      config['AUTH_PROVIDER'] === 'clerk' &&
+      config['SYNC_BACKEND'] === 'vercel_queues' &&
+      config['JIRA_CONNECTION_POLICY'] === 'cloud_oauth_only',
+    );
     decryptSecretMock.mockReturnValue('pat-123');
     createJiraClientMock.mockReturnValue(jiraClientStub);
     jiraClientStub.fetchServerInfo.mockResolvedValue({
@@ -336,6 +353,12 @@ describe('runScopeSync', () => {
         issueTypes: [{ id: 'story', name: 'Story' }],
       },
       filterId: null,
+    });
+    fetchBoardIssuesMock.mockResolvedValue({
+      issues: [],
+      total: 0,
+      startAt: 0,
+      maxResults: 1,
     });
     detectBoardDriftMock.mockReturnValue(null);
     applyBoardDriftHandlingMock.mockResolvedValue(undefined);
@@ -748,6 +771,92 @@ describe('runScopeSync', () => {
     );
   });
 
+  it('fails hosted sync before streaming when the active issue cap is exceeded', async () => {
+    getConfigMock.mockReturnValue({
+      ENCRYPTION_KEY: 'test-encryption-key',
+      AUTH_PROVIDER: 'clerk',
+      SYNC_BACKEND: 'vercel_queues',
+      JIRA_CONNECTION_POLICY: 'cloud_oauth_only',
+      HOSTED_BETA_MAX_ACTIVE_ISSUES_PER_SCOPE: 1,
+      HOSTED_BETA_MAX_COMPLETED_ISSUES_PER_SYNC: 1000,
+      SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: 600_000,
+      SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS: 30_000,
+    });
+    fetchBoardIssuesMock.mockResolvedValue({
+      issues: [],
+      total: 2,
+      startAt: 0,
+      maxResults: 1,
+    });
+    const db = createDb({ doneStatusIds: [] });
+
+    await expect(
+      runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1'),
+    ).rejects.toMatchObject({ code: 'HOSTED_ACTIVE_ISSUE_CAP_EXCEEDED' });
+
+    expect(streamBoardIssuesMock).not.toHaveBeenCalled();
+    expect(db.boardSnapshot.create).not.toHaveBeenCalled();
+    expect(db.syncRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: 'failed',
+        errorCode: 'HOSTED_ACTIVE_ISSUE_CAP_EXCEEDED',
+      }),
+    }));
+  });
+
+  it('fails hosted sync before streaming completed history when that cap is exceeded', async () => {
+    getConfigMock.mockReturnValue({
+      ENCRYPTION_KEY: 'test-encryption-key',
+      AUTH_PROVIDER: 'clerk',
+      SYNC_BACKEND: 'vercel_queues',
+      JIRA_CONNECTION_POLICY: 'cloud_oauth_only',
+      HOSTED_BETA_MAX_ACTIVE_ISSUES_PER_SCOPE: 500,
+      HOSTED_BETA_MAX_COMPLETED_ISSUES_PER_SYNC: 1,
+      SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: 600_000,
+      SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS: 30_000,
+    });
+    fetchBoardIssuesMock.mockResolvedValue({
+      issues: [],
+      total: 1,
+      startAt: 0,
+      maxResults: 1,
+    });
+    fetchJqlIssueCountMock.mockResolvedValue(2);
+    getBoardDetailWithFilterIdMock.mockResolvedValue({
+      detail: {
+        boardId: 42,
+        boardName: 'Payments Board',
+        columns: [{ name: 'Doing', statusIds: ['10'] }],
+        statuses: [{ id: '10', name: 'In Progress' }],
+        completionStatuses: [
+          { id: '30', name: 'Closed' },
+          { id: '40', name: 'Resolved' },
+        ],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      },
+      filterId: '1001',
+    });
+    streamBoardIssuesMock.mockReturnValue(issueStream());
+    const db = createDb();
+
+    await expect(
+      runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1'),
+    ).rejects.toMatchObject({ code: 'HOSTED_COMPLETED_ISSUE_CAP_EXCEEDED' });
+
+    expect(fetchJqlIssueCountMock).toHaveBeenCalledWith(
+      jiraClientStub,
+      'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
+    );
+    expect(streamJqlIssuesMock).not.toHaveBeenCalled();
+    expect(db.workItem.upsert).not.toHaveBeenCalled();
+    expect(db.syncRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: 'failed',
+        errorCode: 'HOSTED_COMPLETED_ISSUE_CAP_EXCEEDED',
+      }),
+    }));
+  });
+
   it('does not publish work items until the Jira issue stream is complete', async () => {
     const db = createDb({ doneStatusIds: [] });
     const paused = createDeferred();
@@ -816,6 +925,7 @@ describe('runScopeSync', () => {
       }),
     );
     db.syncRun.updateMany
+      .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })

@@ -39,6 +39,9 @@ export async function processHostedScopeSyncMessage(message: unknown): Promise<v
   const claimed = await db.hostedSyncTask.updateMany({
     where: {
       dedupeKey: parsed.dedupeKey,
+      syncRunId: parsed.syncRunId,
+      scopeId: parsed.scopeId,
+      phase: parsed.phase,
       status: { in: ['queued', 'failed'] },
     },
     data: {
@@ -51,9 +54,26 @@ export async function processHostedScopeSyncMessage(message: unknown): Promise<v
   if (claimed.count === 0) {
     const existing = await db.hostedSyncTask.findUnique({
       where: { dedupeKey: parsed.dedupeKey },
-      select: { status: true },
+      select: { status: true, syncRunId: true, scopeId: true, phase: true },
     });
     if (existing) {
+      if (
+        existing.syncRunId !== parsed.syncRunId ||
+        existing.scopeId !== parsed.scopeId ||
+        existing.phase !== parsed.phase
+      ) {
+        logger.warn('Hosted sync task identity mismatch; acknowledging queue message without running', {
+          dedupeKey: parsed.dedupeKey,
+          taskSyncRunId: existing.syncRunId,
+          messageSyncRunId: parsed.syncRunId,
+          taskScopeId: existing.scopeId,
+          messageScopeId: parsed.scopeId,
+          taskPhase: existing.phase,
+          messagePhase: parsed.phase,
+        });
+        return;
+      }
+
       logger.debug('Hosted sync task already claimed; acknowledging duplicate', {
         dedupeKey: parsed.dedupeKey,
         status: existing.status,

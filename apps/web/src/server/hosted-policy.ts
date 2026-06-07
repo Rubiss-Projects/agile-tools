@@ -9,6 +9,7 @@ import {
 } from '@agile-tools/db';
 import { getConfig, isHostedMode } from '@agile-tools/shared';
 
+import { countHostedClerkOrgMembers } from './auth';
 import { ResponseError } from './errors';
 
 export type HostedWriteOperation =
@@ -136,6 +137,22 @@ export async function assertHostedScopeCapacity(workspaceId: string): Promise<vo
   throw capacityError(
     'HOSTED_SCOPE_CAP_EXHAUSTED',
     `Hosted beta allows ${config.HOSTED_BETA_MAX_SCOPES_PER_WORKSPACE} flow scope per workspace.`,
+  );
+}
+
+export async function assertHostedOrgMemberCapacity(clerkOrgId: string): Promise<void> {
+  if (!isHostedMode()) return;
+
+  const config = getConfig();
+  const count = await countHostedClerkOrgMembers(
+    clerkOrgId,
+    config.HOSTED_BETA_MAX_ORG_MEMBERS + 1,
+  );
+  if (count <= config.HOSTED_BETA_MAX_ORG_MEMBERS) return;
+
+  throw capacityError(
+    'HOSTED_ORG_MEMBER_CAP_EXHAUSTED',
+    `Hosted beta allows ${config.HOSTED_BETA_MAX_ORG_MEMBERS} members per Clerk organization.`,
   );
 }
 
