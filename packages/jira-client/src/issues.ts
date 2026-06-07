@@ -28,6 +28,8 @@ export interface RawJiraIssueFields {
   created: string;
   /** ISO 8601 Jira last-updated timestamp */
   updated?: string;
+  /** ISO 8601 Jira resolution timestamp. Present for resolved/done issues. */
+  resolutiondate?: string | null;
   assignee?: { accountId?: string; name?: string } | null;
   comment?: {
     startAt?: number;

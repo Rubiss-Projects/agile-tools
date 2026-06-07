@@ -524,7 +524,7 @@ describe('runScopeSync', () => {
     expect(streamJqlIssuesMock).toHaveBeenCalledWith(
       jiraClientStub,
       'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
-      { fields: 'summary,status,issuetype,project,created,updated,assignee,comment' },
+      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment' },
     );
     expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
     expect(db.workItem.upsert).toHaveBeenNthCalledWith(
@@ -671,7 +671,7 @@ describe('runScopeSync', () => {
     expect(streamJqlIssuesMock).toHaveBeenCalledWith(
       jiraClientStub,
       'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
-      { fields: 'summary,status,issuetype,project,created,updated,assignee,comment' },
+      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment' },
     );
     expect(fetchIssueChangelogMock).toHaveBeenCalledTimes(1);
     expect(db.workItem.upsert).toHaveBeenCalledTimes(1);

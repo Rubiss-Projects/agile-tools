@@ -39,7 +39,7 @@ import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js
 
 const BATCH_SIZE = 10;
 const STAGED_ITEM_PAGE_SIZE = 100;
-const SYNC_ISSUE_FIELDS = 'summary,status,issuetype,project,created,updated,assignee,comment';
+const SYNC_ISSUE_FIELDS = 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment';
 
 function quoteJqlValue(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
