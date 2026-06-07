@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing semver tag to publish, for example v0.2.0 or v0.2.0-rc.1
+        description: Semver tag to publish; if missing, it is created at the default branch HEAD
         required: true
         type: string
 
@@ -66,8 +66,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: ${{ steps.vars.outputs.tag }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || steps.vars.outputs.tag }}
           fetch-depth: 0
+
+      - name: Resolve or create manual release tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          git fetch --no-tags origin "${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then
+            echo "Tag ${TAG} already exists; using existing tag."
+            git checkout --detach "${TAG}"
+            exit 0
+          fi
+
+          default_sha="$(git rev-parse "refs/remotes/origin/${DEFAULT_BRANCH}")"
+          current_sha="$(git rev-parse HEAD)"
+          if [[ "$current_sha" != "$default_sha" ]]; then
+            echo "Manual release tag creation must run from ${DEFAULT_BRANCH} HEAD." >&2
+            echo "Current checkout: ${current_sha}; ${DEFAULT_BRANCH}: ${default_sha}." >&2
+            exit 1
+          fi
+
+          git tag "$TAG"
+          git push origin "refs/tags/${TAG}"
 
       - name: Ensure tag is on default branch history
         shell: bash
@@ -75,9 +103,9 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "${DEFAULT_BRANCH}:${DEFAULT_BRANCH}"
+          git fetch --no-tags origin "${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
 
-          if ! git merge-base --is-ancestor HEAD "${DEFAULT_BRANCH}"; then
+          if ! git merge-base --is-ancestor HEAD "refs/remotes/origin/${DEFAULT_BRANCH}"; then
             echo "Release tags must point to a commit contained in ${DEFAULT_BRANCH}." >&2
             exit 1
           fi
