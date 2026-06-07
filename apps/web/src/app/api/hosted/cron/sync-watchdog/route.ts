@@ -8,8 +8,7 @@ function hasValidCronSecret(request: NextRequest): boolean {
   if (!configured) return false;
 
   const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  const querySecret = request.nextUrl.searchParams.get('secret');
-  return bearer === configured || querySecret === configured;
+  return bearer === configured;
 }
 
 export async function GET(request: NextRequest): Promise<Response> {

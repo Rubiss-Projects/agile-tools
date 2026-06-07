@@ -11,6 +11,7 @@ import { getConfig, isHostedMode, logger, normalizeTimeZoneOrThrow } from '@agil
 import { getHostedClerkIdentity } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import {
+  assertHostedOrgMemberCapacity,
   assertHostedWorkspaceCapacity,
   assertHostedWriteAllowed,
 } from '@/server/hosted-policy';
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     await assertHostedWriteAllowed('workspace_create');
+    await assertHostedOrgMemberCapacity(identity.orgId);
     await assertHostedWorkspaceCapacity();
 
     const timezone = normalizeTimeZoneOrThrow(parsed.data.defaultTimezone);

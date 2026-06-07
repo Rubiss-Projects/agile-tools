@@ -23,6 +23,22 @@ export interface HostedClerkIdentity {
   orgRole: string | null;
 }
 
+interface ClerkOrganizationMembershipList {
+  data?: unknown[];
+  totalCount?: number;
+  total_count?: number;
+}
+
+interface ClerkOrganizationClient {
+  organizations: {
+    getOrganizationMembershipList(input: {
+      organizationId: string;
+      limit?: number;
+      offset?: number;
+    }): Promise<ClerkOrganizationMembershipList>;
+  };
+}
+
 /**
  * Parse the opaque session cookie and return the workspace context, or fall
  * back to an env-gated read-only workspace context when configured. Returns
@@ -68,6 +84,25 @@ export async function getHostedClerkIdentity(): Promise<HostedClerkIdentity | nu
     orgId: session.orgId ?? null,
     orgRole: session.orgRole ?? null,
   };
+}
+
+export async function countHostedClerkOrgMembers(orgId: string, limit: number): Promise<number> {
+  const clerkModule = (await import('@clerk/nextjs/server')) as {
+    clerkClient: () => Promise<ClerkOrganizationClient> | ClerkOrganizationClient;
+  };
+  const client = await clerkModule.clerkClient();
+  const memberships = await client.organizations.getOrganizationMembershipList({
+    organizationId: orgId,
+    limit,
+  });
+
+  if (typeof memberships.totalCount === 'number') {
+    return memberships.totalCount;
+  }
+  if (typeof memberships.total_count === 'number') {
+    return memberships.total_count;
+  }
+  return Array.isArray(memberships.data) ? memberships.data.length : 0;
 }
 
 async function getClerkWorkspaceContext(): Promise<WorkspaceContext | null> {

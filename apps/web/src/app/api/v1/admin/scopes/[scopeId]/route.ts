@@ -429,7 +429,6 @@ async function handlePUT(
 
           await updateFlowScope(tx, ctx.workspaceId, scopeId, {
             ...txResult.rollbackScopeInput,
-            syncIntervalMinutes: currentScope.syncIntervalMinutes,
           });
           return true;
         });

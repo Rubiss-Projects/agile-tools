@@ -9,6 +9,7 @@ import {
   getConfig,
   decryptSecret,
   encryptSecret,
+  isHostedMode,
   logger,
   metricsClock,
   recordSyncRun,
@@ -19,6 +20,7 @@ import {
   inferChangelogFetchStrategyFromServerInfo,
   getBoardDetailWithFilterId,
   normalizeChangelogFetchStrategy,
+  fetchBoardIssues,
   streamBoardIssues,
   streamJqlIssues,
   fetchJqlIssueCount,
@@ -296,6 +298,21 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       return;
     }
 
+    const hostedCaps = getHostedSyncCaps();
+    if (hostedCaps) {
+      const boardIssueCount = await fetchBoardIssues(jiraClient, boardId, {
+        maxResults: 1,
+        fields: SYNC_ISSUE_FIELDS,
+      });
+      if (boardIssueCount.total > hostedCaps.maxActiveIssues) {
+        throw new SyncError(
+          'HOSTED_ACTIVE_ISSUE_CAP_EXCEEDED',
+          `Hosted beta allows at most ${hostedCaps.maxActiveIssues} active board issues per scope; Jira returned ${boardIssueCount.total}.`,
+        );
+      }
+    }
+    await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+
     // Build inverted status → column lookup from board configuration.
     const statusIdsByColumn: Record<string, string> = {};
     const startStatusIds = new Set<string>(scope.startStatusIds);
@@ -374,6 +391,17 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
         const completedJql =
           `filter = ${boardFilterId} AND status in (${doneIdList}) ` +
           `AND updated >= -${DEFAULT_COMPLETED_WINDOW_DAYS}d`;
+
+        if (hostedCaps) {
+          const completedIssueCount = await fetchJqlIssueCount(jiraClient, completedJql);
+          if (completedIssueCount > hostedCaps.maxCompletedIssues) {
+            throw new SyncError(
+              'HOSTED_COMPLETED_ISSUE_CAP_EXCEEDED',
+              `Hosted beta allows at most ${hostedCaps.maxCompletedIssues} completed issues per sync; Jira returned ${completedIssueCount}.`,
+            );
+          }
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+        }
 
         for await (const issue of streamJqlIssues(jiraClient, completedJql, {
           fields: SYNC_ISSUE_FIELDS,
@@ -518,6 +546,18 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     recordSyncMetric('failed', errorCode);
     throw err;
   }
+}
+
+function getHostedSyncCaps(): { maxActiveIssues: number; maxCompletedIssues: number } | null {
+  const config = getConfig();
+  if (!isHostedMode(config)) {
+    return null;
+  }
+
+  return {
+    maxActiveIssues: config.HOSTED_BETA_MAX_ACTIVE_ISSUES_PER_SCOPE,
+    maxCompletedIssues: config.HOSTED_BETA_MAX_COMPLETED_ISSUES_PER_SYNC,
+  };
 }
 
 async function resolveJiraAccessToken(

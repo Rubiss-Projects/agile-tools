@@ -76,4 +76,38 @@ describe('processHostedScopeSyncMessage', () => {
     expect(syncRunCheckpointUpsert).not.toHaveBeenCalled();
     expect(hostedSyncTaskUpdate).not.toHaveBeenCalled();
   });
+
+  it('requires the stored task identity to match the queue message before running sync', async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+    findUnique.mockResolvedValue({
+      status: 'queued',
+      scopeId: '00000000-0000-4000-8000-000000000099',
+      syncRunId: '00000000-0000-4000-8000-000000000098',
+      phase: 'initialize',
+    });
+
+    const { processHostedScopeSyncMessage } = await import('./hosted-sync');
+
+    await processHostedScopeSyncMessage({
+      type: 'scope-sync',
+      scopeId: '00000000-0000-4000-8000-000000000001',
+      syncRunId: '00000000-0000-4000-8000-000000000002',
+      phase: 'initialize',
+      dedupeKey: 'hosted-sync:scope:run',
+      trigger: 'manual',
+      requestedBy: 'user-1',
+    });
+
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        dedupeKey: 'hosted-sync:scope:run',
+        scopeId: '00000000-0000-4000-8000-000000000001',
+        syncRunId: '00000000-0000-4000-8000-000000000002',
+        phase: 'initialize',
+      }),
+    }));
+    expect(runScopeSync).not.toHaveBeenCalled();
+    expect(syncRunCheckpointUpsert).not.toHaveBeenCalled();
+    expect(hostedSyncTaskUpdate).not.toHaveBeenCalled();
+  });
 });

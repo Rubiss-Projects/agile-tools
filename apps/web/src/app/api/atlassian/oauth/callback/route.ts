@@ -20,6 +20,10 @@ function callbackRedirect(request: NextRequest, path: string, params: Record<str
   return NextResponse.redirect(url);
 }
 
+function isClerkOrgAdmin(orgRole: string | null): boolean {
+  return orgRole === 'org:admin' || orgRole === 'admin';
+}
+
 export async function GET(request: NextRequest): Promise<Response> {
   if (!isHostedMode(getConfig())) {
     return Response.json(
@@ -56,6 +60,12 @@ export async function GET(request: NextRequest): Promise<Response> {
       return callbackRedirect(request, '/admin/jira', {
         oauth: 'failed',
         code: 'identity_mismatch',
+      });
+    }
+    if (!isClerkOrgAdmin(identity.orgRole)) {
+      return callbackRedirect(request, '/admin/jira', {
+        oauth: 'failed',
+        code: 'forbidden',
       });
     }
 
