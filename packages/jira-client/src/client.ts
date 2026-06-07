@@ -50,6 +50,10 @@ export interface FetchOptions {
   params?: Record<string, string | number | boolean>;
 }
 
+export interface PostOptions extends FetchOptions {
+  body?: unknown;
+}
+
 function jiraOperation(path: string): string {
   if (path === '/rest/api/2/myself') return 'myself';
   if (path === '/rest/api/2/serverInfo') return 'server_info';
@@ -59,6 +63,8 @@ function jiraOperation(path: string): string {
   if (/^\/rest\/api\/2\/issue\/[^/]+\/changelog$/.test(path)) return 'issue_changelog';
   if (/^\/rest\/api\/2\/issue\/[^/]+$/.test(path)) return 'issue_detail';
   if (path === '/rest/api/2/search') return 'jql_search';
+  if (path === '/rest/api/3/search/jql') return 'jql_search';
+  if (path === '/rest/api/3/search/approximate-count') return 'jql_count';
   if (path === '/rest/api/2/status') return 'status_list';
   return 'other';
 }
@@ -123,6 +129,14 @@ export class JiraClient {
   }
 
   async get<T>(path: string, options: FetchOptions = {}): Promise<T> {
+    return this.request<T>('GET', path, options);
+  }
+
+  async post<T>(path: string, options: PostOptions = {}): Promise<T> {
+    return this.request<T>('POST', path, options);
+  }
+
+  private async request<T>(method: 'GET' | 'POST', path: string, options: PostOptions = {}): Promise<T> {
     const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
     const url = new URL(normalizedPath, this.baseUrl + '/');
     if (options.params) {
@@ -139,15 +153,18 @@ export class JiraClient {
           let response: Response;
           try {
             response = await fetch(url.toString(), {
+              method,
               headers: {
                 Authorization: `Bearer ${this.pat}`,
                 Accept: 'application/json',
+                ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
               },
+              ...(method === 'POST' ? { body: JSON.stringify(options.body ?? {}) } : {}),
             });
           } catch (error) {
             const errorType = metricsErrorType(error);
             recordJiraRequest({
-              method: 'GET',
+              method,
               url,
               operation,
               result: 'network_error',
@@ -158,7 +175,7 @@ export class JiraClient {
           }
 
           recordJiraRequest({
-            method: 'GET',
+            method,
             url,
             operation,
             result: response.ok ? 'success' : response.status === 429 ? 'rate_limited' : 'error',

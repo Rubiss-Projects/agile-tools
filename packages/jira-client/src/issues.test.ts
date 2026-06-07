@@ -376,10 +376,53 @@ describe('streamJqlIssues', () => {
     const calledUrl = String(fetchMock.mock.calls[0]![0]);
     expect(calledUrl).toContain('fields=summary%2Cstatus');
   });
+
+  it('uses the Jira Cloud enhanced search API with token pagination', async () => {
+    const page1Issues = [makeIssue('1'), makeIssue('2')];
+    const page2Issues = [makeIssue('3')];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          issues: page1Issues,
+          isLast: false,
+          nextPageToken: 'page-2',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          issues: page2Issues,
+          isLast: true,
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://api.atlassian.com/ex/jira/cloud-123', 'token-123');
+    const results: string[] = [];
+    for await (const issue of streamJqlIssues(client, 'project = PROJ', {
+      maxResults: 2,
+      fields: 'summary,status',
+    })) {
+      results.push(issue.id);
+    }
+
+    expect(results).toEqual(['1', '2', '3']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstCallUrl = new URL(String(fetchMock.mock.calls[0]![0]));
+    expect(firstCallUrl.pathname).toBe('/ex/jira/cloud-123/rest/api/3/search/jql');
+    expect(firstCallUrl.searchParams.get('jql')).toBe('project = PROJ');
+    expect(firstCallUrl.searchParams.get('maxResults')).toBe('2');
+    expect(firstCallUrl.searchParams.get('fields')).toBe('summary,status');
+    expect(firstCallUrl.searchParams.get('startAt')).toBeNull();
+
+    const secondCallUrl = new URL(String(fetchMock.mock.calls[1]![0]));
+    expect(secondCallUrl.searchParams.get('nextPageToken')).toBe('page-2');
+  });
 });
 
 describe('fetchJqlIssueCount', () => {
-  it('requests only the total for a JQL query', async () => {
+  it('requests only the total for a Data Center JQL query', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({ startAt: 0, maxResults: 0, total: 7, issues: [] }),
@@ -395,5 +438,22 @@ describe('fetchJqlIssueCount', () => {
     expect(calledUrl).toContain('/rest/api/2/search');
     expect(calledUrl).toContain('maxResults=0');
     expect(calledUrl).toContain('fields=summary');
+  });
+
+  it('uses the Jira Cloud approximate count endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ count: 7 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createJiraClient('https://api.atlassian.com/ex/jira/cloud-123', 'token-123');
+    await expect(fetchJqlIssueCount(client, '"Epic Link" = "PROJ-1"')).resolves.toBe(7);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://api.atlassian.com/ex/jira/cloud-123/rest/api/3/search/approximate-count',
+    );
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ jql: '"Epic Link" = "PROJ-1"' }),
+    });
   });
 });

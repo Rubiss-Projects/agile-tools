@@ -374,6 +374,16 @@ interface JiraSearchCountResponse {
   total: number;
 }
 
+interface JiraCloudSearchResponse {
+  issues: RawJiraIssue[];
+  isLast?: boolean;
+  nextPageToken?: string;
+}
+
+interface JiraCloudSearchCountResponse {
+  count: number;
+}
+
 export interface StreamJqlIssuesOptions {
   /** Page size — Jira default is 50, max 100. */
   maxResults?: number;
@@ -387,10 +397,10 @@ export interface StreamJqlIssuesOptions {
 /**
  * Async generator that yields every issue matching a JQL query across all pages.
  *
- * Uses the platform REST API (`/rest/api/2/search`) rather than the Agile board
- * endpoint, so it returns issues regardless of whether their status is mapped to
- * a board column. This is the correct path for fetching historically-completed
- * issues that have already rolled off the board view.
+ * Uses the platform REST search API rather than the Agile board endpoint, so it
+ * returns issues regardless of whether their status is mapped to a board column.
+ * This is the correct path for fetching historically-completed issues that have
+ * already rolled off the board view.
  *
  * De-duplicates by issue ID to handle live-reordering between pages.
  */
@@ -399,6 +409,11 @@ export async function* streamJqlIssues(
   jql: string,
   options: StreamJqlIssuesOptions = {},
 ): AsyncGenerator<RawJiraIssue> {
+  if (isJiraCloudGatewayClient(client)) {
+    yield* streamJiraCloudJqlIssues(client, jql, options);
+    return;
+  }
+
   const pageSize = options.maxResults ?? 50;
   let startAt = 0;
   let total = Infinity;
@@ -426,8 +441,58 @@ export async function* streamJqlIssues(
 }
 
 export async function fetchJqlIssueCount(client: JiraClient, jql: string): Promise<number> {
+  if (isJiraCloudGatewayClient(client)) {
+    const page = await client.post<JiraCloudSearchCountResponse>('/rest/api/3/search/approximate-count', {
+      body: { jql },
+    });
+    return page.count;
+  }
+
   const page = await client.get<JiraSearchCountResponse>('/rest/api/2/search', {
     params: { jql, maxResults: 0, fields: 'summary' },
   });
   return page.total;
+}
+
+async function* streamJiraCloudJqlIssues(
+  client: JiraClient,
+  jql: string,
+  options: StreamJqlIssuesOptions,
+): AsyncGenerator<RawJiraIssue> {
+  const pageSize = options.maxResults ?? 50;
+  const seen = new Set<string>();
+  let nextPageToken: string | undefined;
+
+  for (;;) {
+    const params: Record<string, string | number> = { jql, maxResults: pageSize };
+    if (nextPageToken) {
+      params['nextPageToken'] = nextPageToken;
+    }
+    if (options.fields) {
+      params['fields'] = options.fields;
+    }
+
+    const page = await client.get<JiraCloudSearchResponse>('/rest/api/3/search/jql', { params });
+
+    for (const issue of page.issues) {
+      if (!seen.has(issue.id)) {
+        seen.add(issue.id);
+        yield issue;
+      }
+    }
+
+    nextPageToken = page.nextPageToken;
+    if (page.isLast || page.issues.length === 0 || !nextPageToken) {
+      break;
+    }
+  }
+}
+
+function isJiraCloudGatewayClient(client: JiraClient): boolean {
+  try {
+    const baseUrl = new URL(client.baseUrl);
+    return baseUrl.hostname === 'api.atlassian.com' && baseUrl.pathname.startsWith('/ex/jira/');
+  } catch {
+    return false;
+  }
 }
