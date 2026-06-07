@@ -459,7 +459,7 @@ describe('PUT /v1/admin/scopes/:id', () => {
     const db = getPrismaClient();
     const scope = await db.flowScope.findUnique({ where: { id: scopeId } });
     expect(scope?.startStatusIds).toEqual(['1']);
-    expect(scope?.syncIntervalMinutes).toBe(30);
+    expect(scope?.syncIntervalMinutes).toBe(10);
 
     const syncRuns = await db.syncRun.findMany({ where: { scopeId } });
     expect(syncRuns).toHaveLength(1);
