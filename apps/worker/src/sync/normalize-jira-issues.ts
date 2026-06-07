@@ -62,6 +62,7 @@ export function normalizeJiraIssue(
 
   const lifecycleEvents = deriveLifecycleEvents(changelog, ctx);
   const createdAt = new Date(fields.created);
+  const resolutionDate = parseOptionalDate(fields.resolutiondate);
   const latestComment = selectLatestComment(
     latestJiraComment ? [latestJiraComment] : (fields.comment?.comments ?? []),
   );
@@ -69,6 +70,7 @@ export function normalizeJiraIssue(
     lifecycleEvents,
     currentStatusId,
     createdAt,
+    resolutionDate,
     ctx,
   );
   const reopenedCount = lifecycleEvents.filter((e) => e.eventType === 'reopened').length;
@@ -133,6 +135,12 @@ function selectLatestComment(
   return validComments.reduce((latest, comment) =>
     comment.createdAt.getTime() > latest.createdAt.getTime() ? comment : latest,
   );
+}
+
+function parseOptionalDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**
@@ -218,20 +226,19 @@ function deriveLifecycleEvents(
  * Derive startedAt and completedAt from lifecycle events.
  *
  * - startedAt: earliest transition into a startStatusId. If no such transition
- *   exists but the item's current status is a start status (e.g., the issue
- *   was created directly in a start status with no changelog entry), fall back
- *   to the issue's createdAt so the item is still treated as in-flow by
- *   downstream projections (flow chart, filter dropdowns, aging thresholds).
+ *   exists but the item's current status is already in scope (e.g., CSV-imported
+ *   issues created directly in an in-flow status), fall back to the issue's
+ *   createdAt so the item is still treated as in-flow by downstream projections.
  * - completedAt: timestamp of the latest `completed` event, but only when the
  *   item's current status is a done status (i.e., it has not been re-opened
- *   since its last completion). Items that never had a recorded `completed`
- *   event will have completedAt = null even if they are currently in a done
- *   status (e.g., created directly in done with no changelog).
+ *   since its last completion). If no completion event exists, fall back to
+ *   Jira's resolutiondate for imported or history-truncated done issues.
  */
 function deriveTimestamps(
   events: NormalizedLifecycleEvent[],
   currentStatusId: string,
   createdAt: Date,
+  resolutionDate: Date | null,
   ctx: NormalizeContext,
 ): { startedAt: Date | null; completedAt: Date | null } {
   const startEvents = events.filter(
@@ -245,7 +252,7 @@ function deriveTimestamps(
   if (currentStatusInScope) {
     if (startEvents.length > 0) {
       startedAt = startEvents[0]!.changedAt;
-    } else if (ctx.startStatusIds.has(currentStatusId)) {
+    } else {
       startedAt = createdAt;
     }
   }
@@ -255,6 +262,8 @@ function deriveTimestamps(
     const completedEvents = events.filter((e) => e.eventType === 'completed');
     if (completedEvents.length > 0) {
       completedAt = completedEvents[completedEvents.length - 1]!.changedAt;
+    } else if (resolutionDate) {
+      completedAt = resolutionDate;
     }
   }
 

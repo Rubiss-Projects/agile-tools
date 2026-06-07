@@ -71,6 +71,38 @@ describe('normalizeJiraIssue', () => {
     expect(result.startedAt).toEqual(new Date('2025-01-02T09:00:00.000Z'));
   });
 
+  it('falls back to createdAt for imported issues already in an in-flow status', () => {
+    const result = normalizeJiraIssue(
+      makeIssue({ id: '20', name: 'Review' }),
+      [],
+      BASE_CONTEXT,
+    );
+
+    expect(result.startedAt).toEqual(new Date('2025-01-01T00:00:00.000Z'));
+    expect(result.completedAt).toBeNull();
+  });
+
+  it('uses resolutiondate for done issues without status changelog history', () => {
+    const issue = makeIssue({ id: '30', name: 'Done' });
+    issue.fields.resolutiondate = '2025-01-09T17:30:00.000Z';
+
+    const result = normalizeJiraIssue(issue, [], BASE_CONTEXT);
+
+    expect(result.startedAt).toEqual(new Date('2025-01-01T00:00:00.000Z'));
+    expect(result.completedAt).toEqual(new Date('2025-01-09T17:30:00.000Z'));
+  });
+
+  it('does not mark done issues complete without changelog or resolutiondate', () => {
+    const result = normalizeJiraIssue(
+      makeIssue({ id: '30', name: 'Done' }),
+      [],
+      BASE_CONTEXT,
+    );
+
+    expect(result.startedAt).toEqual(new Date('2025-01-01T00:00:00.000Z'));
+    expect(result.completedAt).toBeNull();
+  });
+
   it('keeps Jira update time and the latest comment for standup detail', () => {
     const issue = makeIssue({ id: '20', name: 'Review' });
     issue.fields.updated = '2025-01-05T12:00:00.000Z';
