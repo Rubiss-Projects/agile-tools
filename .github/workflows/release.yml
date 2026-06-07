@@ -215,11 +215,14 @@ jobs:
       - name: Run production database migrations
         if: ${{ steps.vars.outputs.prerelease != 'true' }}
         shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.PRISMA_PRODUCTION_DATABASE_URL }}
         run: |
           set -euo pipefail
-          set -a
-          source .vercel/.env.production.local
-          set +a
+          if [[ -z "${DATABASE_URL:-}" ]]; then
+            echo "PRISMA_PRODUCTION_DATABASE_URL GitHub secret is required for production migrations." >&2
+            exit 1
+          fi
           pnpm --filter @agile-tools/db exec prisma migrate deploy
 
       - name: Deploy Vercel production artifact

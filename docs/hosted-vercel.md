@@ -50,13 +50,25 @@ Do not commit `.vercel/`; it is gitignored. CI uses:
 - `VERCEL_TOKEN`
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
+- `PRISMA_PREVIEW_DATABASE_URL`
+- `PRISMA_PRODUCTION_DATABASE_URL`
 
-The production release workflow runs:
+Use the Vercel secrets only for Vercel build/deploy commands. Migration workflows use the Prisma Postgres database URLs directly so a rotated or revoked Vercel token cannot block database migrations.
+
+The preview migration workflow runs:
+
+```bash
+DATABASE_URL="$PRISMA_PREVIEW_DATABASE_URL" \
+pnpm --filter @agile-tools/db exec prisma migrate deploy
+```
+
+The production release workflow builds the Vercel artifact before mutating the production database, then deploys the prebuilt artifact:
 
 ```bash
 vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-pnpm --filter @agile-tools/db exec prisma migrate deploy
 vercel build --prod --token="$VERCEL_TOKEN"
+DATABASE_URL="$PRISMA_PRODUCTION_DATABASE_URL" \
+pnpm --filter @agile-tools/db exec prisma migrate deploy
 vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
 ```
 
@@ -69,7 +81,7 @@ Create separate Prisma Postgres databases:
 - `agile-tools-production`
 - `agile-tools-preview`
 
-These databases share the Prisma account's free quota; separation prevents accidental data overlap but does not isolate quota consumption. Configure production and preview Vercel environments with the corresponding database URL.
+These databases share the Prisma account's free quota; separation prevents accidental data overlap but does not isolate quota consumption. Configure production and preview Vercel environments with the corresponding database URL, and also store the same URLs in GitHub Actions as `PRISMA_PRODUCTION_DATABASE_URL` and `PRISMA_PREVIEW_DATABASE_URL` for migrations.
 
 Before launch, verify `btree_gist` support:
 
@@ -139,8 +151,9 @@ Production Vercel deployment is inside `.github/workflows/release.yml` after:
 2. Default-branch ancestry check.
 3. GHCR image build/publish.
 4. GitHub Release creation or verification.
-5. Production migration.
-6. Vercel production build/deploy.
+5. Vercel production artifact build.
+6. Production migration.
+7. Vercel production deploy.
 
 Stable tags such as `v1.2.3` deploy production. Prereleases such as `v1.2.3-rc.1` do not. Normal `main` pushes do not deploy production.
 
