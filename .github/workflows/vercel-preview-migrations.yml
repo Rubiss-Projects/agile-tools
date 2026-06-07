@@ -27,9 +27,7 @@ jobs:
 
     env:
       NODE_VERSION: '24'
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DATABASE_URL: ${{ secrets.PRISMA_PREVIEW_DATABASE_URL }}
 
     steps:
       - name: Checkout repository
@@ -50,25 +48,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@50.25.4
-
-      - name: Validate Vercel secrets
+      - name: Validate preview database secret
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$VERCEL_TOKEN"
-          test -n "$VERCEL_ORG_ID"
-          test -n "$VERCEL_PROJECT_ID"
-
-      - name: Pull Vercel preview environment
-        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          if [[ -z "${DATABASE_URL:-}" ]]; then
+            echo "PRISMA_PREVIEW_DATABASE_URL GitHub secret is required for preview migrations." >&2
+            exit 1
+          fi
 
       - name: Run preview database migrations
         shell: bash
-        run: |
-          set -euo pipefail
-          set -a
-          source .vercel/.env.preview.local
-          set +a
-          pnpm --filter @agile-tools/db exec prisma migrate deploy
+        run: pnpm --filter @agile-tools/db exec prisma migrate deploy
