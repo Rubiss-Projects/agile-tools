@@ -155,7 +155,7 @@ Production Vercel deployment is inside `.github/workflows/release.yml` after:
 6. Production migration.
 7. Vercel production deploy.
 
-Stable tags such as `v1.2.3` deploy production. Prereleases such as `v1.2.3-rc.1` do not. Normal `main` pushes do not deploy production.
+Stable tags such as `v1.2.3` deploy production. Prereleases such as `v1.2.3-rc.1` do not. Normal `main` pushes do not deploy production. Manual release runs accept a semver tag; if the tag does not exist yet, the workflow creates it at the current default branch HEAD before publishing the release.
 
 ## Upgrade Gates
 
