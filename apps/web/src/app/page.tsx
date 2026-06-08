@@ -1,6 +1,6 @@
 import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import { getPrismaClient, listFlowScopes, listJiraConnections } from '@agile-tools/db';
-import { getConfig, isHostedMode } from '@agile-tools/shared';
+import { isHostedModeFromEnv } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
@@ -30,7 +30,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const hosted = isHostedMode(getConfig());
+  const hosted = isHostedModeFromEnv();
   const ctx = await getWorkspaceContext();
   const demoEnabled = isLocalDemoEnabled();
   const adminBootstrapEnabled = isLocalAdminBootstrapAvailable();

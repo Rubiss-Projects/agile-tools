@@ -1,7 +1,7 @@
 import { CreateOrganization, OrganizationList } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import { getPrismaClient, getWorkspaceByClerkOrgId } from '@agile-tools/db';
-import { getConfig, isHostedMode } from '@agile-tools/shared';
+import { isHostedModeFromEnv } from '@agile-tools/shared';
 
 import { getHostedClerkIdentity } from '@/server/auth';
 import {
@@ -19,7 +19,7 @@ import { WorkspaceOnboardingForm } from '@/components/hosted/workspace-onboardin
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingPage() {
-  if (!isHostedMode(getConfig())) {
+  if (!isHostedModeFromEnv()) {
     redirect('/');
   }
 

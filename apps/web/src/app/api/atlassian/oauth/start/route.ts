@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
+import { isHostedModeFromEnv, logger } from '@agile-tools/shared';
 
 import {
   buildAtlassianAuthorizationUrl,
@@ -23,7 +23,7 @@ function normalizeReturnUrl(request: NextRequest): string {
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
-    if (!isHostedMode(getConfig())) {
+    if (!isHostedModeFromEnv()) {
       return Response.json(
         { code: 'NOT_FOUND', message: 'Jira Cloud OAuth is only available in hosted mode.' },
         { status: 404 },

@@ -1,6 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { getConfig, isHostedMode, resetConfig, resolveDatabaseUrlFromEnv } from './config.js';
+import {
+  getAuthProvider,
+  getConfig,
+  getRuntimeModeConfig,
+  isHostedMode,
+  isHostedModeFromEnv,
+  resetConfig,
+  resolveDatabaseUrlFromEnv,
+} from './config.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -172,6 +180,54 @@ describe('getConfig', () => {
 
     expect(isHostedMode(config)).toBe(true);
     expect(config.ATLASSIAN_CLIENT_ID).toBeUndefined();
+  });
+});
+
+describe('runtime mode config', () => {
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    resetConfig();
+  });
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+    resetConfig();
+  });
+
+  it('reads hosted mode without requiring unrelated operational secrets', () => {
+    delete process.env['DATABASE_URL'];
+    delete process.env['ENCRYPTION_KEY'];
+    process.env['AUTH_PROVIDER'] = 'clerk';
+    process.env['SYNC_BACKEND'] = 'vercel_queues';
+    process.env['JIRA_CONNECTION_POLICY'] = 'cloud_oauth_only';
+
+    expect(getRuntimeModeConfig()).toEqual({
+      AUTH_PROVIDER: 'clerk',
+      SYNC_BACKEND: 'vercel_queues',
+      JIRA_CONNECTION_POLICY: 'cloud_oauth_only',
+    });
+    expect(getAuthProvider()).toBe('clerk');
+    expect(isHostedModeFromEnv()).toBe(true);
+  });
+
+  it('defaults to self-hosted local mode when mode variables are absent', () => {
+    delete process.env['AUTH_PROVIDER'];
+    delete process.env['SYNC_BACKEND'];
+    delete process.env['JIRA_CONNECTION_POLICY'];
+    delete process.env['ENCRYPTION_KEY'];
+
+    expect(getRuntimeModeConfig()).toEqual({
+      AUTH_PROVIDER: 'local_session',
+      SYNC_BACKEND: 'pgboss',
+      JIRA_CONNECTION_POLICY: 'self_hosted_tokens',
+    });
+    expect(isHostedModeFromEnv()).toBe(false);
+  });
+
+  it('still rejects invalid mode variable values', () => {
+    process.env['AUTH_PROVIDER'] = 'not-real';
+
+    expect(() => getRuntimeModeConfig()).toThrowError(/AUTH_PROVIDER/);
   });
 });
 

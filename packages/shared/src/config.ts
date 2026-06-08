@@ -141,8 +141,18 @@ const configSchema = z.object({
 });
 
 export type Config = z.infer<typeof configSchema>;
+export type RuntimeModeConfig = Pick<
+  Config,
+  'AUTH_PROVIDER' | 'SYNC_BACKEND' | 'JIRA_CONNECTION_POLICY'
+>;
 
 let _config: Config | undefined;
+
+const runtimeModeSchema = z.object({
+  AUTH_PROVIDER: AuthProviderSchema.default('local_session'),
+  SYNC_BACKEND: SyncBackendSchema.default('pgboss'),
+  JIRA_CONNECTION_POLICY: JiraConnectionPolicySchema.default('self_hosted_tokens'),
+});
 
 function buildConfigInput(): NodeJS.ProcessEnv {
   return {
@@ -215,12 +225,33 @@ export function getConfig(): Config {
   return _config;
 }
 
-export function isHostedMode(config: Config = getConfig()): boolean {
+export function isHostedMode(config: RuntimeModeConfig = getConfig()): boolean {
   return (
     config.AUTH_PROVIDER === 'clerk' &&
     config.SYNC_BACKEND === 'vercel_queues' &&
     config.JIRA_CONNECTION_POLICY === 'cloud_oauth_only'
   );
+}
+
+export function getRuntimeModeConfig(): RuntimeModeConfig {
+  const result = runtimeModeSchema.safeParse(process.env);
+  if (!result.success) {
+    throw new Error(
+      `Invalid runtime mode configuration:\n${result.error.issues
+        .map((i) => `  ${i.path.join('.')}: ${i.message}`)
+        .join('\n')}`,
+    );
+  }
+
+  return result.data;
+}
+
+export function getAuthProvider(): AuthProvider {
+  return getRuntimeModeConfig().AUTH_PROVIDER;
+}
+
+export function isHostedModeFromEnv(): boolean {
+  return isHostedMode(getRuntimeModeConfig());
 }
 
 export function getHostedLaunchTier(config: Config = getConfig()): HostedLaunchTier {

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
+import { isHostedModeFromEnv, logger } from '@agile-tools/shared';
 
 import {
   completeAtlassianOAuthConnection,
@@ -25,7 +25,7 @@ function isClerkOrgAdmin(orgRole: string | null): boolean {
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
-  if (!isHostedMode(getConfig())) {
+  if (!isHostedModeFromEnv()) {
     return Response.json(
       { code: 'NOT_FOUND', message: 'Jira Cloud OAuth is only available in hosted mode.' },
       { status: 404 },

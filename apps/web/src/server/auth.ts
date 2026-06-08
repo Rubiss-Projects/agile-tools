@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import type { NextRequest, NextResponse } from 'next/server';
-import { getConfig, logger } from '@agile-tools/shared';
+import { getAuthProvider, logger } from '@agile-tools/shared';
 import { getPrismaClient, getWorkspaceByClerkOrgId } from '@agile-tools/db';
 import { ResponseError } from './errors';
 import {
@@ -51,7 +51,7 @@ interface ClerkOrganizationClient {
  * contract.
  */
 export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
-  if (getConfig().AUTH_PROVIDER === 'clerk') {
+  if (getAuthProvider() === 'clerk') {
     return getClerkWorkspaceContext();
   }
 
