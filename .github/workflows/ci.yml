@@ -25,6 +25,7 @@ env:
   COMPOSE_CI_DEFAULT_SYNC_INTERVAL_MINUTES: '10'
   COMPOSE_CI_LOG_LEVEL: 'warn'
   COMPOSE_CI_ALLOW_LOOPBACK_HTTP_BYPASS: 'true'
+  CI_POSTGRES_IMAGE: 'postgres:16-alpine'
 
 jobs:
   docker-build:
@@ -139,7 +140,7 @@ jobs:
             sleep 2
           done
 
-          echo "Compose web service did not become healthy in time."
+          echo "Compose web service did not become healthy after $attempt attempts."
           exit 1
 
       - name: Verify runtime services are running
@@ -186,6 +187,24 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - &prepull-testcontainers-postgres
+        name: Pre-pull Testcontainers PostgreSQL image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3; do
+            if docker pull "$CI_POSTGRES_IMAGE"; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+
+            sleep $((attempt * 10))
+          done
 
       - name: Lint
         run: pnpm lint
@@ -236,6 +255,8 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @agile-tools/db exec prisma generate
 
+      - *prepull-testcontainers-postgres
+
       - name: Run contract tests
         run: pnpm test:contract
 
@@ -266,6 +287,8 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - *prepull-testcontainers-postgres
 
       - name: Run integration tests
         run: pnpm test:integration
@@ -345,7 +368,7 @@ jobs:
             sleep 2
           done
 
-          echo "Web application did not become ready in time."
+          echo "Web application did not become ready after $attempt attempts."
           cat /tmp/agile-tools-web.log
           exit 1
 
@@ -399,6 +422,8 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @agile-tools/db exec prisma generate
+
+      - *prepull-testcontainers-postgres
 
       - name: Run performance benchmarks
         run: pnpm test:perf
