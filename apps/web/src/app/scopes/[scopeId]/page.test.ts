@@ -26,6 +26,7 @@ vi.mock('@/server/views/scope-summary', () => ({
 
 vi.mock('@/components/admin/trigger-sync-button', () => ({
   TriggerSyncButton: () => null,
+  SyncCompletionRefresh: () => null,
 }));
 
 vi.mock('@/components/admin/hold-definition-form', () => ({
