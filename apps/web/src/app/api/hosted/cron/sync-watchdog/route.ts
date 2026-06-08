@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
+import { getConfig, isHostedModeFromEnv, logger } from '@agile-tools/shared';
 
 import { scheduleHostedSyncTick, shouldReseedHostedSyncTick } from '@/server/hosted-sync';
 
@@ -12,7 +12,7 @@ function hasValidCronSecret(request: NextRequest): boolean {
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
-  if (!isHostedMode(getConfig())) {
+  if (!isHostedModeFromEnv()) {
     return Response.json(
       { code: 'NOT_FOUND', message: 'Hosted cron is only available in hosted mode.' },
       { status: 404 },

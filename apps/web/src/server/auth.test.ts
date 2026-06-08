@@ -46,6 +46,13 @@ describe('getWorkspaceContext', () => {
     expect(await getWorkspaceContext()).toBeNull();
   });
 
+  it('does not require encryption config just to resolve an unauthenticated local-session request', async () => {
+    delete process.env['ENCRYPTION_KEY'];
+    vi.mocked(cookies).mockReturnValue(makeCookieStore(null) as never);
+
+    await expect(getWorkspaceContext()).resolves.toBeNull();
+  });
+
   it('returns null when the fallback is enabled but READONLY_WORKSPACE_ID is missing', async () => {
     process.env['ALLOW_READONLY_WORKSPACE_FALLBACK'] = 'true';
     vi.mocked(cookies).mockReturnValue(makeCookieStore(null) as never);

@@ -1,9 +1,12 @@
 export {
   AuthProviderSchema,
+  getAuthProvider,
   getConfig,
   getHostedLaunchTier,
+  getRuntimeModeConfig,
   HostedLaunchTierSchema,
   isHostedMode,
+  isHostedModeFromEnv,
   JiraConnectionPolicySchema,
   resetConfig,
   resolveDatabaseUrlFromEnv,
@@ -14,6 +17,7 @@ export type {
   Config,
   HostedLaunchTier,
   JiraConnectionPolicy,
+  RuntimeModeConfig,
   SyncBackend,
 } from './config.js';
 

@@ -6,7 +6,7 @@ import {
   getWorkspaceByClerkOrgId,
   reserveHostedCapacity,
 } from '@agile-tools/db';
-import { getConfig, isHostedMode, logger, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
+import { isHostedModeFromEnv, logger, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
 
 import { getHostedClerkIdentity } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
@@ -24,7 +24,7 @@ const CreateHostedWorkspaceRequestSchema = z.object({
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
-    if (!isHostedMode(getConfig())) {
+    if (!isHostedModeFromEnv()) {
       return Response.json(
         { code: 'NOT_FOUND', message: 'Hosted onboarding is only available in hosted mode.' },
         { status: 404 },
