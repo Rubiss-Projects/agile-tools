@@ -3,7 +3,7 @@ import { getPrismaClient, listSyncRuns } from '@agile-tools/db';
 import { InvalidTimeZoneError, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { buildScopeSummary } from '@/server/views/scope-summary';
-import { TriggerSyncButton } from '@/components/admin/trigger-sync-button';
+import { SyncCompletionRefresh, TriggerSyncButton } from '@/components/admin/trigger-sync-button';
 import { HoldDefinitionForm } from '@/components/admin/hold-definition-form';
 import { FlowAnalyticsSection } from '@/components/flow/flow-analytics-section';
 import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
@@ -174,6 +174,7 @@ export default async function ScopePage({
     ? formatScopeTimestamp(lastSync.finishedAt, scope.timezone)
     : null;
   const lastSyncFinishedAt = lastSync?.finishedAt ?? null;
+  const flowAnalyticsKey = lastSync?.dataVersion ?? lastSync?.id ?? 'no-sync';
   const lastSyncTimeNode = lastSyncFinishedAt && formattedLastSyncAt
     ? (
       <ViewerLocalTime
@@ -264,6 +265,7 @@ export default async function ScopePage({
               </div>
             </div>
             <FlowAnalyticsSection
+              key={flowAnalyticsKey}
               scopeId={scopeId}
               filterOptions={{
                 ...(filterOptions.issueTypes !== undefined && { issueTypes: filterOptions.issueTypes }),
@@ -361,7 +363,9 @@ export default async function ScopePage({
         ) : (
           <p style={sectionCopyStyle}>No sync runs yet.</p>
         )}
-        {ctx.role === 'admin' && <TriggerSyncButton scopeId={scopeId} />}
+        {ctx.role === 'admin'
+          ? <TriggerSyncButton scopeId={scopeId} activeSyncRunId={activeSync?.id ?? null} />
+          : <SyncCompletionRefresh syncRunId={activeSync?.id ?? null} />}
         </section>
       </div>
     </main>
