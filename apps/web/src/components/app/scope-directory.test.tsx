@@ -3,7 +3,7 @@
 import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ScopeDirectory, type HomeScopeSummary } from './scope-directory';
 
@@ -42,6 +42,10 @@ const scopes: HomeScopeSummary[] = [
 
 beforeEach(() => {
   window.localStorage.clear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('ScopeDirectory', () => {
@@ -94,6 +98,23 @@ describe('ScopeDirectory', () => {
     await waitFor(() => {
       const rows = screen.getAllByRole('listitem');
       expect(within(rows[0] as HTMLElement).getByText('Gamma Enablement')).toBeVisible();
+    });
+  });
+
+  it('keeps favorites usable when localStorage writes fail', async () => {
+    const user = userEvent.setup();
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage quota exceeded.', 'QuotaExceededError');
+    });
+
+    render(<ScopeDirectory workspaceId="workspace-1" scopes={scopes} />);
+
+    await user.click(screen.getByRole('button', { name: /add beta platform to favorites/i }));
+
+    expect(setItemSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0] as HTMLElement).getByText('Beta Platform')).toBeVisible();
     });
   });
 });

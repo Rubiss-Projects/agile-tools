@@ -93,7 +93,11 @@ function readFavoriteIds(storageKey: string): string[] {
 }
 
 function writeFavoriteIds(storageKey: string, favoriteIds: string[]): void {
-  window.localStorage.setItem(storageKey, JSON.stringify(favoriteIds));
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(favoriteIds));
+  } catch {
+    // Favorites still update in memory when browser storage is disabled or full.
+  }
 }
 
 function normalizeSearch(value: string): string {
