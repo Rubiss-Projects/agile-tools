@@ -294,7 +294,7 @@ describe('GET /api/v1/scopes/:scopeId/epic-forecasts', () => {
       expect.objectContaining({
         dataVersion: 'sync-1',
         timezone: 'UTC',
-        now: expect.any(Date),
+        now: new Date('2026-06-01T00:00:00.000Z'),
       }),
     );
     expect(runEpicForecast).toHaveBeenCalledWith(

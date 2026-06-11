@@ -127,6 +127,9 @@ export async function upsertEpicForecastTarget(
       remainingStoryCount: input.remainingStoryCount,
       ...(input.storyCountSource !== undefined ? { storyCountSource: input.storyCountSource } : {}),
       ...(input.epicLinkStoryCount !== undefined ? { epicLinkStoryCount: input.epicLinkStoryCount } : {}),
+      ...(input.storyCountSource !== undefined && input.storyCountSource !== 'epic_link'
+        ? { epicLinkIssueKeys: [] }
+        : {}),
       ...(input.jiraStoryCount !== undefined ? { jiraStoryCount: input.jiraStoryCount } : {}),
       ...(input.manualStoryCount !== undefined ? { manualStoryCount: input.manualStoryCount } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
@@ -153,9 +156,28 @@ export async function updateEpicForecastTargetById(
   targetId: string,
   input: UpdateEpicForecastTargetInput,
 ): Promise<EpicForecastTargetRow | null> {
+  const existing = await db.epicForecastTarget.findFirst({
+    where: { id: targetId, scopeId },
+    select: {
+      jiraIssueKey: true,
+      storyCountSource: true,
+    },
+  });
+  if (!existing) {
+    return null;
+  }
+
+  const shouldClearEpicLinkIssueKeys =
+    input.storyCountSource !== 'epic_link' ||
+    existing.jiraIssueKey !== input.jiraIssueKey ||
+    existing.storyCountSource !== input.storyCountSource;
+
   const updated = await db.epicForecastTarget.updateMany({
     where: { id: targetId, scopeId },
-    data: input,
+    data: {
+      ...input,
+      ...(shouldClearEpicLinkIssueKeys ? { epicLinkIssueKeys: [] } : {}),
+    },
   });
   if (updated.count === 0) {
     return null;

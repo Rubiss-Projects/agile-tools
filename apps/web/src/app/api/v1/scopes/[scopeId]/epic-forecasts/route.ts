@@ -264,6 +264,7 @@ async function handleGET(
     const historicalDailyThroughput = completeDays.map((day) => day.completedStoryCount);
     const sampleSize = getCompletedStoryCount(completeDays);
     const now = new Date();
+    const progressReferenceDate = dataVersionResult.syncedAt;
     const progressEligibleTargets = activeTargetRows.filter(
       (target) => target.storyCountSource === 'epic_link' && target.epicLinkIssueKeys.length > 0,
     );
@@ -283,7 +284,7 @@ async function handleGET(
         queryEpicForecastChildProgress(db, scopeId, progressEligibleTargets, {
           dataVersion: dataVersionResult.dataVersion,
           timezone: scope.timezone,
-          now,
+          now: progressReferenceDate,
         }),
       ]);
     }
