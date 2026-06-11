@@ -625,18 +625,35 @@ describe('runScopeSync', () => {
         status: 'active',
       },
     ]);
-    fetchJqlIssueCountMock.mockResolvedValue(6);
+    streamJqlIssuesMock.mockReturnValue(issueStream(
+      ...Array.from({ length: 6 }, (_, index) =>
+        makeIssue({
+          id: `EPIC-CHILD-${index + 1}`,
+          key: `PROJ-${index + 10}`,
+          projectId: 'proj-board',
+          statusId: '10',
+          statusName: 'In Progress',
+        }),
+      ),
+    ));
 
     await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
 
-    expect(fetchJqlIssueCountMock).toHaveBeenCalledWith(
+    expect(streamJqlIssuesMock).toHaveBeenCalledWith(
       jiraClientStub,
       '"Epic Link" = "PROJ-EPIC-1" AND issuetype in ("story") AND status in ("5", "10", "20")',
+      { fields: 'summary' },
     );
     expect(refreshEpicLinkForecastTargetCountsMock).toHaveBeenCalledWith(
       db,
       'scope-1',
-      new Map([['PROJ-EPIC-1', 6]]),
+      new Map([[
+        'PROJ-EPIC-1',
+        {
+          remainingStoryCount: 6,
+          issueKeys: ['PROJ-10', 'PROJ-11', 'PROJ-12', 'PROJ-13', 'PROJ-14', 'PROJ-15'],
+        },
+      ]]),
     );
   });
 

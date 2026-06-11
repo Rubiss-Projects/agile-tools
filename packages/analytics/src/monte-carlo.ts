@@ -38,6 +38,7 @@ export interface EpicForecastTargetInput {
   summary: string;
   dueDate: string;
   remainingStoryCount: number;
+  effectiveRemainingStoryCount?: number;
   targetDays: number;
 }
 
@@ -232,8 +233,12 @@ export function runEpicForecast(input: EpicForecastInput): EpicForecastSimulatio
   const hasPositiveThroughput = historicalDailyThroughput.some((v) => v > 0);
 
   let cumulativeStoryCount = 0;
+  let cumulativeForecastStoryCount = 0;
+  const cumulativeForecastStoryCounts: number[] = [];
   const results: EpicForecastResult[] = targets.map((target) => {
     cumulativeStoryCount += target.remainingStoryCount;
+    cumulativeForecastStoryCount += resolveEffectiveRemainingStoryCount(target);
+    cumulativeForecastStoryCounts.push(cumulativeForecastStoryCount);
     return {
       targetId: target.id,
       jiraIssueKey: target.jiraIssueKey,
@@ -256,15 +261,16 @@ export function runEpicForecast(input: EpicForecastInput): EpicForecastSimulatio
   for (let i = 0; i < iterations; i++) {
     for (let targetIndex = 0; targetIndex < targets.length; targetIndex++) {
       const target = targets[targetIndex]!;
+      const targetForecastStoryCount = cumulativeForecastStoryCounts[targetIndex]!;
       let completed = 0;
       let days = 0;
-      const maxDays = Math.max(results[targetIndex]!.cumulativeStoryCount * 365, 3650);
-      while (completed < results[targetIndex]!.cumulativeStoryCount && days < maxDays) {
+      const maxDays = Math.max(Math.ceil(targetForecastStoryCount) * 365, 3650);
+      while (completed < targetForecastStoryCount && days < maxDays) {
         completed += sampleDay(historicalDailyThroughput);
         days += 1;
       }
       completionDaysByTarget[targetIndex]!.push(days);
-      if (completed >= results[targetIndex]!.cumulativeStoryCount && days <= target.targetDays) {
+      if (completed >= targetForecastStoryCount && days <= target.targetDays) {
         successes[targetIndex] = successes[targetIndex]! + 1;
       }
     }
@@ -295,6 +301,10 @@ export function runEpicForecast(input: EpicForecastInput): EpicForecastSimulatio
 
 function sampleDay(days: number[]): number {
   return days[Math.floor(Math.random() * days.length)]!;
+}
+
+function resolveEffectiveRemainingStoryCount(target: EpicForecastTargetInput): number {
+  return Math.max(0, target.effectiveRemainingStoryCount ?? target.remainingStoryCount);
 }
 
 /**

@@ -3,6 +3,7 @@ import type {
   EpicStoryCountSource,
 } from '@agile-tools/shared/contracts/epic-forecast';
 import type { PrismaClient } from '@prisma/client';
+import { differenceInWorkingDays } from '@agile-tools/shared';
 
 export interface EpicForecastTargetRow {
   id: string;
@@ -13,6 +14,7 @@ export interface EpicForecastTargetRow {
   remainingStoryCount: number;
   storyCountSource: EpicStoryCountSource;
   epicLinkStoryCount: number | null;
+  epicLinkIssueKeys: string[];
   jiraStoryCount: number | null;
   manualStoryCount: number | null;
   status: EpicForecastTargetStatus;
@@ -49,6 +51,23 @@ export interface UpdateEpicForecastTargetInput {
   status: EpicForecastTargetStatus;
   closedAt: Date | null;
   sortOrder: number;
+}
+
+export interface EpicLinkForecastTargetSnapshot {
+  remainingStoryCount: number;
+  issueKeys: string[];
+}
+
+export interface EpicForecastChildProgressInput {
+  jiraIssueKey: string;
+  epicLinkIssueKeys?: string[];
+}
+
+export interface EpicForecastChildProgressRow {
+  epicIssueKey: string;
+  issueKey: string;
+  ageInDays: number;
+  startedAt: Date;
 }
 
 function resolveManualStoryCount(
@@ -149,10 +168,11 @@ export async function updateEpicForecastTargetById(
 export async function refreshEpicLinkForecastTargetCounts(
   db: PrismaClient,
   scopeId: string,
-  countsByIssueKey: Map<string, number>,
+  snapshotsByIssueKey: Map<string, EpicLinkForecastTargetSnapshot>,
 ): Promise<number> {
   let updatedCount = 0;
-  for (const [jiraIssueKey, remainingStoryCount] of countsByIssueKey) {
+  for (const [jiraIssueKey, snapshot] of snapshotsByIssueKey) {
+    const remainingStoryCount = snapshot.remainingStoryCount;
     const updated = await db.epicForecastTarget.updateMany({
       where: {
         scopeId,
@@ -163,6 +183,7 @@ export async function refreshEpicLinkForecastTargetCounts(
       data: {
         remainingStoryCount,
         epicLinkStoryCount: remainingStoryCount,
+        epicLinkIssueKeys: snapshot.issueKeys,
         ...(remainingStoryCount === 0
           ? { status: 'closed', closedAt: new Date() }
           : { closedAt: null }),
@@ -171,4 +192,71 @@ export async function refreshEpicLinkForecastTargetCounts(
     updatedCount += updated.count;
   }
   return updatedCount;
+}
+
+export async function queryEpicForecastChildProgress(
+  db: PrismaClient,
+  scopeId: string,
+  targets: EpicForecastChildProgressInput[],
+  options?: {
+    dataVersion?: string;
+    timezone?: string;
+    now?: Date;
+  },
+): Promise<Map<string, EpicForecastChildProgressRow[]>> {
+  const issueKeyToEpicKeys = new Map<string, Set<string>>();
+  for (const target of targets) {
+    for (const issueKey of target.epicLinkIssueKeys ?? []) {
+      const normalizedIssueKey = issueKey.toUpperCase();
+      const epicKeys = issueKeyToEpicKeys.get(normalizedIssueKey) ?? new Set<string>();
+      epicKeys.add(target.jiraIssueKey);
+      issueKeyToEpicKeys.set(normalizedIssueKey, epicKeys);
+    }
+  }
+
+  if (issueKeyToEpicKeys.size === 0) {
+    return new Map();
+  }
+
+  const now = options?.now ?? new Date();
+  const timezone = options?.timezone ?? 'UTC';
+  const items = await db.workItem.findMany({
+    where: {
+      scopeId,
+      issueKey: { in: Array.from(issueKeyToEpicKeys.keys()) },
+      completedAt: null,
+      startedAt: { not: null },
+      excludedReason: null,
+      ...(options?.dataVersion ? { lastSyncRunId: options.dataVersion } : {}),
+    },
+    select: {
+      issueKey: true,
+      startedAt: true,
+      createdAt: true,
+    },
+  });
+
+  const progressByEpicKey = new Map<string, EpicForecastChildProgressRow[]>();
+  for (const item of items) {
+    const issueKey = item.issueKey.toUpperCase();
+    const epicKeys = issueKeyToEpicKeys.get(issueKey);
+    const startedAt = item.startedAt ?? item.createdAt;
+    if (!epicKeys || !item.startedAt) {
+      continue;
+    }
+
+    const ageInDays = Math.max(0, differenceInWorkingDays(startedAt, now, timezone));
+    for (const epicIssueKey of epicKeys) {
+      const rows = progressByEpicKey.get(epicIssueKey) ?? [];
+      rows.push({
+        epicIssueKey,
+        issueKey: item.issueKey,
+        ageInDays,
+        startedAt: item.startedAt,
+      });
+      progressByEpicKey.set(epicIssueKey, rows);
+    }
+  }
+
+  return progressByEpicKey;
 }

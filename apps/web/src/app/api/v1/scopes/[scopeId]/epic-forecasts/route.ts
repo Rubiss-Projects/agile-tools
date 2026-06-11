@@ -16,7 +16,9 @@ import {
   getPrismaClient,
   getSyncRunByDataVersion,
   listEpicForecastTargets,
+  queryCompletedStories,
   queryDailyThroughput,
+  queryEpicForecastChildProgress,
   upsertEpicForecastTarget,
 } from '@agile-tools/db';
 import { DEFAULT_MONTE_CARLO_ITERATIONS, runEpicForecast } from '@agile-tools/analytics';
@@ -39,6 +41,8 @@ interface ProblemResponse {
   message: string;
   details?: string[];
 }
+
+const EPIC_PROGRESS_CYCLE_TIME_PERCENTILE = 85;
 
 function buildJiraIssueUrl(baseUrl: string, issueKey: string): string {
   return `${baseUrl.replace(/\/$/, '')}/browse/${encodeURIComponent(issueKey)}`;
@@ -97,6 +101,49 @@ function parseEpicForecastQuery(req: NextRequest): unknown {
     iterations: iterationsParam === null ? undefined : Number(iterationsParam),
     dataVersion: params.get('dataVersion') ?? undefined,
   };
+}
+
+function resolveCycleTimeBaselineDays(cycleTimeDays: number[]): number | null {
+  const sorted = cycleTimeDays
+    .filter((days) => Number.isFinite(days) && days > 0)
+    .sort((a, b) => a - b);
+  if (sorted.length === 0) {
+    return null;
+  }
+
+  const index = Math.floor((EPIC_PROGRESS_CYCLE_TIME_PERCENTILE / 100) * sorted.length);
+  return sorted[Math.min(index, sorted.length - 1)]!;
+}
+
+function resolveEffectiveRemainingStoryCount(
+  target: {
+    jiraIssueKey: string;
+    remainingStoryCount: number;
+    storyCountSource: string;
+  },
+  childProgress: Array<{ ageInDays: number }>,
+  cycleTimeBaselineDays: number | null,
+): number {
+  if (
+    target.storyCountSource !== 'epic_link' ||
+    target.remainingStoryCount <= 0 ||
+    cycleTimeBaselineDays == null ||
+    cycleTimeBaselineDays <= 0 ||
+    childProgress.length === 0
+  ) {
+    return target.remainingStoryCount;
+  }
+
+  const startedChildren = [...childProgress]
+    .sort((a, b) => b.ageInDays - a.ageInDays)
+    .slice(0, target.remainingStoryCount);
+  const startedEffectiveRemaining = startedChildren.reduce((total, child) => {
+    const progress = Math.min(1, Math.max(0, child.ageInDays / cycleTimeBaselineDays));
+    return total + (1 - progress);
+  }, 0);
+  const unstartedOrUnknownCount = Math.max(0, target.remainingStoryCount - startedChildren.length);
+
+  return Math.round((unstartedOrUnknownCount + startedEffectiveRemaining) * 1000) / 1000;
 }
 
 async function resolveDataVersion(
@@ -180,7 +227,7 @@ async function handleGET(
     }
     const targets = await listEpicForecastTargets(db, scopeId);
     const serializedTargets = targets.map((target) => serializeTarget(target, connection.baseUrl));
-    const activeTargets = serializedTargets.filter((target) => target.status === 'active');
+    const activeTargetRows = targets.filter((target) => target.status === 'active');
     const sampleWindow = resolveSampleWindow(
       {
         sampleMode: request.sampleMode,
@@ -216,19 +263,49 @@ async function handleGET(
     const completeDays = getForecastSampleDays(allDays);
     const historicalDailyThroughput = completeDays.map((day) => day.completedStoryCount);
     const sampleSize = getCompletedStoryCount(completeDays);
-    const todayLocal = formatDateInTimezone(new Date(), scope.timezone);
+    const now = new Date();
+    const progressEligibleTargets = activeTargetRows.filter(
+      (target) => target.storyCountSource === 'epic_link' && target.epicLinkIssueKeys.length > 0,
+    );
+    let cycleTimeBaselineDays: number | null = null;
+    let childProgressByEpic = new Map<string, Array<{ ageInDays: number }>>();
+    if (progressEligibleTargets.length > 0 && completeDays.length > 0) {
+      [cycleTimeBaselineDays, childProgressByEpic] = await Promise.all([
+        queryCompletedStories(db, scopeId, {
+          dataVersion: dataVersionResult.dataVersion,
+          timezone: scope.timezone,
+          anchorDate: dataVersionResult.syncedAt,
+          sampleStartDate: completeDays[0]!.day,
+          sampleEndDate: completeDays[completeDays.length - 1]!.day,
+        }).then((stories) =>
+          resolveCycleTimeBaselineDays(stories.map((story) => story.cycleTimeDays)),
+        ),
+        queryEpicForecastChildProgress(db, scopeId, progressEligibleTargets, {
+          dataVersion: dataVersionResult.dataVersion,
+          timezone: scope.timezone,
+          now,
+        }),
+      ]);
+    }
+    const todayLocal = formatDateInTimezone(now, scope.timezone);
     const simulation = runEpicForecast({
       historicalDailyThroughput,
       sampleSize,
       iterations,
       confidenceLevels: [50, 70, 85, 95],
       timezone: scope.timezone,
-      targets: activeTargets.map((target) => ({
+      referenceDate: now,
+      targets: activeTargetRows.map((target) => ({
         id: target.id,
         jiraIssueKey: target.jiraIssueKey,
         summary: target.summary,
         dueDate: target.dueDate,
         remainingStoryCount: target.remainingStoryCount,
+        effectiveRemainingStoryCount: resolveEffectiveRemainingStoryCount(
+          target,
+          childProgressByEpic.get(target.jiraIssueKey) ?? [],
+          cycleTimeBaselineDays,
+        ),
         targetDays: Math.max(0, countWorkingDaysBetweenDates(todayLocal, target.dueDate)),
       })),
     });

@@ -41,6 +41,49 @@ describe('runEpicForecast', () => {
     ]);
   });
 
+  it('uses effective remaining story counts for simulation while preserving displayed counts', () => {
+    const result = runEpicForecast({
+      historicalDailyThroughput: [1],
+      sampleSize: 90,
+      iterations: 1000,
+      targets: [
+        {
+          id: 'target-1',
+          jiraIssueKey: 'PROJ-1',
+          summary: 'First epic',
+          dueDate: '2026-07-01',
+          remainingStoryCount: 3,
+          effectiveRemainingStoryCount: 1,
+          targetDays: 1,
+        },
+        {
+          id: 'target-2',
+          jiraIssueKey: 'PROJ-2',
+          summary: 'Second epic',
+          dueDate: '2026-07-08',
+          remainingStoryCount: 4,
+          effectiveRemainingStoryCount: 4,
+          targetDays: 5,
+        },
+      ],
+    });
+
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        targetId: 'target-1',
+        remainingStoryCount: 3,
+        cumulativeStoryCount: 3,
+        completionChance: 100,
+      }),
+      expect.objectContaining({
+        targetId: 'target-2',
+        remainingStoryCount: 4,
+        cumulativeStoryCount: 7,
+        completionChance: 100,
+      }),
+    ]);
+  });
+
   it('keeps targets visible but marks chance unavailable when there is no throughput', () => {
     const result = runEpicForecast({
       historicalDailyThroughput: [0, 0, 0],

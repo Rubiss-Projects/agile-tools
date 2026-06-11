@@ -23,7 +23,9 @@ vi.mock('@agile-tools/db', () => ({
   getPrismaClient: vi.fn(() => ({})),
   getSyncRunByDataVersion: vi.fn(),
   listEpicForecastTargets: vi.fn(),
+  queryCompletedStories: vi.fn(),
   queryDailyThroughput: vi.fn(),
+  queryEpicForecastChildProgress: vi.fn(),
   upsertEpicForecastTarget: vi.fn(),
 }));
 
@@ -35,7 +37,9 @@ const {
   getLastSucceededSyncRun,
   getSyncRunByDataVersion,
   listEpicForecastTargets,
+  queryCompletedStories,
   queryDailyThroughput,
+  queryEpicForecastChildProgress,
   upsertEpicForecastTarget,
 } = await import('@agile-tools/db');
 const { runEpicForecast } = await import('@agile-tools/analytics');
@@ -50,6 +54,7 @@ const activeTarget = {
   remainingStoryCount: 8,
   storyCountSource: 'epic_link',
   epicLinkStoryCount: 8,
+  epicLinkIssueKeys: [],
   jiraStoryCount: 12,
   manualStoryCount: 10,
   status: 'active',
@@ -95,6 +100,8 @@ describe('GET /api/v1/scopes/:scopeId/epic-forecasts', () => {
       { day: '2026-05-31', completedStoryCount: 3, complete: true },
       { day: '2026-06-01', completedStoryCount: 40, complete: false },
     ] as never);
+    vi.mocked(queryCompletedStories).mockResolvedValue([] as never);
+    vi.mocked(queryEpicForecastChildProgress).mockResolvedValue(new Map() as never);
     vi.mocked(runEpicForecast).mockReturnValue({
       warnings: [],
       results: [
@@ -222,6 +229,84 @@ describe('GET /api/v1/scopes/:scopeId/epic-forecasts', () => {
       jiraIssueKey: 'AG-EPIC-1',
       completionChance: 99.8,
     });
+  });
+
+  it('prorates Epic Link story counts by synced in-progress child age', async () => {
+    const targetWithChildren = {
+      ...activeTarget,
+      remainingStoryCount: 3,
+      epicLinkStoryCount: 3,
+      epicLinkIssueKeys: ['AG-101', 'AG-102', 'AG-103'],
+    };
+    vi.mocked(listEpicForecastTargets).mockResolvedValue([targetWithChildren] as never);
+    vi.mocked(queryCompletedStories).mockResolvedValue([
+      {
+        workItemId: 'completed-1',
+        issueKey: 'AG-1',
+        completedAt: new Date('2026-05-30T12:00:00.000Z'),
+        cycleTimeDays: 10,
+        holdTimeDays: 0,
+        reopenedCount: 0,
+      },
+    ] as never);
+    vi.mocked(queryEpicForecastChildProgress).mockResolvedValue(
+      new Map([
+        [
+          'AG-EPIC-1',
+          [
+            {
+              epicIssueKey: 'AG-EPIC-1',
+              issueKey: 'AG-101',
+              ageInDays: 5,
+              startedAt: new Date('2026-05-25T12:00:00.000Z'),
+            },
+            {
+              epicIssueKey: 'AG-EPIC-1',
+              issueKey: 'AG-102',
+              ageInDays: 10,
+              startedAt: new Date('2026-05-20T12:00:00.000Z'),
+            },
+          ],
+        ],
+      ]),
+    );
+
+    const response = await GET(
+      new NextRequest(`http://localhost/api/v1/scopes/${scopeId}/epic-forecasts?historicalWindowDays=90`),
+      { params: Promise.resolve({ scopeId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(queryCompletedStories).toHaveBeenCalledWith(
+      expect.anything(),
+      scopeId,
+      expect.objectContaining({
+        dataVersion: 'sync-1',
+        sampleStartDate: '2026-05-30',
+        sampleEndDate: '2026-05-31',
+        timezone: 'UTC',
+      }),
+    );
+    expect(queryEpicForecastChildProgress).toHaveBeenCalledWith(
+      expect.anything(),
+      scopeId,
+      [targetWithChildren],
+      expect.objectContaining({
+        dataVersion: 'sync-1',
+        timezone: 'UTC',
+        now: expect.any(Date),
+      }),
+    );
+    expect(runEpicForecast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targets: [
+          expect.objectContaining({
+            remainingStoryCount: 3,
+            effectiveRemainingStoryCount: 1.5,
+          }),
+        ],
+      }),
+    );
   });
 });
 

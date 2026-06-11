@@ -715,7 +715,7 @@ async function refreshEpicForecastTargetsAfterSync(
     return;
   }
 
-  const countsByIssueKey = new Map<string, number>();
+  const snapshotsByIssueKey = new Map<string, { remainingStoryCount: number; issueKeys: string[] }>();
   await Promise.all(
     epicLinkTargets.map(async (target) => {
       const jql = buildEpicRemainingStoriesJql(
@@ -723,17 +723,23 @@ async function refreshEpicForecastTargetsAfterSync(
         input.issueTypeIds,
         input.countableStatusIds,
       );
-      countsByIssueKey.set(
-        target.jiraIssueKey,
-        jql ? await fetchJqlIssueCount(jiraClient, jql) : 0,
-      );
+      const issueKeys: string[] = [];
+      if (jql) {
+        for await (const issue of streamJqlIssues(jiraClient, jql, { fields: 'summary' })) {
+          issueKeys.push(issue.key);
+        }
+      }
+      snapshotsByIssueKey.set(target.jiraIssueKey, {
+        remainingStoryCount: issueKeys.length,
+        issueKeys,
+      });
     }),
   );
 
   const updatedCount = await refreshEpicLinkForecastTargetCounts(
     db,
     input.scopeId,
-    countsByIssueKey,
+    snapshotsByIssueKey,
   );
   logger.info('Epic forecast targets refreshed after sync', {
     scopeId: input.scopeId,
