@@ -39,16 +39,28 @@ export interface CompletedStoryRow {
 export async function queryCompletedStories(
   db: PrismaClient,
   scopeId: string,
-  options?: { windowDays?: number; dataVersion?: string; timezone?: string },
+  options?: {
+    windowDays?: number;
+    dataVersion?: string;
+    timezone?: string;
+    sampleStartDate?: string;
+    sampleEndDate?: string;
+    anchorDate?: Date;
+  },
 ): Promise<CompletedStoryRow[]> {
   const windowDays = options?.windowDays ?? DEFAULT_COMPLETED_WINDOW_DAYS;
-  const windowStart = new Date(Date.now() - windowDays * MS_PER_DAY);
   const timezone = options?.timezone ?? 'UTC';
+  const anchorDate = options?.anchorDate ?? new Date();
+  const anchorLocalDate = sharedFormatDateInTimezone(anchorDate, timezone);
+  const sampleStartDate = options?.sampleStartDate ?? addLocalDateDays(anchorLocalDate, -windowDays);
+  const sampleEndDate = options?.sampleEndDate ?? anchorLocalDate;
+  const queryStart = new Date(`${addLocalDateDays(sampleStartDate, -2)}T00:00:00.000Z`);
+  const queryEnd = new Date(`${addLocalDateDays(sampleEndDate, 2)}T23:59:59.999Z`);
 
   const items = await db.workItem.findMany({
     where: {
       scopeId,
-      completedAt: { not: null, gte: windowStart },
+      completedAt: { not: null, gte: queryStart, lte: queryEnd },
       excludedReason: null,
       ...(options?.dataVersion ? { lastSyncRunId: options.dataVersion } : {}),
     },
@@ -56,7 +68,12 @@ export async function queryCompletedStories(
     orderBy: { completedAt: 'asc' },
   });
 
-  return items.map((item) => {
+  return items.flatMap((item) => {
+    const completedLocalDate = sharedFormatDateInTimezone(item.completedAt!, timezone);
+    if (completedLocalDate < sampleStartDate || completedLocalDate > sampleEndDate) {
+      return [];
+    }
+
     const referenceDate = item.startedAt ?? item.createdAt;
     const cycleTimeDays = differenceInWorkingDays(referenceDate, item.completedAt!, timezone);
 
@@ -67,14 +84,14 @@ export async function queryCompletedStories(
     }
     const holdTimeDays = totalHoldMs / MS_PER_DAY;
 
-    return {
+    return [{
       workItemId: item.id,
       issueKey: item.issueKey,
       completedAt: item.completedAt!,
       cycleTimeDays,
       holdTimeDays,
       reopenedCount: item.reopenedCount,
-    };
+    }];
   });
 }
 

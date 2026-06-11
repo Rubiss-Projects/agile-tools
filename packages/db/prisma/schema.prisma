@@ -404,6 +404,7 @@ model EpicForecastTarget {
   remainingStoryCount Int
   storyCountSource    String    @default("manual")
   epicLinkStoryCount  Int?
+  epicLinkIssueKeys   String[]  @default([])
   jiraStoryCount      Int?
   manualStoryCount    Int?
   status              String    @default("active")
