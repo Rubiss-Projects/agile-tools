@@ -5,6 +5,7 @@ import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
 import { LocalBootstrapForm } from '@/components/app/demo-bootstrap-form';
+import { ScopeDirectory, type HomeScopeSummary } from '@/components/app/scope-directory';
 import { buildJiraBoardUrl } from '@/lib/jira-links';
 import {
   buttonStyle,
@@ -14,12 +15,10 @@ import {
   heroCopyStyle,
   heroTitleStyle,
   itemCardStyle,
-  linkStyle,
   pageShellStyle,
   palette,
   sectionCardStyle,
   sectionCopyStyle,
-  sectionStackStyle,
   sectionTitleStyle,
   statCardStyle,
   statGridStyle,
@@ -141,7 +140,23 @@ export default async function HomePage() {
     listJiraConnections(db, ctx.workspaceId),
     listFlowScopes(db, ctx.workspaceId),
   ]);
-  const jiraBaseUrlByConnectionId = new Map(connections.map((connection) => [connection.id, connection.baseUrl]));
+  const jiraBaseUrlByConnectionId = new Map(
+    connections.map((connection) => [connection.id, connection.siteUrl ?? connection.baseUrl]),
+  );
+  const scopeSummaries: HomeScopeSummary[] = scopes.map((scope) => {
+    const jiraBaseUrl = jiraBaseUrlByConnectionId.get(scope.connectionId);
+
+    return {
+      id: scope.id,
+      boardId: scope.boardId,
+      boardName: scope.boardName,
+      timezone: scope.timezone,
+      includedIssueTypeNames: scope.includedIssueTypeNames,
+      syncIntervalMinutes: scope.syncIntervalMinutes,
+      status: scope.status,
+      jiraDashboardUrl: jiraBaseUrl ? buildJiraBoardUrl(jiraBaseUrl, scope.boardId) : null,
+    };
+  });
 
   return (
     <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
@@ -196,54 +211,7 @@ export default async function HomePage() {
       </section>
 
       <section style={{ ...sectionCardStyle, marginTop: '1.5rem' }}>
-        <h2 style={sectionTitleStyle}>Available scopes</h2>
-        {scopes.length === 0 ? (
-          <p style={sectionCopyStyle}>No scopes are configured in this workspace yet.</p>
-        ) : (
-          <div style={sectionStackStyle}>
-            {scopes.map((scope) => {
-              const jiraBaseUrl = jiraBaseUrlByConnectionId.get(scope.connectionId);
-              const jiraDashboardUrl = jiraBaseUrl ? buildJiraBoardUrl(jiraBaseUrl, scope.boardId) : null;
-              return (
-                <div
-                  key={scope.id}
-                  style={{
-                    ...itemCardStyle,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '1rem',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div>
-                    <h3 style={{ ...sectionTitleStyle, fontSize: '1.2rem' }}>{scope.boardName}</h3>
-                    <p style={{ ...sectionCopyStyle, marginTop: '0.5rem' }}>
-                      Board {scope.boardId} · every {scope.syncIntervalMinutes} minutes · {scope.status}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <a href={`/scopes/${scope.id}`} style={linkStyle}>
-                      Scope →
-                    </a>
-                    <a href={`/scopes/${scope.id}/forecast`} style={linkStyle}>
-                      Forecast →
-                    </a>
-                    {jiraDashboardUrl && (
-                      <a
-                        href={jiraDashboardUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={linkStyle}
-                      >
-                        Jira dashboard ↗
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <ScopeDirectory workspaceId={ctx.workspaceId} scopes={scopeSummaries} />
       </section>
     </main>
   );
