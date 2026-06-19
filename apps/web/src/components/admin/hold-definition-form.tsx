@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, type FormEvent } from 'react';
-import type { HoldDefinitionResponse } from '@agile-tools/shared/contracts/api';
+import { useState, useEffect, type CSSProperties, type FormEvent } from 'react';
+import type { HoldDefinitionResponse, HoldStatusOption, NamedValue } from '@agile-tools/shared/contracts/api';
 import { buttonStyle, checkboxChipStyle, insetPanelStyle, noticeStyle, palette, sectionCopyStyle, selectionControlStyle } from '@/components/app/chrome';
 
 interface HoldDefinitionFormProps {
   scopeId: string;
-  availableStatuses?: Array<{ id: string; name: string }>;
+  availableStatuses?: Array<HoldStatusOption | NamedValue>;
 }
 
 export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitionFormProps) {
@@ -74,6 +74,8 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
     );
   }
 
+  const statusOptions = mergeStatusOptions(availableStatuses ?? [], selected);
+
   return (
     <div style={{ marginTop: '1rem', borderTop: `1px solid ${palette.line}`, paddingTop: '1rem' }}>
       <button
@@ -93,13 +95,13 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
           {loading && <p style={sectionCopyStyle}>Loading…</p>}
           {!loading && (
             <form onSubmit={(e) => { void handleSubmit(e); }}>
-              {availableStatuses && availableStatuses.length > 0 ? (
+              {statusOptions.length > 0 ? (
                 <div>
                   <p style={{ margin: '0 0 0.6rem', color: palette.ink, fontWeight: 700 }}>
                     Hold Statuses
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                    {availableStatuses.map((s) => (
+                    {statusOptions.map((s) => (
                       <label
                         key={s.id}
                         style={checkboxChipStyle(selected.includes(s.id))}
@@ -111,7 +113,12 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
                           disabled={saving}
                           style={selectionControlStyle}
                         />
-                        {s.name}
+                        <span>{s.name}</span>
+                        {isHoldStatusOption(s) && (
+                          <span style={holdStatusMetaStyle(s)}>
+                            {formatPlacement(s)}
+                          </span>
+                        )}
                       </label>
                     ))}
                   </div>
@@ -125,7 +132,7 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
               {saved && (
                 <div style={{ ...noticeStyle('success'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>Hold definition saved.</p></div>
               )}
-              {availableStatuses && availableStatuses.length > 0 && (
+              {statusOptions.length > 0 && (
                 <button
                   type="submit"
                   disabled={saving}
@@ -140,4 +147,41 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
       )}
     </div>
   );
+}
+
+function isHoldStatusOption(value: HoldStatusOption | NamedValue): value is HoldStatusOption {
+  return 'placement' in value && 'onBoard' in value;
+}
+
+function mergeStatusOptions(
+  availableStatuses: Array<HoldStatusOption | NamedValue>,
+  selectedStatusIds: string[],
+): Array<HoldStatusOption | NamedValue> {
+  const byId = new Map(availableStatuses.map((status) => [status.id, status]));
+  for (const id of selectedStatusIds) {
+    if (!byId.has(id)) {
+      byId.set(id, { id, name: id });
+    }
+  }
+  return Array.from(byId.values());
+}
+
+function formatPlacement(status: HoldStatusOption): string {
+  if (status.placement === 'off_board') return 'off-board';
+  if (status.placement === 'before_start') return 'before start';
+  if (status.placement === 'done') return 'done';
+  return 'in flow';
+}
+
+function holdStatusMetaStyle(status: HoldStatusOption): CSSProperties {
+  return {
+    marginLeft: '0.15rem',
+    padding: '0.08rem 0.35rem',
+    borderRadius: '999px',
+    border: `1px solid ${status.placement === 'off_board' ? palette.warning : palette.lineStrong}`,
+    color: status.placement === 'off_board' ? palette.warning : palette.muted,
+    fontSize: '0.68rem',
+    lineHeight: 1.25,
+    whiteSpace: 'nowrap',
+  };
 }

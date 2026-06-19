@@ -276,7 +276,7 @@ export default async function ScopePage({
                 footer: (
                   <HoldDefinitionForm
                     scopeId={scopeId}
-                    {...(filterOptions.statuses !== undefined && { availableStatuses: filterOptions.statuses })}
+                    {...(filterOptions.holdStatuses !== undefined && { availableStatuses: filterOptions.holdStatuses })}
                   />
                 ),
               })}

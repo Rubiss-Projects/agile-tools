@@ -24,6 +24,20 @@ export const NamedValueSchema = z.object({
 });
 export type NamedValue = z.infer<typeof NamedValueSchema>;
 
+export const HoldStatusPlacementSchema = z.enum([
+  'before_start',
+  'in_flow',
+  'done',
+  'off_board',
+]);
+export type HoldStatusPlacement = z.infer<typeof HoldStatusPlacementSchema>;
+
+export const HoldStatusOptionSchema = NamedValueSchema.extend({
+  placement: HoldStatusPlacementSchema,
+  onBoard: z.boolean(),
+});
+export type HoldStatusOption = z.infer<typeof HoldStatusOptionSchema>;
+
 // ─── Connections ─────────────────────────────────────────────────────────────
 
 export const ConnectionHealthStatusSchema = z.enum([
@@ -105,6 +119,7 @@ export const BoardDiscoveryDetailSchema = z.object({
   columns: z.array(BoardColumnSchema),
   statuses: z.array(NamedValueSchema),
   completionStatuses: z.array(NamedValueSchema).optional(),
+  workflowStatuses: z.array(NamedValueSchema).optional(),
   issueTypes: z.array(NamedValueSchema),
   blockedFields: z.array(NamedValueSchema).optional(),
 });
@@ -187,6 +202,7 @@ export const ScopeSummarySchema = z.object({
     .object({
       issueTypes: z.array(NamedValueSchema).optional(),
       statuses: z.array(NamedValueSchema).optional(),
+      holdStatuses: z.array(HoldStatusOptionSchema).optional(),
       historicalWindows: z.array(z.number().int()).optional(),
     })
     .optional(),
@@ -253,6 +269,23 @@ export const FlowPointSchema = z.object({
 });
 export type FlowPoint = z.infer<typeof FlowPointSchema>;
 
+export const HoldReviewItemSchema = z.object({
+  workItemId: z.string().uuid(),
+  issueKey: z.string(),
+  summary: z.string(),
+  issueType: z.string().optional(),
+  currentStatus: z.string(),
+  currentColumn: z.string().optional(),
+  assigneeName: z.string().optional(),
+  placement: HoldStatusPlacementSchema,
+  holdStartedAt: z.string().datetime(),
+  holdAgeDays: z.number(),
+  flowAgeDays: z.number().optional(),
+  totalHoldHours: z.number().optional(),
+  jiraUrl: z.string().url().optional(),
+});
+export type HoldReviewItem = z.infer<typeof HoldReviewItemSchema>;
+
 export const FlowAnalyticsResponseSchema = z.object({
   scopeId: z.string().uuid(),
   dataVersion: z.string(),
@@ -263,6 +296,7 @@ export const FlowAnalyticsResponseSchema = z.object({
   agingModel: AgingModelSchema,
   columnAgingModels: z.array(ColumnAgingModelSchema).optional(),
   points: z.array(FlowPointSchema),
+  holdItems: z.array(HoldReviewItemSchema).optional(),
 });
 export type FlowAnalyticsResponse = z.infer<typeof FlowAnalyticsResponseSchema>;
 

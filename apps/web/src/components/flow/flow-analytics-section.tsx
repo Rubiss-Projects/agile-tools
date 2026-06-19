@@ -7,6 +7,7 @@ import { FlowFiltersPanel } from './flow-filters';
 import type { FlowFilters, FilterOptions } from './flow-filters';
 import { AgingScatterPlot } from './aging-scatter-plot';
 import { ColumnAgingScatterPlot } from './column-aging-scatter-plot';
+import { HoldReviewPanel } from './hold-review-panel';
 import { AgingThresholdDrawer } from './aging-threshold-drawer';
 import { WorkItemDetailDrawer } from './work-item-detail-drawer';
 import { buttonStyle, codeStyle, insetPanelStyle, noticeStyle, palette, tonePillStyle } from '@/components/app/chrome';
@@ -29,7 +30,7 @@ const DEFAULT_FILTERS: FlowFilters = {
 const FILTER_STORAGE_PREFIX = 'agile-tools:flow-filters:v1:';
 const VIEW_STORAGE_PREFIX = 'agile-tools:flow-chart-view:v1:';
 const HIDE_EMPTY_COLUMNS_STORAGE_PREFIX = 'agile-tools:flow-hide-empty-columns:v1:';
-type FlowChartView = 'global' | 'column';
+type FlowChartView = 'global' | 'column' | 'hold';
 
 function storageKey(scopeId: string): string {
   return `${FILTER_STORAGE_PREFIX}${scopeId}`;
@@ -143,7 +144,8 @@ function loadStoredView(scopeId: string): FlowChartView {
   if (typeof window === 'undefined') return 'global';
   try {
     const value = window.localStorage.getItem(viewStorageKey(scopeId));
-    return value === 'column' ? 'column' : 'global';
+    if (value === 'column' || value === 'hold') return value;
+    return 'global';
   } catch {
     return 'global';
   }
@@ -335,6 +337,13 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
                 >
                   Column aging
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleChartViewChange('hold')}
+                  style={buttonStyle(chartView === 'hold' ? 'primary' : 'secondary')}
+                >
+                  Hold review
+                </button>
                 {chartView === 'column' && (
                   <label
                     style={{
@@ -361,12 +370,19 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
                 )}
               </div>
               <span style={{ color: palette.soft, fontSize: '0.8rem', alignSelf: 'center' }}>
-                {chartView === 'column'
+                {chartView === 'hold'
+                  ? 'Current hold items for standup review.'
+                  : chartView === 'column'
                   ? 'Current-column dwell with per-column thresholds.'
                   : 'Whole-flow age with global thresholds.'}
               </span>
             </div>
-            {chartView === 'column' ? (
+            {chartView === 'hold' ? (
+              <HoldReviewPanel
+                holdItems={response?.holdItems ?? []}
+                onItemSelect={handleItemSelect}
+              />
+            ) : chartView === 'column' ? (
               <ColumnAgingScatterPlot
                 viewModel={viewModel}
                 onItemSelect={handleItemSelect}
@@ -386,6 +402,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
       </div>
 
       {/* Legend */}
+      {chartView !== 'hold' && (
       <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.75rem', fontSize: '0.75rem', flexWrap: 'wrap' }}>
         {[
           { color: palette.chartPositive, label: 'Normal (≤ p50)' },
@@ -406,12 +423,13 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
           </span>
         ))}
       </div>
+      )}
 
       {/* Footer slot (e.g. admin hold-definition form) */}
       {footer && <div style={{ marginTop: '0.85rem' }}>{footer}</div>}
 
       {/* Aging model summary (moved to bottom) */}
-      {response && (
+      {response && chartView !== 'hold' && (
         <div
           style={{
             ...insetPanelStyle,
@@ -457,7 +475,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
       />
 
       {/* Aging threshold explanation drawer */}
-      {response && (
+      {response && chartView !== 'hold' && (
         <AgingThresholdDrawer
           open={thresholdDrawerOpen}
           agingModel={response.agingModel}

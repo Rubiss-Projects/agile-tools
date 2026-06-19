@@ -650,6 +650,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NamedValue'
+        completionStatuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedValue'
+        workflowStatuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedValue'
         issueTypes:
           type: array
           items:
@@ -664,6 +672,19 @@ components:
       properties:
         name:
           type: string
+    HoldStatusOption:
+      type: object
+      required: [id, name, placement, onBoard]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        placement:
+          type: string
+          enum: [before_start, in_flow, done, off_board]
+        onBoard:
+          type: boolean
         statusIds:
           type: array
           items:
@@ -828,6 +849,10 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/NamedValue'
+            holdStatuses:
+              type: array
+              items:
+                $ref: '#/components/schemas/HoldStatusOption'
             historicalWindows:
               type: array
               items:
@@ -866,6 +891,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FlowPoint'
+        holdItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldReviewItem'
     AgingModel:
       type: object
       required: [metricBasis, p50, p70, p85, sampleSize]
@@ -969,6 +998,40 @@ components:
         agingZone:
           type: string
           enum: [normal, watch, aging]
+        jiraUrl:
+          type: string
+          format: uri
+    HoldReviewItem:
+      type: object
+      required: [workItemId, issueKey, summary, currentStatus, placement, holdStartedAt, holdAgeDays]
+      properties:
+        workItemId:
+          type: string
+          format: uuid
+        issueKey:
+          type: string
+        summary:
+          type: string
+        issueType:
+          type: string
+        currentStatus:
+          type: string
+        currentColumn:
+          type: string
+        assigneeName:
+          type: string
+        placement:
+          type: string
+          enum: [before_start, in_flow, done, off_board]
+        holdStartedAt:
+          type: string
+          format: date-time
+        holdAgeDays:
+          type: number
+        flowAgeDays:
+          type: number
+        totalHoldHours:
+          type: number
         jiraUrl:
           type: string
           format: uri

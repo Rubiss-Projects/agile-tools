@@ -7,6 +7,7 @@ const {
   isHostedModeMock,
   decryptSecretMock,
   updateJiraConnectionCapabilitiesMock,
+  getActiveHoldDefinitionMock,
   listEpicForecastTargetsMock,
   refreshEpicLinkForecastTargetCountsMock,
   createJiraClientMock,
@@ -63,6 +64,7 @@ const {
     isHostedModeMock,
     decryptSecretMock: vi.fn(() => 'pat-123'),
     updateJiraConnectionCapabilitiesMock: vi.fn(),
+    getActiveHoldDefinitionMock: vi.fn(),
     listEpicForecastTargetsMock: vi.fn(),
     refreshEpicLinkForecastTargetCountsMock: vi.fn(),
     createJiraClientMock: vi.fn(() => jiraClientStub),
@@ -87,6 +89,7 @@ const {
 
 vi.mock('@agile-tools/db', () => ({
   DEFAULT_COMPLETED_WINDOW_DAYS: 90,
+  getActiveHoldDefinition: getActiveHoldDefinitionMock,
   listEpicForecastTargets: listEpicForecastTargetsMock,
   refreshEpicLinkForecastTargetCounts: refreshEpicLinkForecastTargetCountsMock,
   updateJiraConnectionCapabilities: updateJiraConnectionCapabilitiesMock,
@@ -336,6 +339,7 @@ describe('runScopeSync', () => {
     });
     jiraClientStub.setChangelogFetchStrategy.mockReturnValue(undefined);
     updateJiraConnectionCapabilitiesMock.mockResolvedValue(undefined);
+    getActiveHoldDefinitionMock.mockResolvedValue(null);
     inferChangelogFetchStrategyFromServerInfoMock.mockReturnValue('issue_expand');
     normalizeChangelogFetchStrategyMock.mockImplementation((strategy: unknown) =>
       strategy === 'subresource' || strategy === 'issue_expand' ? strategy : undefined,
@@ -572,6 +576,89 @@ describe('runScopeSync', () => {
       },
     });
     expect(loggerMock.info).toHaveBeenCalledWith('Completed-issue sync pass finished', {
+      syncRunId: 'run-1',
+      scopeId: 'scope-1',
+    });
+  });
+
+  it('backfills configured hold issues using the board filter JQL', async () => {
+    const db = createDb();
+    const boardIssue = makeIssue({
+      id: 'ISSUE-1',
+      key: 'PROJ-1',
+      projectId: 'proj-board',
+      statusId: '10',
+      statusName: 'In Progress',
+    });
+    const holdIssue = makeIssue({
+      id: 'ISSUE-2',
+      key: 'PROJ-2',
+      projectId: 'proj-offboard',
+      statusId: '50',
+      statusName: 'On Hold',
+    });
+
+    getActiveHoldDefinitionMock.mockResolvedValue({
+      scopeId: 'scope-1',
+      holdStatusIds: ['50'],
+    });
+    getBoardDetailWithFilterIdMock.mockResolvedValue({
+      detail: {
+        boardId: 42,
+        boardName: 'Payments Board',
+        columns: [{ name: 'Doing', statusIds: ['10'] }],
+        statuses: [{ id: '10', name: 'In Progress' }],
+        workflowStatuses: [
+          { id: '10', name: 'In Progress' },
+          { id: '50', name: 'On Hold' },
+        ],
+        completionStatuses: [
+          { id: '30', name: 'Closed' },
+          { id: '40', name: 'Resolved' },
+          { id: '50', name: 'On Hold' },
+        ],
+        issueTypes: [{ id: 'story', name: 'Story' }],
+      },
+      filterId: '1001',
+    });
+    streamBoardIssuesMock.mockReturnValue(issueStream(boardIssue));
+    streamJqlIssuesMock
+      .mockReturnValueOnce(issueStream(holdIssue))
+      .mockReturnValueOnce(issueStream());
+
+    await runScopeSync(db as unknown as Parameters<typeof runScopeSync>[0], 'run-1');
+
+    expect(streamJqlIssuesMock).toHaveBeenNthCalledWith(
+      1,
+      jiraClientStub,
+      'filter = 1001 AND status in ("50")',
+      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment' },
+    );
+    expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
+    expect(db.workItem.upsert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        create: expect.objectContaining({
+          currentStatusId: '50',
+          currentStatusName: 'On Hold',
+        }),
+        update: expect.objectContaining({
+          currentStatusId: '50',
+          currentStatusName: 'On Hold',
+        }),
+      }),
+    );
+    expect(db.boardSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workflowStatuses: [
+            { id: '10', name: 'In Progress' },
+            { id: '50', name: 'On Hold' },
+          ],
+        }),
+      }),
+    );
+    expect(loggerMock.info).toHaveBeenCalledWith('Hold-issue sync pass finished', {
       syncRunId: 'run-1',
       scopeId: 'scope-1',
     });
