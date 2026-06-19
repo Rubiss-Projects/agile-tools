@@ -132,6 +132,65 @@ function columnFlowResponse() {
   });
 }
 
+function holdFlowResponse() {
+  return jsonResponse({
+    scopeId: TEST_SCOPE_ID,
+    dataVersion: 'sync-1',
+    syncedAt: new Date('2026-04-19T12:00:00Z').toISOString(),
+    historicalWindowDays: 90,
+    sampleSize: 1,
+    warnings: [],
+    agingModel: {
+      metricBasis: 'cycle_time',
+      p50: 7,
+      p70: 10,
+      p85: 14,
+      sampleSize: 40,
+    },
+    points: [
+      {
+        workItemId: '11111111-1111-4111-8111-111111111111',
+        issueKey: 'AGILE-101',
+        summary: 'In progress story',
+        currentStatus: 'In Progress',
+        currentColumn: 'In Progress',
+        ageDays: 4,
+        agingZone: 'normal',
+        onHoldNow: false,
+      },
+    ],
+    holdItems: [
+      {
+        workItemId: '22222222-2222-4222-8222-222222222222',
+        issueKey: 'AGILE-202',
+        summary: 'Waiting on vendor approval',
+        issueType: 'Story',
+        currentStatus: 'On Hold',
+        placement: 'off_board',
+        holdStartedAt: new Date('2026-04-15T12:00:00Z').toISOString(),
+        holdAgeDays: 3.5,
+        totalHoldHours: 84,
+        jiraUrl: 'https://jira.example.internal/browse/AGILE-202',
+      },
+      {
+        workItemId: '33333333-3333-4333-8333-333333333333',
+        issueKey: 'AGILE-203',
+        summary: 'Blocked in development',
+        issueType: 'Story',
+        currentStatus: 'Blocked',
+        currentColumn: 'In Progress',
+        assigneeName: 'Riley Chen',
+        placement: 'in_flow',
+        holdStartedAt: new Date('2026-04-18T12:00:00Z').toISOString(),
+        holdAgeDays: 1.2,
+        flowAgeDays: 8.1,
+        totalHoldHours: 28.8,
+        jiraUrl: 'https://jira.example.internal/browse/AGILE-203',
+      },
+    ],
+  });
+}
+
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -443,6 +502,27 @@ describe('FlowAnalyticsSection', () => {
         expect(columnAgingScatterPlotMock).toHaveBeenLastCalledWith(
           expect.objectContaining({ hideEmptyColumns: true }),
         );
+      });
+
+      it('shows and persists the hold review view', async () => {
+        const user = userEvent.setup();
+        const fetchMock = vi.fn().mockResolvedValue(holdFlowResponse());
+        vi.stubGlobal('fetch', fetchMock);
+
+        render(<FlowAnalyticsSection scopeId={TEST_SCOPE_ID} filterOptions={filterOptions} />);
+
+        await screen.findByText('Global chart');
+
+        await user.click(screen.getByRole('button', { name: /hold review/i }));
+
+        expect(await screen.findByRole('region', { name: /hold review/i })).toBeVisible();
+        expect(screen.getByText('Current holds')).toBeVisible();
+        expect(screen.getByText('AGILE-202')).toBeVisible();
+        expect(screen.getAllByText('Off-board').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText('Not started')).toBeVisible();
+        expect(screen.getByText('AGILE-203')).toBeVisible();
+        expect(screen.getByText('8.1d')).toBeVisible();
+        expect(window.localStorage.getItem(`${VIEW_STORAGE_PREFIX}${TEST_SCOPE_ID}`)).toBe('hold');
       });
     });
   });

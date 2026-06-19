@@ -5,6 +5,8 @@ import {
   getFlowScope,
   getLastSucceededSyncRun,
   queryCurrentWorkItems,
+  queryHoldReviewItems,
+  queryHoldStatusOptions,
   getLatestAgingThresholds,
   getLatestAgingThresholdModel,
   getBoardColumnMappingsForDataVersion,
@@ -17,6 +19,7 @@ import {
   type ColumnAgingModel,
   type ColumnDuration,
   type FlowPoint,
+  type HoldReviewItem,
   type Warning,
 } from '@agile-tools/shared/contracts/api';
 import { requireWorkspaceContext } from '@/server/auth';
@@ -98,14 +101,27 @@ async function handleGET(
       getLatestAgingThresholdModel(db, scopeId, { dataVersion: effectiveDataVersion }),
       getBoardColumnMappingsForDataVersion(db, scopeId, effectiveDataVersion),
     ]);
+    const holdStatusOptions = await queryHoldStatusOptions(db, scopeId, {
+      dataVersion: effectiveDataVersion,
+      startStatusIds: scope.startStatusIds,
+      doneStatusIds: scope.doneStatusIds,
+    });
 
     // Query active work items for this scope.
-    const items = await queryCurrentWorkItems(db, scopeId, {
-      dataVersion: effectiveDataVersion,
-      timezone: scope.timezone,
-      ...(agingThresholds ? { agingThresholds } : {}),
-      ...(columnMappings.length > 0 ? { columnMappings } : {}),
-    });
+    const [items, holdItemsRaw] = await Promise.all([
+      queryCurrentWorkItems(db, scopeId, {
+        dataVersion: effectiveDataVersion,
+        timezone: scope.timezone,
+        ...(agingThresholds ? { agingThresholds } : {}),
+        ...(columnMappings.length > 0 ? { columnMappings } : {}),
+      }),
+      queryHoldReviewItems(db, scopeId, {
+        dataVersion: effectiveDataVersion,
+        timezone: scope.timezone,
+        startStatusIds: scope.startStatusIds,
+        holdStatusOptions,
+      }),
+    ]);
 
     // Apply optional filters.
     let filtered = items;
@@ -120,6 +136,10 @@ async function handleGET(
     }
     if (onHoldOnly) {
       filtered = filtered.filter((i) => i.onHoldNow);
+    }
+    let filteredHoldItems = holdItemsRaw;
+    if (issueTypeIds.length > 0) {
+      filteredHoldItems = filteredHoldItems.filter((item) => issueTypeIds.includes(item.issueTypeId));
     }
 
     const agingModel: AgingModel = agingModelRow
@@ -182,6 +202,21 @@ async function handleGET(
       agingZone: item.agingZone,
       jiraUrl: item.directUrl,
     }));
+    const holdItems: HoldReviewItem[] = filteredHoldItems.map((item) => ({
+      workItemId: item.workItemId,
+      issueKey: item.issueKey,
+      summary: item.summary,
+      issueType: item.issueTypeName,
+      currentStatus: item.currentStatusName,
+      ...(item.currentColumn ? { currentColumn: item.currentColumn } : {}),
+      ...(item.assigneeName ? { assigneeName: item.assigneeName } : {}),
+      placement: item.placement,
+      holdStartedAt: item.holdStartedAt.toISOString(),
+      holdAgeDays: item.holdAgeDays,
+      ...(item.flowAgeDays != null ? { flowAgeDays: item.flowAgeDays } : {}),
+      totalHoldHours: item.totalHoldHours,
+      jiraUrl: item.directUrl,
+    }));
     metricResult = 'success';
     metricItemCount = points.length;
 
@@ -195,6 +230,7 @@ async function handleGET(
       agingModel,
       columnAgingModels,
       points,
+      holdItems,
     } satisfies FlowAnalyticsResponse);
   } catch (err) {
     if (err instanceof ResponseError) {

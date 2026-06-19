@@ -6,6 +6,7 @@ import {
   type ColumnDurationResult,
 } from '@agile-tools/analytics';
 import { differenceInWorkingDays } from '@agile-tools/shared';
+import type { HoldStatusOption, HoldStatusPlacement } from '@agile-tools/shared/contracts/api';
 
 /**
  * Percentile thresholds used to classify a work item's aging zone.
@@ -239,6 +240,193 @@ export async function queryScopeFilterOptions(
   };
 }
 
+export interface HoldReviewItemRow {
+  workItemId: string;
+  scopeId: string;
+  issueKey: string;
+  summary: string;
+  issueTypeId: string;
+  issueTypeName: string;
+  currentStatusId: string;
+  currentStatusName: string;
+  currentColumn: string | null;
+  assigneeName: string | null;
+  holdStartedAt: Date;
+  holdAgeDays: number;
+  flowAgeDays: number | null;
+  totalHoldHours: number;
+  placement: HoldStatusPlacement;
+  directUrl: string;
+}
+
+export async function queryHoldReviewItems(
+  db: PrismaClient,
+  scopeId: string,
+  options?: {
+    dataVersion?: string;
+    timezone?: string;
+    now?: Date;
+    startStatusIds?: string[];
+    holdStatusOptions?: HoldStatusOption[];
+  },
+): Promise<HoldReviewItemRow[]> {
+  const now = options?.now ?? new Date();
+  const timezone = options?.timezone ?? 'UTC';
+  const startStatusIds = new Set(options?.startStatusIds ?? []);
+  const placementByStatusId = new Map(
+    (options?.holdStatusOptions ?? []).map((status) => [status.id, status.placement]),
+  );
+
+  const items = await db.workItem.findMany({
+    where: {
+      scopeId,
+      completedAt: null,
+      excludedReason: null,
+      holdPeriods: {
+        some: { endedAt: null },
+      },
+      ...(options?.dataVersion ? { lastSyncRunId: options.dataVersion } : {}),
+    },
+    select: {
+      id: true,
+      scopeId: true,
+      issueKey: true,
+      summary: true,
+      issueTypeId: true,
+      issueTypeName: true,
+      currentStatusId: true,
+      currentStatusName: true,
+      currentColumn: true,
+      assigneeName: true,
+      startedAt: true,
+      directUrl: true,
+      holdPeriods: {
+        select: { startedAt: true, endedAt: true },
+        orderBy: { startedAt: 'asc' },
+      },
+      lifecycleEvents: {
+        where: { eventType: 'status_change' },
+        select: {
+          toStatusId: true,
+          changedAt: true,
+        },
+        orderBy: { changedAt: 'asc' },
+      },
+    },
+    orderBy: { issueKey: 'asc' },
+  });
+
+  return items
+    .flatMap((item): HoldReviewItemRow[] => {
+      const currentHold = item.holdPeriods.find((period) => period.endedAt === null);
+      if (!currentHold) return [];
+
+      const flowStartedAt =
+        item.startedAt ??
+        item.lifecycleEvents.find(
+          (event) => event.toStatusId != null && startStatusIds.has(event.toStatusId),
+        )?.changedAt ??
+        null;
+
+      let totalHoldMs = 0;
+      for (const hold of item.holdPeriods) {
+        const end = hold.endedAt ?? now;
+        totalHoldMs += Math.max(0, end.getTime() - hold.startedAt.getTime());
+      }
+
+      return [{
+        workItemId: item.id,
+        scopeId: item.scopeId,
+        issueKey: item.issueKey,
+        summary: item.summary,
+        issueTypeId: item.issueTypeId,
+        issueTypeName: item.issueTypeName ?? item.issueTypeId,
+        currentStatusId: item.currentStatusId,
+        currentStatusName: item.currentStatusName ?? item.currentColumn ?? item.currentStatusId,
+        currentColumn: item.currentColumn,
+        assigneeName: item.assigneeName,
+        holdStartedAt: currentHold.startedAt,
+        holdAgeDays: differenceInWorkingDays(currentHold.startedAt, now, timezone),
+        flowAgeDays: flowStartedAt ? differenceInWorkingDays(flowStartedAt, now, timezone) : null,
+        totalHoldHours: totalHoldMs / MS_PER_HOUR,
+        placement:
+          placementByStatusId.get(item.currentStatusId) ??
+          (item.currentColumn ? 'in_flow' : 'off_board'),
+        directUrl: item.directUrl,
+      }];
+    })
+    .sort((left, right) =>
+      right.holdAgeDays - left.holdAgeDays ||
+      left.issueKey.localeCompare(right.issueKey),
+    );
+}
+
+export async function queryHoldStatusOptions(
+  db: PrismaClient,
+  scopeId: string,
+  options: {
+    startStatusIds: string[];
+    doneStatusIds: string[];
+    dataVersion?: string;
+  },
+): Promise<HoldStatusOption[]> {
+  const snapshot = await db.boardSnapshot.findFirst({
+    where: {
+      scopeId,
+      ...(options.dataVersion ? { syncRunId: options.dataVersion } : {}),
+    },
+    orderBy: { fetchedAt: 'desc' },
+    select: {
+      columns: true,
+      workflowStatuses: true,
+    },
+  });
+
+  if (!snapshot) return [];
+
+  const columns = parseBoardColumnMappings(snapshot.columns);
+  const workflowStatuses = parseNamedValues(snapshot.workflowStatuses);
+  const statuses =
+    workflowStatuses.length > 0
+      ? workflowStatuses
+      : Array.from(new Set(columns.flatMap((column) => column.statusIds))).map((id) => ({ id, name: id }));
+
+  const startStatuses = new Set(options.startStatusIds);
+  const doneStatuses = new Set(options.doneStatusIds);
+  const statusColumnIndex = new Map<string, number>();
+
+  columns.forEach((column, index) => {
+    for (const statusId of column.statusIds) {
+      statusColumnIndex.set(statusId, index);
+    }
+  });
+
+  const startColumnIndex = columns.findIndex((column) =>
+    column.statusIds.some((statusId) => startStatuses.has(statusId)),
+  );
+
+  return statuses.map((status) => {
+    const columnIndex = statusColumnIndex.get(status.id);
+    const onBoard = columnIndex !== undefined;
+    let placement: HoldStatusPlacement = 'off_board';
+    if (onBoard) {
+      if (doneStatuses.has(status.id)) {
+        placement = 'done';
+      } else if (startColumnIndex >= 0 && columnIndex < startColumnIndex) {
+        placement = 'before_start';
+      } else {
+        placement = 'in_flow';
+      }
+    }
+
+    return {
+      ...status,
+      onBoard,
+      placement,
+    };
+  });
+}
+
 /**
  * Retrieve the most recently computed aging thresholds for a scope.
  *
@@ -334,4 +522,18 @@ function classifyAgingZone(
   if (ageDays > thresholds.p85) return 'aging';
   if (ageDays > thresholds.p50) return 'watch';
   return 'normal';
+}
+
+function parseNamedValues(value: unknown): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+  const values: Array<{ id: string; name: string }> = [];
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const candidate = entry as { id?: unknown; name?: unknown };
+    if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') continue;
+    values.push({ id: candidate.id, name: candidate.name });
+  }
+
+  return values;
 }

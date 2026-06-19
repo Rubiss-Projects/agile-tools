@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@agile-tools/db';
 import {
   DEFAULT_COMPLETED_WINDOW_DAYS,
+  getActiveHoldDefinition,
   listEpicForecastTargets,
   refreshEpicLinkForecastTargetCounts,
   updateJiraConnectionCapabilities,
@@ -339,6 +340,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
         fetchedAt: new Date(),
         columns: boardDetail.columns,
         statusIdsByColumn,
+        workflowStatuses: boardDetail.workflowStatuses ?? boardDetail.completionStatuses ?? boardDetail.statuses,
         projectRefs: [],
       },
     });
@@ -379,6 +381,53 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
       await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
       batch = [];
+    }
+
+    const holdDefinition = await getActiveHoldDefinition(db, scope.id);
+    const holdStatusIds = holdDefinition?.holdStatusIds ?? [];
+    if (holdStatusIds.length > 0) {
+      if (boardFilterId != null) {
+        const holdJql =
+          `filter = ${boardFilterId} AND status in (${jqlList(holdStatusIds)})`;
+
+        if (hostedCaps) {
+          const holdIssueCount = await fetchJqlIssueCount(jiraClient, holdJql);
+          if (holdIssueCount > hostedCaps.maxActiveIssues) {
+            throw new SyncError(
+              'HOSTED_ACTIVE_ISSUE_CAP_EXCEEDED',
+              `Hosted beta allows at most ${hostedCaps.maxActiveIssues} active board issues per scope; Jira returned ${holdIssueCount} configured hold issues.`,
+            );
+          }
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+        }
+
+        for await (const issue of streamJqlIssues(jiraClient, holdJql, {
+          fields: SYNC_ISSUE_FIELDS,
+        })) {
+          if (processedIssueIds.has(issue.id)) {
+            continue;
+          }
+          processedIssueIds.add(issue.id);
+          batch.push(issue);
+          if (batch.length >= BATCH_SIZE) {
+            await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
+            await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+            batch = [];
+          }
+        }
+        if (batch.length > 0) {
+          await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+          batch = [];
+        }
+
+        logger.info('Hold-issue sync pass finished', { syncRunId, scopeId: scope.id });
+      } else {
+        logger.warn('Board has no saved filter; skipping hold-issue sync pass', {
+          syncRunId,
+          boardId,
+        });
+      }
     }
 
     // Fetch historically-completed issues that match the board's saved filter but are

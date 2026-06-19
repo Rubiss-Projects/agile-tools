@@ -161,6 +161,7 @@ model BoardSnapshot {
   fetchedAt         DateTime
   columns           Json
   statusIdsByColumn Json
+  workflowStatuses  Json?
   projectRefs       Json
   filterId          String?
   createdAt         DateTime @default(now())

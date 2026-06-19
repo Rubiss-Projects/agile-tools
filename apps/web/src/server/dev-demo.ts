@@ -138,10 +138,42 @@ export async function seedLocalDemoWorkspace(): Promise<{ scopeId: string }> {
       },
     });
 
+    await tx.boardSnapshot.create({
+      data: {
+        scopeId: LOCAL_DEMO_IDS.scopeId,
+        syncRunId: LOCAL_DEMO_IDS.syncRunId,
+        fetchedAt: syncFinishedAt,
+        columns: [
+          { name: 'Selected', statusIds: ['selected'] },
+          { name: 'In Progress', statusIds: ['in-progress'] },
+          { name: 'Review', statusIds: ['review'] },
+          { name: 'Blocked', statusIds: ['blocked'] },
+          { name: 'Done', statusIds: ['done'] },
+        ],
+        statusIdsByColumn: {
+          selected: 'Selected',
+          'in-progress': 'In Progress',
+          review: 'Review',
+          blocked: 'Blocked',
+          done: 'Done',
+        },
+        workflowStatuses: [
+          { id: 'selected', name: 'Selected' },
+          { id: 'in-progress', name: 'In Progress' },
+          { id: 'review', name: 'Review' },
+          { id: 'blocked', name: 'Blocked' },
+          { id: 'vendor-hold', name: 'Vendor Hold' },
+          { id: 'done', name: 'Done' },
+        ],
+        projectRefs: [{ id: LOCAL_DEMO_PROJECT_ID, key: LOCAL_DEMO_PROJECT_ID, name: 'Agile Tools Demo' }],
+        filterId: LOCAL_DEMO_BOARD_ID,
+      },
+    });
+
     await tx.holdDefinition.create({
       data: {
         scopeId: LOCAL_DEMO_IDS.scopeId,
-        holdStatusIds: ['blocked'],
+        holdStatusIds: ['blocked', 'vendor-hold'],
         blockedTruthyValues: [],
         effectiveFrom: syncFinishedAt,
         updatedBy: LOCAL_DEMO_IDS.userId,
@@ -322,9 +354,10 @@ function buildActiveDemoItems(syncFinishedAt: Date) {
     issueTypeName: 'Story',
     projectId: LOCAL_DEMO_PROJECT_ID,
     currentStatusId: spec.currentStatusId,
+    currentStatusName: getDemoStatusName(spec.currentStatusId),
     currentColumn: spec.currentColumn,
     createdAt: daysAgo(spec.createdDaysAgo, 10),
-    startedAt: daysAgo(spec.startedDaysAgo, 10),
+    startedAt: spec.startedDaysAgo == null ? null : daysAgo(spec.startedDaysAgo, 10),
     directUrl: issueUrl(spec.issueKey),
     syncedAt: syncFinishedAt,
     lastSyncRunId: LOCAL_DEMO_IDS.syncRunId,
@@ -354,6 +387,25 @@ function buildActiveDemoItems(syncFinishedAt: Date) {
   }));
 }
 
+function getDemoStatusName(statusId: string): string {
+  switch (statusId) {
+    case 'selected':
+      return 'Selected';
+    case 'in-progress':
+      return 'In Progress';
+    case 'review':
+      return 'Review';
+    case 'blocked':
+      return 'Blocked';
+    case 'vendor-hold':
+      return 'Vendor Hold';
+    case 'done':
+      return 'Done';
+    default:
+      return statusId;
+  }
+}
+
 type LocalDemoLifecycleEventSpec = {
   eventType: 'status_change' | 'field_change' | 'reopened' | 'completed';
   fromStatusId: string;
@@ -376,9 +428,9 @@ type LocalDemoActiveItemSpec = {
   issueKey: string;
   summary: string;
   currentStatusId: string;
-  currentColumn: string;
+  currentColumn: string | null;
   createdDaysAgo: number;
-  startedDaysAgo: number;
+  startedDaysAgo: number | null;
   lifecycleEvents: LocalDemoLifecycleEventSpec[];
   holdPeriods: LocalDemoHoldPeriodSpec[];
 };
@@ -462,6 +514,21 @@ const ACTIVE_ITEM_SPECS: LocalDemoActiveItemSpec[] = [
     ],
     holdPeriods: [
       { source: 'status', sourceValue: 'blocked', startedDaysAgo: 11 },
+    ],
+  },
+  {
+    issueKey: 'AG-206',
+    summary: 'Waiting for vendor security review before checkout launch',
+    currentStatusId: 'vendor-hold',
+    currentColumn: null,
+    createdDaysAgo: 18,
+    startedDaysAgo: null,
+    lifecycleEvents: [
+      { eventType: 'status_change', fromStatusId: 'backlog', toStatusId: 'in-progress', daysAgo: 14 },
+      { eventType: 'status_change', fromStatusId: 'in-progress', toStatusId: 'vendor-hold', daysAgo: 4 },
+    ],
+    holdPeriods: [
+      { source: 'status', sourceValue: 'vendor-hold', startedDaysAgo: 4 },
     ],
   },
 ];

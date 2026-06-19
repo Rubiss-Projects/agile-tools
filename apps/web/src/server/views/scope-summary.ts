@@ -6,6 +6,7 @@ import {
   getLastSucceededSyncRun,
   getLastFinishedSyncRun,
   queryScopeFilterOptions,
+  queryHoldStatusOptions,
 } from '@agile-tools/db';
 import { mapScope, mapSyncRun } from '@/app/api/v1/admin/scopes/_lib';
 
@@ -36,12 +37,20 @@ export async function buildScopeSummary(
   // can distinguish "not yet synced" from "synced but empty".
   let filterOptions: ScopeSummary['filterOptions'];
   if (lastSucceeded?.dataVersion) {
-    const options = await queryScopeFilterOptions(db, scopeId, {
-      dataVersion: lastSucceeded.dataVersion,
-    });
+    const [options, holdStatuses] = await Promise.all([
+      queryScopeFilterOptions(db, scopeId, {
+        dataVersion: lastSucceeded.dataVersion,
+      }),
+      queryHoldStatusOptions(db, scopeId, {
+        dataVersion: lastSucceeded.dataVersion,
+        startStatusIds: scope.startStatusIds,
+        doneStatusIds: scope.doneStatusIds,
+      }),
+    ]);
     filterOptions = {
       issueTypes: options.issueTypes,
       statuses: options.statuses,
+      holdStatuses,
       historicalWindows: DEFAULT_HISTORICAL_WINDOWS,
     };
   }

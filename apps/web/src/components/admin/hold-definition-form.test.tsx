@@ -51,6 +51,38 @@ describe('HoldDefinitionForm', () => {
     });
   });
 
+  it('shows off-board and before-start status choices for hold configuration', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          scopeId: '11111111-1111-4111-8111-111111111111',
+          holdStatusIds: ['50'],
+          effectiveFrom: new Date('2026-04-19T12:00:00Z').toISOString(),
+        }),
+      ),
+    );
+
+    render(
+      <HoldDefinitionForm
+        scopeId="11111111-1111-4111-8111-111111111111"
+        availableStatuses={[
+          { id: '5', name: 'Selected', placement: 'before_start', onBoard: true },
+          { id: '20', name: 'Blocked', placement: 'in_flow', onBoard: true },
+          { id: '50', name: 'On Hold', placement: 'off_board', onBoard: false },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /hold definition/i }));
+
+    expect(await screen.findByRole('checkbox', { name: /on hold/i })).toBeChecked();
+    expect(screen.getByText('off-board')).toBeVisible();
+    expect(screen.getByText('before start')).toBeVisible();
+    expect(screen.getByText('in flow')).toBeVisible();
+  });
+
   it('prevents saving when no hold status is selected', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 404 })));

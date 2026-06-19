@@ -171,14 +171,17 @@ async function buildBoardDetail(
     .filter((f) => holdKeywords.some((kw) => f.name.toLowerCase().includes(kw)))
     .map((f) => ({ id: f.id, name: f.name }));
 
+  const workflowStatuses = sortNamedValues(
+    Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
+  );
+
   return {
     boardId,
     boardName: config.name,
     columns,
     statuses,
-    completionStatuses: sortNamedValues(
-      Array.from(completionStatusesMap, ([id, name]) => ({ id, name })),
-    ),
+    completionStatuses: workflowStatuses,
+    workflowStatuses,
     issueTypes,
     blockedFields: blockedFields.length > 0 ? blockedFields : undefined,
   };
