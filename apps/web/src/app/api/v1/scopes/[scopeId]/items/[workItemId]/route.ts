@@ -61,7 +61,8 @@ async function handleGET(
     }
 
     const now = new Date();
-    const referenceDate = item.startedAt ?? item.createdAt;
+    const flowStartedAt = resolveFlowStartedAt(item, scope.startStatusIds);
+    const referenceDate = flowStartedAt ?? item.createdAt;
     const endDate = item.completedAt ?? now;
     const ageDays = differenceInWorkingDays(referenceDate, endDate, scope.timezone);
     const jiraUpdatedAgeWorkingDays = item.jiraUpdatedAt
@@ -75,7 +76,7 @@ async function handleGET(
       : [];
     const { columnDurations } = buildColumnDurationsForItem({
       createdAt: item.createdAt,
-      startedAt: item.startedAt,
+      startedAt: flowStartedAt,
       completedAt: item.completedAt,
       currentStatusId: item.currentStatusId,
       statusChanges: item.lifecycleEvents
@@ -162,7 +163,7 @@ async function handleGET(
           }
         : {}),
       jiraUrl: item.directUrl,
-      ...(item.startedAt ? { startedAt: item.startedAt.toISOString() } : {}),
+      ...(flowStartedAt ? { startedAt: flowStartedAt.toISOString() } : {}),
       ...(item.completedAt ? { completedAt: item.completedAt.toISOString() } : {}),
       columnDurations: columnDurations.map(toColumnDurationResponse),
       holdPeriods,
@@ -182,6 +183,23 @@ async function handleGET(
 }
 
 export const GET = withHttpMetrics('GET', '/api/v1/scopes/[scopeId]/items/[workItemId]', handleGET);
+
+function resolveFlowStartedAt(
+  item: NonNullable<Awaited<ReturnType<typeof getWorkItemWithDetail>>>,
+  startStatusIds: string[],
+): Date | null {
+  if (item.startedAt) {
+    return item.startedAt;
+  }
+
+  const startStatuses = new Set(startStatusIds);
+  return item.lifecycleEvents.find(
+    (event) =>
+      event.eventType === 'status_change' &&
+      event.toStatusId != null &&
+      startStatuses.has(event.toStatusId),
+  )?.changedAt ?? null;
+}
 
 function toColumnDurationResponse(duration: {
   columnName: string;

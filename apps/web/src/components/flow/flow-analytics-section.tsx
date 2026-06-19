@@ -276,6 +276,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
   const viewModel = response ? shapeFlowAnalytics(response) : null;
   const visibleColumnNames = viewModel ? getVisibleColumnNames(viewModel, hideEmptyColumns) : [];
   const activeColumnNames = viewModel ? getActiveColumnNames(viewModel) : [];
+  const holdReviewCount = response?.holdItems?.length ?? 0;
 
   return (
     <div>
@@ -339,10 +340,37 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
                 </button>
                 <button
                   type="button"
+                  aria-label={`Hold review (${holdReviewCount} current hold ${holdReviewCount === 1 ? 'item' : 'items'})`}
                   onClick={() => handleChartViewChange('hold')}
-                  style={buttonStyle(chartView === 'hold' ? 'primary' : 'secondary')}
+                  style={{
+                    ...buttonStyle(chartView === 'hold' ? 'primary' : 'secondary'),
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.55rem',
+                  }}
                 >
-                  Hold review
+                  <span>Hold review</span>
+                  <span
+                    style={{
+                      display: 'inline-grid',
+                      placeItems: 'center',
+                      minWidth: '1.45rem',
+                      height: '1.45rem',
+                      padding: '0 0.35rem',
+                      borderRadius: '999px',
+                      border: chartView === 'hold'
+                        ? '1px solid rgba(255, 255, 255, 0.28)'
+                        : `1px solid ${palette.lineStrong}`,
+                      background: chartView === 'hold' ? 'rgba(255, 255, 255, 0.16)' : palette.panel,
+                      color: chartView === 'hold' ? palette.buttonPrimaryText : palette.accentStrong,
+                      fontFamily: 'var(--font-label)',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {holdReviewCount}
+                  </span>
                 </button>
                 {chartView === 'column' && (
                   <label

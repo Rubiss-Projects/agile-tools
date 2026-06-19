@@ -7,9 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FlowAnalyticsSection } from './flow-analytics-section';
 
-const { agingThresholdDrawerMock, columnAgingScatterPlotMock } = vi.hoisted(() => ({
+const { agingThresholdDrawerMock, columnAgingScatterPlotMock, workItemDetailDrawerMock } = vi.hoisted(() => ({
   agingThresholdDrawerMock: vi.fn(() => null),
   columnAgingScatterPlotMock: vi.fn((props: { hideEmptyColumns?: boolean }) => props),
+  workItemDetailDrawerMock: vi.fn(),
 }));
 
 vi.mock('./aging-scatter-plot', () => ({
@@ -24,7 +25,18 @@ vi.mock('./column-aging-scatter-plot', () => ({
 }));
 
 vi.mock('./work-item-detail-drawer', () => ({
-  WorkItemDetailDrawer: () => null,
+  WorkItemDetailDrawer: (props: {
+    workItemId: string | null;
+    issueKey?: string;
+    onClose: () => void;
+  }) => {
+    workItemDetailDrawerMock(props);
+    return props.workItemId ? (
+      <div role="dialog" aria-label={`Work item detail: ${props.issueKey ?? props.workItemId}`}>
+        Detail drawer
+      </div>
+    ) : null;
+  },
 }));
 
 vi.mock('./aging-threshold-drawer', () => ({
@@ -201,6 +213,7 @@ function jsonResponse(body: unknown): Response {
 afterEach(() => {
   agingThresholdDrawerMock.mockClear();
   columnAgingScatterPlotMock.mockClear();
+  workItemDetailDrawerMock.mockClear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   try {
@@ -513,6 +526,8 @@ describe('FlowAnalyticsSection', () => {
 
         await screen.findByText('Global chart');
 
+        expect(screen.getByRole('button', { name: /hold review.*2 current hold items/i })).toBeVisible();
+
         await user.click(screen.getByRole('button', { name: /hold review/i }));
 
         expect(await screen.findByRole('region', { name: /hold review/i })).toBeVisible();
@@ -522,6 +537,19 @@ describe('FlowAnalyticsSection', () => {
         expect(screen.getByText('Not started')).toBeVisible();
         expect(screen.getByText('AGILE-203')).toBeVisible();
         expect(screen.getByText('8.1d')).toBeVisible();
+        expect(screen.queryByRole('link', { name: /open first held issue/i })).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /open AGILE-202 hold details/i }));
+
+        expect(await screen.findByRole('dialog', { name: /work item detail: AGILE-202/i })).toBeVisible();
+        await waitFor(() => {
+          expect(workItemDetailDrawerMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+              workItemId: '22222222-2222-4222-8222-222222222222',
+              issueKey: 'AGILE-202',
+            }),
+          );
+        });
         expect(window.localStorage.getItem(`${VIEW_STORAGE_PREFIX}${TEST_SCOPE_ID}`)).toBe('hold');
       });
     });

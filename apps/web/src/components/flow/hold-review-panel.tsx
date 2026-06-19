@@ -1,7 +1,7 @@
 'use client';
 
 import type { HoldReviewItem } from '@agile-tools/shared/contracts/api';
-import { buttonStyle, codeStyle, insetPanelStyle, palette, tonePillStyle } from '@/components/app/chrome';
+import { codeStyle, insetPanelStyle, palette, tonePillStyle } from '@/components/app/chrome';
 
 interface HoldReviewPanelProps {
   holdItems: HoldReviewItem[];
@@ -154,16 +154,6 @@ export function HoldReviewPanel({ holdItems, onItemSelect }: HoldReviewPanelProp
         <span style={{ color: palette.soft, fontSize: '0.82rem' }}>
           Off-board and before-start holds are reviewed here without forcing them into the aging charts.
         </span>
-        {holdItems.some((item) => item.jiraUrl) && (
-          <a
-            href={holdItems.find((item) => item.jiraUrl)?.jiraUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ ...buttonStyle('secondary'), marginLeft: 'auto' }}
-          >
-            Open first held issue
-          </a>
-        )}
       </div>
     </div>
   );
