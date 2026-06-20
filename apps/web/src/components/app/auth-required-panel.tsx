@@ -1,5 +1,6 @@
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
+import { getAppBranding } from '@/server/branding';
 import { LocalBootstrapForm } from './demo-bootstrap-form';
 import {
   buttonStyle,
@@ -27,6 +28,7 @@ export function AuthRequiredPanel({
   showDemoBootstrap = true,
   showAdminBootstrap = true,
 }: AuthRequiredPanelProps) {
+  const branding = getAppBranding();
   const adminBootstrapEnabled = showAdminBootstrap && isLocalAdminBootstrapAvailable();
   const demoBootstrapEnabled = showDemoBootstrap && isLocalDemoEnabled();
 
@@ -34,7 +36,7 @@ export function AuthRequiredPanel({
     <main style={{ ...pageShellStyle, maxWidth: '760px' }}>
       <div style={sectionCardStyle}>
         <p style={{ ...eyebrowStyle, marginBottom: '0.5rem' }}>
-          Agile Tools
+          {branding.name}
         </p>
         <h1 style={{ ...heroTitleStyle, marginTop: 0, fontSize: 'clamp(2rem, 5vw, 2.6rem)' }}>{title}</h1>
         <p style={{ ...heroCopyStyle, marginTop: '0.75rem' }}>

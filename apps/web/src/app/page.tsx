@@ -5,8 +5,10 @@ import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
 import { LocalBootstrapForm } from '@/components/app/demo-bootstrap-form';
+import { BrandMark } from '@/components/app/brand-mark';
 import { ScopeDirectory, type HomeScopeSummary } from '@/components/app/scope-directory';
 import { buildJiraBoardUrl } from '@/lib/jira-links';
+import { getAppBranding } from '@/server/branding';
 import {
   buttonStyle,
   codeStyle,
@@ -29,6 +31,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
+  const branding = getAppBranding();
   const authProvider = getAuthProvider();
   const hosted = isHostedModeFromEnv();
   const ctx = await getWorkspaceContext();
@@ -41,7 +44,7 @@ export default async function HomePage() {
         <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
           <section style={heroCardStyle}>
             <p style={eyebrowStyle}>Hosted Beta</p>
-            <h1 style={heroTitleStyle}>Agile Tools</h1>
+            <BrandMark branding={branding} heading style={{ margin: '0.9rem 0 0' }} />
             <p style={heroCopyStyle}>
               Sign in with Clerk, choose an organization, and create a hosted workspace before connecting Jira Cloud.
             </p>
@@ -66,7 +69,7 @@ export default async function HomePage() {
         <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
           <section style={heroCardStyle}>
             <p style={eyebrowStyle}>Single Sign-On</p>
-            <h1 style={heroTitleStyle}>Agile Tools</h1>
+            <BrandMark branding={branding} heading style={{ margin: '0.9rem 0 0' }} />
             <p style={heroCopyStyle}>
               Sign in with your organization identity provider to open the workspace.
             </p>
@@ -193,7 +196,7 @@ export default async function HomePage() {
           Workspace Home
         </p>
         <h1 style={heroTitleStyle}>
-          {workspace?.name ?? 'Agile Tools'}
+          {workspace?.name ?? branding.name}
         </h1>
         <p style={heroCopyStyle}>
           Signed in as {ctx.role} for workspace <span style={codeStyle}>{ctx.workspaceId}</span>.

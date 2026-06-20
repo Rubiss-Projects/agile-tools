@@ -93,6 +93,19 @@ a {
   color: inherit;
 }
 
+.brand-mark-logo-stack {
+  display: inline-grid;
+}
+
+.brand-mark-logo {
+  grid-area: 1 / 1;
+}
+
+html[data-theme='light'] .brand-mark-logo-dark,
+html[data-theme='dark'] .brand-mark-logo-light {
+  display: none;
+}
+
 button,
 input,
 select,
