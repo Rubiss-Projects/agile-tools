@@ -75,7 +75,10 @@ Set `OIDC_AUTO_LOGIN=true` only when browser page requests without a session
 should immediately redirect to SSO; API routes, metrics, static assets, and
 OIDC callback/logout routes are excluded. `OIDC_SESSION_MAX_AGE_SECONDS`
 controls Agile Tools' OIDC cookie max age, while the effective authenticated
-lifetime remains capped by the IdP token and revocation policy.
+lifetime remains capped by the IdP token and revocation policy. When
+`AUTH_PROVIDER=oidc`, legacy local/bootstrap `agile_session` cookies are not
+accepted; admins should be mapped through `OIDC_ADMIN_EMAILS` or
+`OIDC_ADMIN_CLAIM`.
 For a local Keycloak walkthrough, see [docs/local-oidc-sso.md](docs/local-oidc-sso.md).
 Hosted Vercel beta remains Clerk-only.
 

@@ -141,32 +141,34 @@ export async function getOidcSessionWorkspaceContext(): Promise<WorkspaceContext
     });
     return null;
   }
+  if (parsed.authProvider !== 'oidc') {
+    recordOidcAuthEvent({
+      event: 'session_rejected',
+      result: 'failure',
+      reason: 'legacy_workspace_cookie',
+    });
+    return null;
+  }
 
   const oidcSessionId = cookieStore.get(OIDC_SESSION_COOKIE_NAME)?.value;
   if (!oidcSessionId) {
-    if (parsed.authProvider === 'oidc') {
-      recordOidcAuthEvent({
-        event: 'session_rejected',
-        result: 'failure',
-        reason: 'missing_session_cookie',
-      });
-      return null;
-    }
-    return parsed;
+    recordOidcAuthEvent({
+      event: 'session_rejected',
+      result: 'failure',
+      reason: 'missing_session_cookie',
+    });
+    return null;
   }
 
   const db = getPrismaClient();
   const oidcSession = await getOidcSessionWithUserById(db, oidcSessionId);
   if (!oidcSession) {
-    if (parsed.authProvider === 'oidc') {
-      recordOidcAuthEvent({
-        event: 'session_rejected',
-        result: 'failure',
-        reason: 'missing_session_row',
-      });
-      return null;
-    }
-    return parsed;
+    recordOidcAuthEvent({
+      event: 'session_rejected',
+      result: 'failure',
+      reason: 'missing_session_row',
+    });
+    return null;
   }
   if (
     oidcSession.workspaceId !== parsed.workspaceId ||
@@ -205,7 +207,7 @@ export async function startOidcLogin(request: NextRequest): Promise<NextResponse
   const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
   const state = oidc.randomState();
   const nonce = oidc.randomNonce();
-  const nextPath = sanitizeRedirectPath(request.nextUrl.searchParams.get('next'));
+  const nextPath = sanitizeOidcRedirectPath(request.nextUrl.searchParams.get('next'));
 
   const authorizationUrl = oidc.buildAuthorizationUrl(configuration, {
     redirect_uri: settings.redirectUri,
@@ -235,7 +237,7 @@ export async function completeOidcCallback(request: NextRequest): Promise<NextRe
   const expectedState = getRequiredRequestCookie(request, OIDC_STATE_COOKIE_NAME);
   const pkceCodeVerifier = getRequiredRequestCookie(request, OIDC_PKCE_COOKIE_NAME);
   const expectedNonce = getRequiredRequestCookie(request, OIDC_NONCE_COOKIE_NAME);
-  const nextPath = sanitizeRedirectPath(request.cookies.get(OIDC_NEXT_COOKIE_NAME)?.value ?? null);
+  const nextPath = sanitizeOidcRedirectPath(request.cookies.get(OIDC_NEXT_COOKIE_NAME)?.value ?? null);
   const configuration = await getOidcConfiguration(settings);
 
   const tokens = await oidc.authorizationCodeGrant(
@@ -674,11 +676,28 @@ function shouldUseSecureCookie(request: NextRequest): boolean {
   return protocol === 'https';
 }
 
-function sanitizeRedirectPath(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+export function sanitizeOidcRedirectPath(value: string | null): string {
+  const candidate = value?.trim();
+  if (
+    !candidate ||
+    !candidate.startsWith('/') ||
+    candidate.startsWith('//') ||
+    candidate.includes('\\') ||
+    candidate.toLowerCase().includes('%5c')
+  ) {
     return DEFAULT_LOGIN_REDIRECT_PATH;
   }
-  return value;
+
+  const sentinelOrigin = 'https://agile-tools.local';
+  try {
+    const resolved = new URL(candidate, sentinelOrigin);
+    if (resolved.origin !== sentinelOrigin) {
+      return DEFAULT_LOGIN_REDIRECT_PATH;
+    }
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return DEFAULT_LOGIN_REDIRECT_PATH;
+  }
 }
 
 function normalizeScopes(value: string): string {

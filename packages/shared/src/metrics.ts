@@ -88,6 +88,7 @@ export type OidcAuthReason =
   | 'callback_error'
   | 'exception'
   | 'csrf'
+  | 'legacy_workspace_cookie'
   | 'invalid_workspace_cookie'
   | 'missing_session_cookie'
   | 'missing_session_row'

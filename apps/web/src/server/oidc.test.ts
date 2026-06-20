@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { resetConfig } from '@agile-tools/shared';
 
-import { getOidcSettings, resolveOidcInitialRole } from './oidc';
+import { getOidcSettings, resolveOidcInitialRole, sanitizeOidcRedirectPath } from './oidc';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -62,5 +62,18 @@ describe('resolveOidcInitialRole', () => {
 
   it('defaults new users to member when no admin mapping matches', () => {
     expect(resolveOidcInitialRole(settings, { email: 'member@example.test', groups: ['team-a'] })).toBe('member');
+  });
+});
+
+describe('sanitizeOidcRedirectPath', () => {
+  it('keeps same-origin paths with query strings', () => {
+    expect(sanitizeOidcRedirectPath('/scopes/scope-1?tab=flow')).toBe('/scopes/scope-1?tab=flow');
+  });
+
+  it('rejects off-site and backslash-prefixed redirects', () => {
+    expect(sanitizeOidcRedirectPath('https://evil.example.test/')).toBe('/');
+    expect(sanitizeOidcRedirectPath('//evil.example.test/')).toBe('/');
+    expect(sanitizeOidcRedirectPath('/\\evil.example.test/')).toBe('/');
+    expect(sanitizeOidcRedirectPath('/%5Cevil.example.test/')).toBe('/');
   });
 });

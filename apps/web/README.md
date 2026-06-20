@@ -87,6 +87,8 @@ pnpm --filter @agile-tools/web lint
   `OIDC_SESSION_MAX_AGE_SECONDS` controls the Agile Tools OIDC cookie max age
   and defaults to 14 days, but the effective authenticated lifetime is still
   capped by the IdP access-token, refresh-token, and revocation policy.
+  OIDC mode does not accept legacy local/bootstrap `agile_session` cookies;
+  configure SSO admins through `OIDC_ADMIN_EMAILS` or `OIDC_ADMIN_CLAIM`.
   New OIDC users are keyed by issuer plus `sub`/`oid`/`email`, seeded as
   `member`, and can be seeded as `admin` with `OIDC_ADMIN_EMAILS` or
   `OIDC_ADMIN_CLAIM` plus `OIDC_ADMIN_CLAIM_VALUES`. Existing user roles stay

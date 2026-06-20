@@ -123,7 +123,7 @@ describe('getWorkspaceContext', () => {
     });
   });
 
-  it('keeps OIDC opt-in bridged through the existing signed workspace cookie', async () => {
+  it('rejects a legacy local workspace cookie when OIDC auth is enabled', async () => {
     process.env['AUTH_PROVIDER'] = 'oidc';
     process.env['OIDC_ISSUER'] = 'https://idp.example.test';
     process.env['OIDC_CLIENT_ID'] = 'agile-tools';
@@ -139,11 +139,7 @@ describe('getWorkspaceContext', () => {
     });
     vi.mocked(cookies).mockReturnValue(makeCookieStore(signed) as never);
 
-    expect(await getWorkspaceContext()).toEqual({
-      userId: 'oidc-user',
-      workspaceId: 'oidc-workspace',
-      role: 'admin',
-    });
+    expect(await getWorkspaceContext()).toBeNull();
   });
 
   it('rejects an OIDC-marked workspace cookie without an OIDC session cookie', async () => {
