@@ -79,7 +79,9 @@ lifetime remains capped by the IdP token and revocation policy. When
 `AUTH_PROVIDER=oidc`, legacy local/bootstrap `agile_session` cookies are not
 accepted; admins should be mapped through `OIDC_ADMIN_EMAILS` or
 `OIDC_ADMIN_CLAIM`.
-For a local Keycloak walkthrough, see [docs/local-oidc-sso.md](docs/local-oidc-sso.md).
+For setup, IdP claim mapping, and existing workspace migration, see
+[docs/self-hosted-oidc-sso.md](docs/self-hosted-oidc-sso.md). For a local
+Keycloak walkthrough, see [docs/local-oidc-sso.md](docs/local-oidc-sso.md).
 Hosted Vercel beta remains Clerk-only.
 
 ### 3. Start PostgreSQL

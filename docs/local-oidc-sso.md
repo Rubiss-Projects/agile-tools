@@ -3,6 +3,9 @@
 This optional demo runs a local Keycloak identity provider for self-hosted SSO
 testing. It does not change the default `AUTH_PROVIDER=local_session` path.
 
+For production OIDC setup, IdP claim mapping, and existing workspace
+migration, see [self-hosted-oidc-sso.md](self-hosted-oidc-sso.md).
+
 ## Start Keycloak
 
 ```bash
