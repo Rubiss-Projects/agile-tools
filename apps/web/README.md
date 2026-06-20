@@ -92,7 +92,9 @@ pnpm --filter @agile-tools/web lint
   New OIDC users are keyed by issuer plus `sub`/`oid`/`email`, seeded as
   `member`, and can be seeded as `admin` with `OIDC_ADMIN_EMAILS` or
   `OIDC_ADMIN_CLAIM` plus `OIDC_ADMIN_CLAIM_VALUES`. Existing user roles stay
-  in the database and are not overwritten by later claim changes.
+  in the database and are not overwritten by later claim changes. See
+  [../../docs/self-hosted-oidc-sso.md](../../docs/self-hosted-oidc-sso.md)
+  for IdP claim setup and existing workspace migration.
 
 ## Development Considerations
 
