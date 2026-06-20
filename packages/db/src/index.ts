@@ -3,6 +3,7 @@ export { PrismaClient } from '@prisma/client';
 
 export * from './repositories/workspaces.js';
 export * from './repositories/workspace-users.js';
+export * from './repositories/flow-scope-user-roles.js';
 export * from './repositories/oidc-sessions.js';
 export * from './repositories/hosted-usage.js';
 export * from './repositories/jira-connections.js';

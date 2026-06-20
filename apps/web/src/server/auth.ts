@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import type { NextRequest, NextResponse } from 'next/server';
 import { getAuthProvider, logger } from '@agile-tools/shared';
-import { getPrismaClient, getWorkspaceByClerkOrgId } from '@agile-tools/db';
+import { getFlowScope, getPrismaClient, getWorkspaceByClerkOrgId, userHasFlowScopeRole } from '@agile-tools/db';
 import { ResponseError } from './errors';
 import {
   SESSION_COOKIE_MAX_AGE_SECONDS,
@@ -182,6 +182,35 @@ export async function requireAdminContext(): Promise<WorkspaceContext> {
     );
   }
   return ctx;
+}
+
+export async function requireScopeManagerContext(scopeId: string): Promise<WorkspaceContext> {
+  const ctx = await requireWorkspaceContext();
+  if (ctx.role === 'admin') return ctx;
+
+  const db = getPrismaClient();
+  const scope = await getFlowScope(db, ctx.workspaceId, scopeId);
+  if (!scope) {
+    throw new ResponseError(
+      Response.json({ code: 'NOT_FOUND', message: 'Flow scope not found.' }, { status: 404 }),
+    );
+  }
+
+  if (await userHasFlowScopeRole(db, ctx.workspaceId, scopeId, ctx.userId, 'owner')) {
+    return ctx;
+  }
+
+  throw new ResponseError(
+    Response.json(
+      { code: 'FORBIDDEN', message: 'Flow scope owner access required.' },
+      { status: 403 },
+    ),
+  );
+}
+
+export async function canManageFlowScope(context: WorkspaceContext, scopeId: string): Promise<boolean> {
+  if (context.role === 'admin') return true;
+  return userHasFlowScopeRole(getPrismaClient(), context.workspaceId, scopeId, context.userId, 'owner');
 }
 
 export function setWorkspaceSessionCookie(

@@ -1,7 +1,8 @@
 import { type NextRequest } from 'next/server';
 import { logger } from '@agile-tools/shared';
 import { getBoardDetail } from '@agile-tools/jira-client';
-import { requireAdminContext } from '@/server/auth';
+import { getPrismaClient } from '@agile-tools/db';
+import { requireWorkspaceContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../../../_lib';
 import { withHttpMetrics } from '@/server/route-metrics';
@@ -21,7 +22,30 @@ async function handleGET(
   }
 
   try {
-    const ctx = await requireAdminContext();
+    const ctx = await requireWorkspaceContext();
+    if (ctx.role !== 'admin') {
+      const ownedScope = await getPrismaClient().flowScope.findFirst({
+        where: {
+          workspaceId: ctx.workspaceId,
+          connectionId,
+          boardId: String(boardId),
+          userRoleAssignments: {
+            some: {
+              workspaceUserId: ctx.userId,
+              role: 'owner',
+            },
+          },
+        },
+        select: { id: true },
+      });
+      if (!ownedScope) {
+        return Response.json(
+          { code: 'FORBIDDEN', message: 'Flow scope owner access required.' },
+          { status: 403 },
+        );
+      }
+    }
+
     const conn = await requireJiraConnection(ctx.workspaceId, connectionId);
     const client = await createClientForConnection(conn);
 

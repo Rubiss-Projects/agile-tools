@@ -1,11 +1,18 @@
-import { getPrismaClient, listJiraConnections, listFlowScopes } from '@agile-tools/db';
+import {
+  getPrismaClient,
+  listFlowScopeUserRoleAssignments,
+  listJiraConnections,
+  listFlowScopes,
+  listWorkspaceUsers,
+} from '@agile-tools/db';
 import { getConfig } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { mapConnection } from '@/app/api/v1/admin/jira-connections/_lib';
-import { mapScope } from '@/app/api/v1/admin/scopes/_lib';
+import { mapFlowScopeOwner, mapScope } from '@/app/api/v1/admin/scopes/_lib';
 import { JiraCloudConnectButton } from '@/components/admin/jira-cloud-connect-button';
 import { JiraConnectionForm, ValidateConnectionButton } from '@/components/admin/jira-connection-form';
 import { FlowScopeForm } from '@/components/admin/flow-scope-form';
+import { FlowScopeOwnerForm } from '@/components/admin/flow-scope-owner-form';
 import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import { Breadcrumbs } from '@/components/app/breadcrumbs';
 import { getMissingAtlassianOAuthConfig } from '@/server/atlassian-oauth';
@@ -81,9 +88,10 @@ export default async function AdminJiraPage() {
   }
 
   const db = getPrismaClient();
-  const [connections, scopes] = await Promise.all([
+  const [connections, scopes, workspaceUsers] = await Promise.all([
     listJiraConnections(db, ctx.workspaceId),
     listFlowScopes(db, ctx.workspaceId),
+    listWorkspaceUsers(db, ctx.workspaceId),
   ]);
   const hostedWarnings = hostedCloudOnly ? await getHostedBudgetWarnings() : [];
   const missingAtlassianOAuthConfig = hostedCloudOnly ? getMissingAtlassianOAuthConfig() : [];
@@ -104,9 +112,27 @@ export default async function AdminJiraPage() {
   const jiraBaseUrlByConnectionId = new Map(
     connections.map((connection) => [connection.id, connection.siteUrl ?? connection.baseUrl]),
   );
+  const ownerAssignmentsByScopeId = new Map(
+    await Promise.all(
+      scopes.map(async (scope) => [
+        scope.id,
+        (await listFlowScopeUserRoleAssignments(db, ctx.workspaceId, scope.id, 'owner')).map(mapFlowScopeOwner),
+      ] as const),
+    ),
+  );
+  const workspaceUserSummaries = workspaceUsers.map((user) => ({
+    id: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+  }));
   const scopeSummaries = scopes.map((scope) => {
     const jiraBaseUrl = jiraBaseUrlByConnectionId.get(scope.connectionId);
-    return mapScope(scope, jiraBaseUrl ? { jiraBaseUrl } : undefined);
+    const owners = ownerAssignmentsByScopeId.get(scope.id) ?? [];
+    return mapScope(scope, {
+      ...(jiraBaseUrl ? { jiraBaseUrl } : {}),
+      owners,
+    });
   });
 
   const connectionTone = (status: string) => {
@@ -267,6 +293,13 @@ export default async function AdminJiraPage() {
                   )}
                 </div>
                 <div style={{ width: '100%' }}>
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <FlowScopeOwnerForm
+                      scopeId={scope.id}
+                      owners={scope.owners ?? []}
+                      workspaceUsers={workspaceUserSummaries}
+                    />
+                  </div>
                   <FlowScopeForm
                     key={`scope-${scope.id}-${scope.connectionId}-${scope.boardId}-${scope.timezone}-${scope.syncIntervalMinutes}`}
                     connections={connectionSummaries}

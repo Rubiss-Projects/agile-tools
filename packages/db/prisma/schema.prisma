@@ -78,6 +78,10 @@ enum WorkspaceUserRole {
   member
 }
 
+enum FlowScopeUserRole {
+  owner
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Workspace {
@@ -110,8 +114,10 @@ model WorkspaceUser {
 
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   oidcSessions OidcSession[]
+  flowScopes    FlowScopeUserRoleAssignment[]
 
   @@unique([workspaceId, authProvider, externalSubject])
+  @@unique([workspaceId, id])
   @@index([workspaceId, role])
   @@index([email])
 }
@@ -192,13 +198,32 @@ model FlowScope {
   boardSnapshots      BoardSnapshot[]
   syncRuns            SyncRun[]
   hostedSyncTasks     HostedSyncTask[]
+  userRoleAssignments FlowScopeUserRoleAssignment[]
   workItems           WorkItem[]
   agingModels         AgingThresholdModel[]
   forecastCache       ForecastResultCache[]
   epicForecastTargets EpicForecastTarget[]
 
+  @@unique([workspaceId, id])
   @@index([workspaceId])
   @@index([connectionId])
+}
+
+model FlowScopeUserRoleAssignment {
+  id              String            @id @default(uuid())
+  workspaceId     String
+  scopeId         String
+  workspaceUserId String
+  role            FlowScopeUserRole @default(owner)
+  assignedAt      DateTime          @default(now())
+  assignedBy      String?
+
+  scope FlowScope     @relation(fields: [workspaceId, scopeId], references: [workspaceId, id], onDelete: Cascade)
+  user  WorkspaceUser @relation(fields: [workspaceId, workspaceUserId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([scopeId, workspaceUserId, role])
+  @@index([workspaceId, workspaceUserId, role])
+  @@index([workspaceId, scopeId, role])
 }
 
 model BoardSnapshot {

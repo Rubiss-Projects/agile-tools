@@ -41,3 +41,27 @@ export async function upsertOidcWorkspaceUser(
     },
   });
 }
+
+export async function listWorkspaceUsers(
+  client: WorkspaceUserClient,
+  workspaceId: string,
+): Promise<WorkspaceUser[]> {
+  return client.workspaceUser.findMany({
+    where: { workspaceId },
+    orderBy: [
+      { displayName: 'asc' },
+      { email: 'asc' },
+      { createdAt: 'asc' },
+    ],
+  });
+}
+
+export async function getWorkspaceUser(
+  client: WorkspaceUserClient,
+  workspaceId: string,
+  workspaceUserId: string,
+): Promise<WorkspaceUser | null> {
+  return client.workspaceUser.findFirst({
+    where: { workspaceId, id: workspaceUserId },
+  });
+}

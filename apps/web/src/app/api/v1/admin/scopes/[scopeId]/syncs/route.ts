@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { getPrismaClient, listSyncRuns } from '@agile-tools/db';
 import { logger, recordManualSyncEnqueue } from '@agile-tools/shared';
-import { requireAdminContext } from '@/server/auth';
+import { requireScopeManagerContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireScope, mapSyncRun, queueManualScopeSync } from '../../_lib';
@@ -13,15 +13,15 @@ async function handlePOST(
 ): Promise<Response> {
   let enqueueResult = 'error';
   try {
-    const ctx = await requireAdminContext();
+    const { scopeId } = await params;
+    const ctx = await requireScopeManagerContext(scopeId);
     assertTrustedMutationRequest(_req);
     enforceRateLimit(_req, {
       bucket: 'admin-syncs:trigger',
-      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${scopeId}`,
       max: 10,
       windowMs: 5 * 60_000,
     });
-    const { scopeId } = await params;
 
     await requireScope(ctx.workspaceId, scopeId);
 
@@ -76,8 +76,8 @@ async function handleGET(
   { params }: { params: Promise<{ scopeId: string }> },
 ): Promise<Response> {
   try {
-    const ctx = await requireAdminContext();
     const { scopeId } = await params;
+    const ctx = await requireScopeManagerContext(scopeId);
 
     await requireScope(ctx.workspaceId, scopeId);
 

@@ -1,5 +1,6 @@
 import type {
   FlowScope as ApiFlowScope,
+  FlowScopeOwner,
   SyncRun as ApiSyncRun,
   NamedValue,
 } from '@agile-tools/shared/contracts/api';
@@ -87,7 +88,7 @@ function parseStoredIncludedIssueTypes(scope: DbFlowScope): NamedValue[] | undef
  */
 export function mapScope(
   scope: DbFlowScope,
-  options?: { jiraBaseUrl: string },
+  options?: { jiraBaseUrl?: string; owners?: FlowScopeOwner[] },
 ): ApiFlowScope {
   const includedIssueTypes = parseStoredIncludedIssueTypes(scope);
   return {
@@ -105,6 +106,27 @@ export function mapScope(
     doneStatusIds: scope.doneStatusIds,
     syncIntervalMinutes: scope.syncIntervalMinutes,
     status: scope.status,
+    ...(options?.owners !== undefined ? { owners: options.owners } : {}),
+  };
+}
+
+export function mapFlowScopeOwner(assignment: {
+  assignedAt: Date;
+  assignedBy: string | null;
+  user: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    role: 'admin' | 'member';
+  };
+}): FlowScopeOwner {
+  return {
+    id: assignment.user.id,
+    email: assignment.user.email,
+    displayName: assignment.user.displayName,
+    role: assignment.user.role,
+    assignedAt: assignment.assignedAt.toISOString(),
+    ...(assignment.assignedBy !== null ? { assignedBy: assignment.assignedBy } : {}),
   };
 }
 

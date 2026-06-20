@@ -3,7 +3,7 @@ import { getPrismaClient, getActiveHoldDefinition, upsertHoldDefinition } from '
 import { logger } from '@agile-tools/shared';
 import { HoldDefinitionRequestSchema } from '@agile-tools/shared/contracts/api';
 import type { HoldDefinitionResponse } from '@agile-tools/shared/contracts/api';
-import { requireAdminContext } from '@/server/auth';
+import { requireScopeManagerContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireScope } from '../../_lib';
@@ -14,8 +14,8 @@ async function handleGET(
   { params }: { params: Promise<{ scopeId: string }> },
 ): Promise<Response> {
   try {
-    const ctx = await requireAdminContext();
     const { scopeId } = await params;
+    const ctx = await requireScopeManagerContext(scopeId);
 
     await requireScope(ctx.workspaceId, scopeId);
 
@@ -47,15 +47,15 @@ async function handlePUT(
   { params }: { params: Promise<{ scopeId: string }> },
 ): Promise<Response> {
   try {
-    const ctx = await requireAdminContext();
+    const { scopeId } = await params;
+    const ctx = await requireScopeManagerContext(scopeId);
     assertTrustedMutationRequest(req);
     enforceRateLimit(req, {
       bucket: 'admin-hold-definition:update',
-      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${scopeId}`,
       max: 30,
       windowMs: 5 * 60_000,
     });
-    const { scopeId } = await params;
 
     await requireScope(ctx.workspaceId, scopeId);
 
