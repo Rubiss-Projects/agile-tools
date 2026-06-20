@@ -181,6 +181,50 @@ describe('getConfig', () => {
     expect(isHostedMode(config)).toBe(true);
     expect(config.ATLASSIAN_CLIENT_ID).toBeUndefined();
   });
+
+  it('allows self-hosted OIDC mode when the required provider settings are configured', () => {
+    process.env['DATABASE_URL'] = 'postgresql://localhost:5432/agile_tools';
+    process.env['ENCRYPTION_KEY'] = '12345678901234567890123456789012';
+    process.env['SESSION_SECRET'] = 'session-secret-for-tests-1234567890';
+    process.env['AUTH_PROVIDER'] = 'oidc';
+    process.env['OIDC_ISSUER'] = 'https://idp.example.test';
+    process.env['OIDC_CLIENT_ID'] = 'agile-tools';
+    process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
+    process.env['OIDC_REDIRECT_URI'] = 'https://app.example.test/api/oidc/callback';
+    process.env['OIDC_POST_LOGOUT_REDIRECT_URI'] = 'https://app.example.test/';
+    process.env['OIDC_WORKSPACE_ID'] = 'workspace-uuid';
+
+    const config = getConfig();
+
+    expect(config.AUTH_PROVIDER).toBe('oidc');
+    expect(isHostedMode(config)).toBe(false);
+  });
+
+  it('rejects OIDC mode when required provider settings are missing', () => {
+    process.env['DATABASE_URL'] = 'postgresql://localhost:5432/agile_tools';
+    process.env['ENCRYPTION_KEY'] = '12345678901234567890123456789012';
+    process.env['SESSION_SECRET'] = 'session-secret-for-tests-1234567890';
+    process.env['AUTH_PROVIDER'] = 'oidc';
+
+    expect(() => getConfig()).toThrowError(/OIDC_ISSUER|OIDC_CLIENT_ID|OIDC_WORKSPACE_ID/);
+  });
+
+  it('rejects OIDC auth for hosted Vercel mode', () => {
+    process.env['DATABASE_URL'] = 'postgresql://localhost:5432/agile_tools';
+    process.env['ENCRYPTION_KEY'] = '12345678901234567890123456789012';
+    process.env['SESSION_SECRET'] = 'session-secret-for-tests-1234567890';
+    process.env['AUTH_PROVIDER'] = 'oidc';
+    process.env['SYNC_BACKEND'] = 'vercel_queues';
+    process.env['JIRA_CONNECTION_POLICY'] = 'cloud_oauth_only';
+    process.env['OIDC_ISSUER'] = 'https://idp.example.test';
+    process.env['OIDC_CLIENT_ID'] = 'agile-tools';
+    process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
+    process.env['OIDC_REDIRECT_URI'] = 'https://app.example.test/api/oidc/callback';
+    process.env['OIDC_POST_LOGOUT_REDIRECT_URI'] = 'https://app.example.test/';
+    process.env['OIDC_WORKSPACE_ID'] = 'workspace-uuid';
+
+    expect(() => getConfig()).toThrowError(/Hosted mode requires AUTH_PROVIDER=clerk/);
+  });
 });
 
 describe('runtime mode config', () => {
@@ -221,6 +265,20 @@ describe('runtime mode config', () => {
       SYNC_BACKEND: 'pgboss',
       JIRA_CONNECTION_POLICY: 'self_hosted_tokens',
     });
+    expect(isHostedModeFromEnv()).toBe(false);
+  });
+
+  it('reads self-hosted OIDC mode without requiring full provider config', () => {
+    delete process.env['DATABASE_URL'];
+    delete process.env['ENCRYPTION_KEY'];
+    process.env['AUTH_PROVIDER'] = 'oidc';
+
+    expect(getRuntimeModeConfig()).toEqual({
+      AUTH_PROVIDER: 'oidc',
+      SYNC_BACKEND: 'pgboss',
+      JIRA_CONNECTION_POLICY: 'self_hosted_tokens',
+    });
+    expect(getAuthProvider()).toBe('oidc');
     expect(isHostedModeFromEnv()).toBe(false);
   });
 

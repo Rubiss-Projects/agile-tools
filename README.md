@@ -67,6 +67,13 @@ ALLOW_LOOPBACK_HTTP_BYPASS=true
 ALLOW_LOCAL_BOOTSTRAP=true
 ```
 
+Self-hosted SSO is optional. Leave `AUTH_PROVIDER=local_session` to keep the
+existing unauthenticated landing page, read-only fallback option, and local
+admin bootstrap cookie flow. To require organization sign-in instead, set
+`AUTH_PROVIDER=oidc` and configure the `OIDC_*` variables in `.env.example`.
+For a local Keycloak walkthrough, see [docs/local-oidc-sso.md](docs/local-oidc-sso.md).
+Hosted Vercel beta remains Clerk-only.
+
 ### 3. Start PostgreSQL
 
 ```bash

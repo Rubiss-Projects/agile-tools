@@ -2,6 +2,8 @@ export { getPrismaClient, disconnectPrisma } from './client.js';
 export { PrismaClient } from '@prisma/client';
 
 export * from './repositories/workspaces.js';
+export * from './repositories/workspace-users.js';
+export * from './repositories/oidc-sessions.js';
 export * from './repositories/hosted-usage.js';
 export * from './repositories/jira-connections.js';
 export * from './repositories/flow-scopes.js';

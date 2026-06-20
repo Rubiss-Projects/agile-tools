@@ -1,0 +1,16 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command:
+      - start-dev
+      - --import-realm
+      - --hostname=http://localhost:8081
+      - --hostname-strict=false
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - ./docker/keycloak/agile-tools-realm.json:/opt/keycloak/data/import/agile-tools-realm.json:ro

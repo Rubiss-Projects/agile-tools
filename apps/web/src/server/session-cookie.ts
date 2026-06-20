@@ -4,12 +4,17 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getConfig } from '@agile-tools/shared';
 
 export type WorkspaceRole = 'admin' | 'member';
+export type WorkspaceAuthProvider = 'local_session' | 'oidc';
 
 export interface WorkspaceContext {
   userId: string;
   workspaceId: string;
   role: WorkspaceRole;
+  authProvider?: WorkspaceAuthProvider;
 }
+
+export const SESSION_COOKIE_NAME = 'agile_session';
+export const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
 const SESSION_COOKIE_VERSION = 'v1';
 
@@ -75,6 +80,9 @@ function isValidPayload(value: unknown): value is WorkspaceContext {
   return (
     typeof obj['userId'] === 'string' &&
     typeof obj['workspaceId'] === 'string' &&
-    (obj['role'] === 'admin' || obj['role'] === 'member')
+    (obj['role'] === 'admin' || obj['role'] === 'member') &&
+    (obj['authProvider'] === undefined ||
+      obj['authProvider'] === 'local_session' ||
+      obj['authProvider'] === 'oidc')
   );
 }

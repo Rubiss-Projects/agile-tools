@@ -1,6 +1,6 @@
 import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import { getPrismaClient, listFlowScopes, listJiraConnections } from '@agile-tools/db';
-import { isHostedModeFromEnv } from '@agile-tools/shared';
+import { getAuthProvider, isHostedModeFromEnv } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { getLocalDemoDefaultPath, isLocalDemoEnabled } from '@/server/dev-demo';
 import { getLocalAdminDefaultPath, isLocalAdminBootstrapAvailable } from '@/server/local-bootstrap';
@@ -29,6 +29,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
+  const authProvider = getAuthProvider();
   const hosted = isHostedModeFromEnv();
   const ctx = await getWorkspaceContext();
   const demoEnabled = isLocalDemoEnabled();
@@ -53,6 +54,33 @@ export default async function HomePage() {
               </SignUpButton>
               <a href="/onboarding" style={{ ...buttonStyle('secondary'), textDecoration: 'none' }}>
                 Onboarding
+              </a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    if (authProvider === 'oidc') {
+      return (
+        <main style={{ ...pageShellStyle, maxWidth: '1040px' }}>
+          <section style={heroCardStyle}>
+            <p style={eyebrowStyle}>Single Sign-On</p>
+            <h1 style={heroTitleStyle}>Agile Tools</h1>
+            <p style={heroCopyStyle}>
+              Sign in with your organization identity provider to open the workspace.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+              <a
+                href="/api/oidc/login"
+                style={{
+                  ...buttonStyle('primary'),
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  textDecoration: 'none',
+                }}
+              >
+                Sign in with SSO
               </a>
             </div>
           </section>
@@ -191,6 +219,13 @@ export default async function HomePage() {
               mode="demo"
               variant="secondary"
             />
+          )}
+          {authProvider === 'oidc' && (
+            <form action="/api/oidc/logout" method="post" style={{ margin: 0 }}>
+              <button type="submit" style={buttonStyle('secondary')}>
+                Sign out
+              </button>
+            </form>
           )}
         </div>
       </section>
