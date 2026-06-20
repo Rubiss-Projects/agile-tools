@@ -100,6 +100,11 @@ Hosted mode requires Clerk:
 - Clerk Organization maps one-to-one to `Workspace.clerkOrgId`.
 - Clerk `org:admin` maps to app `admin`.
 - Clerk org members map to app `member`.
+- Do not set `AUTH_PROVIDER=oidc` for hosted Vercel mode. Hosted keeps Clerk as
+  the platform identity boundary so onboarding, organizations, capacity limits,
+  and billing-oriented controls have one source of truth. If hosted enterprise
+  SSO is added later, it should be exposed as a Clerk-backed organization/domain
+  setup flow rather than as a second app-owned OIDC provider beside Clerk.
 
 Hosted beta caps:
 

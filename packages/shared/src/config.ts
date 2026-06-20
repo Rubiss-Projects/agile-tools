@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const AuthProviderSchema = z.enum(['local_session', 'clerk']);
+export const AuthProviderSchema = z.enum(['local_session', 'clerk', 'oidc']);
 export type AuthProvider = z.infer<typeof AuthProviderSchema>;
 
 export const SyncBackendSchema = z.enum(['pgboss', 'vercel_queues']);
@@ -59,6 +59,23 @@ const configSchema = z.object({
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
   CLERK_SECRET_KEY: z.string().min(1).optional(),
   CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
+  OIDC_ISSUER: z.string().url().optional(),
+  OIDC_CLIENT_ID: z.string().min(1).optional(),
+  OIDC_CLIENT_SECRET: z.string().min(1).optional(),
+  OIDC_CLIENT_AUTH_METHOD: z
+    .enum(['client_secret_basic', 'client_secret_post'])
+    .default('client_secret_basic'),
+  OIDC_REDIRECT_URI: z.string().url().optional(),
+  OIDC_POST_LOGOUT_REDIRECT_URI: z.string().url().optional(),
+  OIDC_SCOPES: z.string().min(1).default('openid profile email'),
+  OIDC_ALLOWED_ISSUERS: z.string().min(1).optional(),
+  OIDC_ALLOW_INSECURE_HTTP: z.enum(['true', 'false']).default('false'),
+  OIDC_WORKSPACE_ID: z.string().min(1).optional(),
+  OIDC_WORKSPACE_NAME: z.string().min(1).default('Agile Tools'),
+  OIDC_DEFAULT_TIMEZONE: z.string().min(1).default('UTC'),
+  OIDC_ADMIN_EMAILS: z.string().min(1).optional(),
+  OIDC_ADMIN_CLAIM: z.string().min(1).optional(),
+  OIDC_ADMIN_CLAIM_VALUES: z.string().min(1).optional(),
   ATLASSIAN_CLIENT_ID: z.string().min(1).optional(),
   ATLASSIAN_CLIENT_SECRET: z.string().min(1).optional(),
   ATLASSIAN_REDIRECT_URI: z.string().url().optional(),
@@ -136,6 +153,43 @@ const configSchema = z.object({
           message: `${key} is required in hosted mode.`,
         });
       }
+    }
+  }
+
+  if (value.AUTH_PROVIDER === 'oidc') {
+    for (const key of [
+      'SESSION_SECRET',
+      'OIDC_ISSUER',
+      'OIDC_CLIENT_ID',
+      'OIDC_CLIENT_SECRET',
+      'OIDC_REDIRECT_URI',
+      'OIDC_POST_LOGOUT_REDIRECT_URI',
+      'OIDC_WORKSPACE_ID',
+    ] as const) {
+      if (!value[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} is required when AUTH_PROVIDER=oidc.`,
+        });
+      }
+    }
+
+    const scopes = value.OIDC_SCOPES.split(/\s+/).filter(Boolean);
+    if (!scopes.includes('openid')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['OIDC_SCOPES'],
+        message: 'OIDC_SCOPES must include openid.',
+      });
+    }
+
+    if (value.OIDC_ADMIN_CLAIM && !value.OIDC_ADMIN_CLAIM_VALUES) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['OIDC_ADMIN_CLAIM_VALUES'],
+        message: 'OIDC_ADMIN_CLAIM_VALUES is required when OIDC_ADMIN_CLAIM is set.',
+      });
     }
   }
 });

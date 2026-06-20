@@ -74,6 +74,17 @@ pnpm --filter @agile-tools/web lint
   hidden — `requireAdminContext()` keeps rejecting member contexts. This is a
   pilot/deployment fallback, not a replacement for a real workspace auth
   provider.
+- Self-hosted deployments that already have a corporate identity provider can
+  set `AUTH_PROVIDER=oidc`. The app uses server-side Authorization Code + PKCE,
+  standard OIDC discovery, and then issues the existing `agile_session` cookie.
+  Required settings are `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
+  `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`,
+  `OIDC_POST_LOGOUT_REDIRECT_URI`, and `OIDC_WORKSPACE_ID`. Configure
+  `OIDC_ALLOWED_ISSUERS` when the `iss` claim differs from the discovery URL.
+  New OIDC users are keyed by issuer plus `sub`/`oid`/`email`, seeded as
+  `member`, and can be seeded as `admin` with `OIDC_ADMIN_EMAILS` or
+  `OIDC_ADMIN_CLAIM` plus `OIDC_ADMIN_CLAIM_VALUES`. Existing user roles stay
+  in the database and are not overwritten by later claim changes.
 
 ## Development Considerations
 

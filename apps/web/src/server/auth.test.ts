@@ -20,10 +20,15 @@ afterAll(() => {
   vi.mocked(cookies).mockReset();
 });
 
-function makeCookieStore(cookieValue: string | null) {
+function makeCookieStore(cookieValue: string | null, extraCookies: Record<string, string> = {}) {
   return {
-    get: (name: string) =>
-      name === SESSION_COOKIE_NAME && cookieValue !== null ? { name, value: cookieValue } : undefined,
+    get: (name: string) => {
+      if (name === SESSION_COOKIE_NAME && cookieValue !== null) {
+        return { name, value: cookieValue };
+      }
+      const extraValue = extraCookies[name];
+      return extraValue !== undefined ? { name, value: extraValue } : undefined;
+    },
   };
 }
 
@@ -116,6 +121,49 @@ describe('getWorkspaceContext', () => {
       userId: 'readonly-public',
       role: 'member',
     });
+  });
+
+  it('keeps OIDC opt-in bridged through the existing signed workspace cookie', async () => {
+    process.env['AUTH_PROVIDER'] = 'oidc';
+    process.env['OIDC_ISSUER'] = 'https://idp.example.test';
+    process.env['OIDC_CLIENT_ID'] = 'agile-tools';
+    process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
+    process.env['OIDC_REDIRECT_URI'] = 'https://app.example.test/api/oidc/callback';
+    process.env['OIDC_POST_LOGOUT_REDIRECT_URI'] = 'https://app.example.test/';
+    process.env['OIDC_WORKSPACE_ID'] = 'oidc-workspace';
+    resetConfig();
+    const signed = serializeWorkspaceContext({
+      userId: 'oidc-user',
+      workspaceId: 'oidc-workspace',
+      role: 'admin',
+    });
+    vi.mocked(cookies).mockReturnValue(makeCookieStore(signed) as never);
+
+    expect(await getWorkspaceContext()).toEqual({
+      userId: 'oidc-user',
+      workspaceId: 'oidc-workspace',
+      role: 'admin',
+    });
+  });
+
+  it('rejects an OIDC-marked workspace cookie without an OIDC session cookie', async () => {
+    process.env['AUTH_PROVIDER'] = 'oidc';
+    process.env['OIDC_ISSUER'] = 'https://idp.example.test';
+    process.env['OIDC_CLIENT_ID'] = 'agile-tools';
+    process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
+    process.env['OIDC_REDIRECT_URI'] = 'https://app.example.test/api/oidc/callback';
+    process.env['OIDC_POST_LOGOUT_REDIRECT_URI'] = 'https://app.example.test/';
+    process.env['OIDC_WORKSPACE_ID'] = 'oidc-workspace';
+    resetConfig();
+    const signed = serializeWorkspaceContext({
+      userId: 'oidc-user',
+      workspaceId: 'oidc-workspace',
+      role: 'admin',
+      authProvider: 'oidc',
+    });
+    vi.mocked(cookies).mockReturnValue(makeCookieStore(signed) as never);
+
+    expect(await getWorkspaceContext()).toBeNull();
   });
 });
 

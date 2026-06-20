@@ -1,0 +1,85 @@
+{
+  "realm": "agile-tools",
+  "enabled": true,
+  "displayName": "Agile Tools Local SSO",
+  "loginWithEmailAllowed": true,
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "groups": [
+    {
+      "name": "agile-tools-admins"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "agile-tools",
+      "name": "Agile Tools",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "local-keycloak-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/api/oidc/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@example.test",
+      "email": "admin@example.test",
+      "firstName": "Agile",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": [
+        "agile-tools-admins"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "agile-tools-admin",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "member@example.test",
+      "email": "member@example.test",
+      "firstName": "Agile",
+      "lastName": "Member",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "agile-tools-member",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

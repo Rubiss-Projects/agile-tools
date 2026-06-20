@@ -73,6 +73,11 @@ enum HostedCapacityReservationKind {
   org_member
 }
 
+enum WorkspaceUserRole {
+  admin
+  member
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Workspace {
@@ -85,8 +90,50 @@ model Workspace {
 
   connections                JiraConnection[]
   scopes                     FlowScope[]
+  users                      WorkspaceUser[]
+  oidcSessions               OidcSession[]
   hostedUsageCounters        HostedUsageCounter[]
   hostedCapacityReservations HostedCapacityReservation[]
+}
+
+model WorkspaceUser {
+  id              String            @id @default(uuid())
+  workspaceId     String
+  authProvider    String
+  externalSubject String
+  email           String?
+  displayName     String?
+  role            WorkspaceUserRole @default(member)
+  lastLoginAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  oidcSessions OidcSession[]
+
+  @@unique([workspaceId, authProvider, externalSubject])
+  @@index([workspaceId, role])
+  @@index([email])
+}
+
+model OidcSession {
+  id                    String    @id @default(uuid())
+  workspaceId           String
+  workspaceUserId       String
+  issuer                String
+  subject               String
+  idTokenSecretRef      String?
+  accessTokenSecretRef  String?
+  refreshTokenSecretRef String?
+  accessTokenExpiresAt  DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      WorkspaceUser @relation(fields: [workspaceUserId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceUserId])
+  @@index([workspaceId, createdAt])
 }
 
 model JiraConnection {

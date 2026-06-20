@@ -19,6 +19,7 @@ out/
 packages/db/src/generated/
 
 # Test artifacts
+.codex/
 coverage/
 playwright-report/
 test-results/

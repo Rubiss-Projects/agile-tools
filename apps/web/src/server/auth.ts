@@ -4,18 +4,16 @@ import { getAuthProvider, logger } from '@agile-tools/shared';
 import { getPrismaClient, getWorkspaceByClerkOrgId } from '@agile-tools/db';
 import { ResponseError } from './errors';
 import {
+  SESSION_COOKIE_MAX_AGE_SECONDS,
+  SESSION_COOKIE_NAME,
   parseWorkspaceContextCookie,
   serializeWorkspaceContext,
   type WorkspaceContext,
   type WorkspaceRole,
 } from './session-cookie';
+import { getOidcSessionWorkspaceContext } from './oidc';
 
-// Session cookie name — must match the value set by the auth middleware.
-export const SESSION_COOKIE_NAME = 'agile_session';
-
-const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
-
-export { serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
+export { SESSION_COOKIE_NAME, serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
 
 export interface HostedClerkIdentity {
   userId: string;
@@ -51,8 +49,12 @@ interface ClerkOrganizationClient {
  * contract.
  */
 export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
-  if (getAuthProvider() === 'clerk') {
+  const provider = getAuthProvider();
+  if (provider === 'clerk') {
     return getClerkWorkspaceContext();
+  }
+  if (provider === 'oidc') {
+    return getOidcSessionWorkspaceContext();
   }
 
   return getLocalSessionWorkspaceContext();
