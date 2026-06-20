@@ -11,7 +11,7 @@ import {
   noticeStyle,
 } from '@/components/app/chrome';
 
-export function WorkspaceOnboardingForm({ defaultName }: { defaultName: string }) {
+export function WorkspaceOnboardingForm({ brandName, defaultName }: { brandName: string; defaultName: string }) {
   const router = useRouter();
   const [name, setName] = useState(defaultName);
   const [timezone, setTimezone] = useState('America/New_York');
@@ -68,7 +68,7 @@ export function WorkspaceOnboardingForm({ defaultName }: { defaultName: string }
           style={inputStyle}
         />
       </label>
-      <p style={helperTextStyle}>Hosted beta creates one Agile Tools workspace for the active Clerk organization.</p>
+      <p style={helperTextStyle}>Hosted beta creates one {brandName} workspace for the active Clerk organization.</p>
       {error && (
         <div style={{ ...noticeStyle('danger'), margin: '0.9rem 0' }}>
           <p style={{ margin: 0 }}>{error}</p>

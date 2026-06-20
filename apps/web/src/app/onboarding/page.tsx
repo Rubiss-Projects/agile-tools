@@ -4,6 +4,7 @@ import { getPrismaClient, getWorkspaceByClerkOrgId } from '@agile-tools/db';
 import { isHostedModeFromEnv } from '@agile-tools/shared';
 
 import { getHostedClerkIdentity } from '@/server/auth';
+import { getAppBranding } from '@/server/branding';
 import {
   eyebrowStyle,
   heroCardStyle,
@@ -19,6 +20,8 @@ import { WorkspaceOnboardingForm } from '@/components/hosted/workspace-onboardin
 export const dynamic = 'force-dynamic';
 
 export default async function OnboardingPage() {
+  const branding = getAppBranding();
+
   if (!isHostedModeFromEnv()) {
     redirect('/');
   }
@@ -34,7 +37,7 @@ export default async function OnboardingPage() {
         <section style={heroCardStyle}>
           <p style={eyebrowStyle}>Hosted Setup</p>
           <h1 style={heroTitleStyle}>Choose an organization</h1>
-          <p style={heroCopyStyle}>Hosted Agile Tools requires an active Clerk organization before a workspace can be created.</p>
+          <p style={heroCopyStyle}>Hosted {branding.name} requires an active Clerk organization before a workspace can be created.</p>
         </section>
         <section style={{ ...sectionCardStyle, marginTop: '1.5rem' }}>
           <h2 style={sectionTitleStyle}>Organizations</h2>
@@ -58,10 +61,10 @@ export default async function OnboardingPage() {
       <section style={heroCardStyle}>
         <p style={eyebrowStyle}>Hosted Setup</p>
         <h1 style={heroTitleStyle}>Create workspace</h1>
-        <p style={heroCopyStyle}>This creates the Agile Tools workspace linked to the active Clerk organization.</p>
+        <p style={heroCopyStyle}>This creates the {branding.name} workspace linked to the active Clerk organization.</p>
       </section>
       <section style={{ ...sectionCardStyle, marginTop: '1.5rem' }}>
-        <WorkspaceOnboardingForm defaultName="Agile Tools Workspace" />
+        <WorkspaceOnboardingForm brandName={branding.name} defaultName={`${branding.name} Workspace`} />
       </section>
     </main>
   );
