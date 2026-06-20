@@ -77,6 +77,19 @@ OIDC_ADMIN_CLAIM_VALUES=agile-tools-admins
 When the mapped user signs in through SSO, the new `WorkspaceUser` row is
 created with role `admin`, and that user can open `/admin/jira`.
 
+## Flow Scope Owners
+
+OIDC users who are not workspace admins can be assigned as owners of individual
+flow scopes after they have signed in at least once. Open `/admin/jira` as a
+workspace admin, find the flow scope, and use **Assign owner** to grant access
+to one of the known workspace users.
+
+Scope owners keep their workspace role as `member`, but can manage the assigned
+scope from the scope page: manual syncs, start/done status mapping, issue type
+mapping, timezone, sync cadence, and hold-state configuration. They cannot
+create Jira connections, discover unrelated boards, create new scopes, assign
+other owners, or move the assigned scope to another board.
+
 ## Existing Workspace Migration
 
 For an existing self-hosted deployment with Jira connections, scopes, or sync

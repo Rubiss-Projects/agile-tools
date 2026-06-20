@@ -130,6 +130,20 @@ export type BoardDiscoveryDetail = z.infer<typeof BoardDiscoveryDetailSchema>;
 export const FlowScopeStatusSchema = z.enum(['active', 'paused', 'needs_attention']);
 export type FlowScopeStatus = z.infer<typeof FlowScopeStatusSchema>;
 
+export const WorkspaceUserSummarySchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().nullable().optional(),
+  displayName: z.string().nullable().optional(),
+  role: z.enum(['admin', 'member']),
+});
+export type WorkspaceUserSummary = z.infer<typeof WorkspaceUserSummarySchema>;
+
+export const FlowScopeOwnerSchema = WorkspaceUserSummarySchema.extend({
+  assignedAt: z.string().datetime(),
+  assignedBy: z.string().nullable().optional(),
+});
+export type FlowScopeOwner = z.infer<typeof FlowScopeOwnerSchema>;
+
 export const FlowScopeSchema = z.object({
   id: z.string().uuid(),
   connectionId: z.string().uuid(),
@@ -143,6 +157,7 @@ export const FlowScopeSchema = z.object({
   doneStatusIds: z.array(z.string()),
   syncIntervalMinutes: z.number().int(),
   status: FlowScopeStatusSchema,
+  owners: z.array(FlowScopeOwnerSchema).optional(),
 });
 export type FlowScope = z.infer<typeof FlowScopeSchema>;
 
@@ -159,6 +174,11 @@ export type CreateFlowScopeRequest = z.infer<typeof CreateFlowScopeRequestSchema
 
 export const UpdateFlowScopeRequestSchema = CreateFlowScopeRequestSchema;
 export type UpdateFlowScopeRequest = z.infer<typeof UpdateFlowScopeRequestSchema>;
+
+export const AssignFlowScopeOwnerRequestSchema = z.object({
+  workspaceUserId: z.string().uuid(),
+});
+export type AssignFlowScopeOwnerRequest = z.infer<typeof AssignFlowScopeOwnerRequestSchema>;
 
 export const HoldDefinitionRequestSchema = z.object({
   holdStatusIds: z.array(z.string()).min(1),

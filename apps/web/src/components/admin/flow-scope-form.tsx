@@ -32,6 +32,7 @@ interface Props {
   syncIntervalMax?: number;
   syncIntervalDefault?: number;
   syncIntervalHelpText?: string;
+  lockToInitialBoard?: boolean;
 }
 
 interface SubmitResult {
@@ -66,6 +67,7 @@ export function FlowScopeForm({
   syncIntervalMax = 15,
   syncIntervalDefault = 5,
   syncIntervalHelpText = 'Use a 5 to 15 minute cadence to stay within the default guard rails.',
+  lockToInitialBoard = false,
 }: Props) {
   const router = useRouter();
   const isEditMode = initialScope !== undefined;
@@ -238,15 +240,19 @@ export function FlowScopeForm({
       if (!initialScope) return;
       setLoadingExistingConfig(true);
       try {
-        const boardIdToInspect = await loadBoards(initialScope.connectionId, initialScope.boardId);
-        if (boardIdToInspect !== null) {
-          await inspectBoard(boardIdToInspect, initialScope.connectionId, initialScope);
+        if (lockToInitialBoard) {
+          await inspectBoard(initialScope.boardId, initialScope.connectionId, initialScope);
+        } else {
+          const boardIdToInspect = await loadBoards(initialScope.connectionId, initialScope.boardId);
+          if (boardIdToInspect !== null) {
+            await inspectBoard(boardIdToInspect, initialScope.connectionId, initialScope);
+          }
         }
       } finally {
         setLoadingExistingConfig(false);
       }
     })();
-  }, [expanded, initialScope, inspectBoard, isEditMode, loadBoards]);
+  }, [expanded, initialScope, inspectBoard, isEditMode, loadBoards, lockToInitialBoard]);
 
   function handleConnectionChange(id: string) {
     setConnectionId(id);
@@ -410,6 +416,7 @@ export function FlowScopeForm({
         </div>
       )}
 
+      {!lockToInitialBoard && (
       <div style={{ ...insetPanelStyle, marginBottom: '0.9rem' }}>
         <label>
           <span style={fieldLabelStyle}>Connection</span>
@@ -431,8 +438,19 @@ export function FlowScopeForm({
         <p style={helperTextStyle}>Board discovery uses the selected Jira connection and current PAT permissions.</p>
         {boardsError && <div style={{ ...noticeStyle('danger'), marginTop: '0.75rem' }}><p style={{ margin: 0 }}>{boardsError}</p></div>}
       </div>
+      )}
 
-      {boards.length > 0 && (
+      {lockToInitialBoard && initialScope && (
+        <div style={{ ...insetPanelStyle, marginBottom: '0.9rem' }}>
+          <p style={{ margin: 0, color: palette.ink, fontWeight: 700 }}>
+            {initialScope.boardName ?? `Board ${initialScope.boardId}`}
+          </p>
+          <p style={helperTextStyle}>Board selection is locked for assigned scope owners.</p>
+          {inspectError && <div style={{ ...noticeStyle('danger'), marginTop: '0.75rem' }}><p style={{ margin: 0 }}>{inspectError}</p></div>}
+        </div>
+      )}
+
+      {boards.length > 0 && !lockToInitialBoard && (
         <div style={{ ...insetPanelStyle, marginBottom: '0.9rem' }}>
           <label>
             <span style={fieldLabelStyle}>Board</span>

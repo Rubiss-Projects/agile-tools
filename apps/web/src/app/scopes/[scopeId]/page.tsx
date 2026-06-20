@@ -1,14 +1,16 @@
 import { notFound } from 'next/navigation';
-import { getPrismaClient, listSyncRuns } from '@agile-tools/db';
+import { getJiraConnection, getPrismaClient, listSyncRuns } from '@agile-tools/db';
 import { InvalidTimeZoneError, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
-import { getWorkspaceContext } from '@/server/auth';
+import { canManageFlowScope, getWorkspaceContext } from '@/server/auth';
 import { buildScopeSummary } from '@/server/views/scope-summary';
 import { SyncCompletionRefresh, TriggerSyncButton } from '@/components/admin/trigger-sync-button';
 import { HoldDefinitionForm } from '@/components/admin/hold-definition-form';
+import { FlowScopeForm } from '@/components/admin/flow-scope-form';
 import { FlowAnalyticsSection } from '@/components/flow/flow-analytics-section';
 import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import { Breadcrumbs } from '@/components/app/breadcrumbs';
 import { ViewerLocalTime } from '@/components/app/viewer-local-time';
+import { mapConnection } from '@/app/api/v1/admin/jira-connections/_lib';
 import {
   type FlowScope,
   type ScopeSummary,
@@ -134,6 +136,10 @@ export default async function ScopePage({
   if (!summary) notFound();
 
   const { scope, connectionHealth, lastSync, filterOptions, warnings } = summary;
+  const [canManageScope, scopeConnection] = await Promise.all([
+    canManageFlowScope(ctx, scopeId),
+    getJiraConnection(db, ctx.workspaceId, scope.connectionId),
+  ]);
   const latestSync = latestSyncRuns[0];
   const activeSync =
     latestSync !== undefined
@@ -272,7 +278,7 @@ export default async function ScopePage({
                 ...(filterOptions.statuses !== undefined && { statuses: filterOptions.statuses }),
                 ...(filterOptions.historicalWindows !== undefined && { historicalWindows: filterOptions.historicalWindows }),
               }}
-              {...(ctx.role === 'admin' && {
+              {...(canManageScope && {
                 footer: (
                   <HoldDefinitionForm
                     scopeId={scopeId}
@@ -363,10 +369,26 @@ export default async function ScopePage({
         ) : (
           <p style={sectionCopyStyle}>No sync runs yet.</p>
         )}
-        {ctx.role === 'admin'
+        {canManageScope
           ? <TriggerSyncButton scopeId={scopeId} activeSyncRunId={activeSync?.id ?? null} />
           : <SyncCompletionRefresh syncRunId={activeSync?.id ?? null} />}
         </section>
+
+        {canManageScope && scopeConnection && (
+          <section style={sectionCardStyle}>
+            <div style={sectionHeaderRowStyle}>
+              <div>
+                <h2 style={sectionTitleStyle}>Scope setup</h2>
+                <p style={sectionCopyStyle}>Update the assigned board boundaries, hold states, timezone, and sync cadence.</p>
+              </div>
+            </div>
+            <FlowScopeForm
+              connections={[mapConnection(scopeConnection)]}
+              initialScope={scope}
+              lockToInitialBoard={ctx.role !== 'admin'}
+            />
+          </section>
+        )}
       </div>
     </main>
   );

@@ -14,7 +14,7 @@ import { getConfig, isHostedMode, logger } from '@agile-tools/shared';
 import { type NamedValue, UpdateFlowScopeRequestSchema } from '@agile-tools/shared/contracts/api';
 import { getBoardDetail } from '@agile-tools/jira-client';
 import { z } from 'zod';
-import { requireAdminContext } from '@/server/auth';
+import { requireScopeManagerContext } from '@/server/auth';
 import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { assertHostedWriteAllowed } from '@/server/hosted-policy';
@@ -145,15 +145,15 @@ async function handlePUT(
   { params }: { params: Promise<{ scopeId: string }> },
 ): Promise<Response> {
   try {
-    const ctx = await requireAdminContext();
+    const { scopeId } = await params;
+    const ctx = await requireScopeManagerContext(scopeId);
     assertTrustedMutationRequest(req);
     enforceRateLimit(req, {
       bucket: 'admin-scopes:update',
-      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${scopeId}`,
       max: 20,
       windowMs: 5 * 60_000,
     });
-    const { scopeId } = await params;
 
     const body: unknown = await req.json().catch(() => null);
     const parsed = UpdateFlowScopeRequestSchema.safeParse(body);
@@ -209,6 +209,16 @@ async function handlePUT(
       preflightIncludedIssueTypeNames,
     );
     const boardSelectionChanged = hasBoardSelectionChange(preflightScope, parsed.data);
+    if (ctx.role !== 'admin' && boardSelectionChanged) {
+      return Response.json(
+        {
+          code: 'FORBIDDEN',
+          message: 'Flow scope owners cannot move a scope to another Jira connection or board.',
+        },
+        { status: 403 },
+      );
+    }
+
     const issueTypeSelectionChanged = hasIssueTypeSelectionChange(preflightScope, parsed.data);
     const boundaryChangesRequested = hasBoundaryChanges(preflightScope, parsed.data);
     const needsIssueTypeLookup =
@@ -474,16 +484,16 @@ async function handleDELETE(
   { params }: { params: Promise<{ scopeId: string }> },
 ): Promise<Response> {
   try {
-    const ctx = await requireAdminContext();
+    const { scopeId } = await params;
+    const ctx = await requireScopeManagerContext(scopeId);
     assertTrustedMutationRequest(req);
     enforceRateLimit(req, {
       bucket: 'admin-scopes:delete',
-      identifier: `${ctx.workspaceId}:${ctx.userId}:${(await params).scopeId}`,
+      identifier: `${ctx.workspaceId}:${ctx.userId}:${scopeId}`,
       max: 10,
       windowMs: 5 * 60_000,
     });
 
-    const { scopeId } = await params;
     const prisma = getPrismaClient();
     const txResult = await prisma.$transaction(async (tx) => {
       await acquireScopeSyncLock(tx, scopeId);
