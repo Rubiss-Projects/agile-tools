@@ -62,12 +62,38 @@ interface MetricsState {
   syncRunsCounter: Counter;
   syncRunDuration: Histogram;
   syncItemsProcessed: Histogram;
+  oidcAuthEventsCounter: Counter;
   httpClientRequestDuration: Histogram;
   databaseQueryDuration: Histogram;
   queueStatsProvider?: () => Promise<QueueStatsSnapshot[]>;
   queueStatsRegistered: boolean;
   server?: Server;
 }
+
+export type OidcAuthEvent =
+  | 'login_start'
+  | 'callback'
+  | 'refresh'
+  | 'logout'
+  | 'session_rejected';
+
+export type OidcAuthResult = 'success' | 'failure';
+
+export type OidcAuthReason =
+  | 'success'
+  | 'disabled'
+  | 'rate_limited'
+  | 'provider_error'
+  | 'missing_code'
+  | 'callback_error'
+  | 'exception'
+  | 'csrf'
+  | 'invalid_workspace_cookie'
+  | 'missing_session_cookie'
+  | 'missing_session_row'
+  | 'session_mismatch'
+  | 'no_refresh_token'
+  | 'refresh_failed';
 
 const metricsGlobal = globalThis as typeof globalThis & {
   __agileToolsOtelMetrics?: MetricsState;
@@ -267,6 +293,10 @@ function createMetricsState(options: InitializeMetricsOptions): MetricsState {
     }),
     syncItemsProcessed: meter.createHistogram('agile_tools_sync_items_processed', {
       description: 'Distinct Jira issues processed by scope sync runs.',
+      unit: '1',
+    }),
+    oidcAuthEventsCounter: meter.createCounter('agile_tools_oidc_auth_events', {
+      description: 'OIDC authentication events by low-cardinality event, result, and reason.',
       unit: '1',
     }),
     httpClientRequestDuration: meter.createHistogram(METRIC_HTTP_CLIENT_REQUEST_DURATION, {
@@ -534,6 +564,18 @@ export function recordSyncRun(input: {
   state.syncRunsCounter.add(1, attributes);
   state.syncRunDuration.record(input.durationSeconds, attributes);
   if (input.itemCount !== undefined) state.syncItemsProcessed.record(input.itemCount, attributes);
+}
+
+export function recordOidcAuthEvent(input: {
+  event: OidcAuthEvent;
+  result: OidcAuthResult;
+  reason: OidcAuthReason;
+}): void {
+  getMetricsState().oidcAuthEventsCounter.add(1, {
+    event: input.event,
+    result: input.result,
+    reason: input.reason,
+  });
 }
 
 export function recordJiraRequest(input: {

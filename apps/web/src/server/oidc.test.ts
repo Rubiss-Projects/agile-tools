@@ -21,6 +21,7 @@ describe('OIDC settings', () => {
       OIDC_REDIRECT_URI: 'https://app.example.test/api/oidc/callback',
       OIDC_POST_LOGOUT_REDIRECT_URI: 'https://app.example.test/',
       OIDC_WORKSPACE_ID: 'workspace-uuid',
+      OIDC_SESSION_MAX_AGE_SECONDS: '3600',
       OIDC_ADMIN_EMAILS: 'admin@example.test,owner@example.test',
       OIDC_ADMIN_CLAIM: 'groups',
       OIDC_ADMIN_CLAIM_VALUES: 'agile-tools-admins,flow-admins',
@@ -40,6 +41,7 @@ describe('OIDC settings', () => {
     expect(settings.adminEmails).toEqual(['admin@example.test', 'owner@example.test']);
     expect(settings.adminClaimValues).toEqual(['agile-tools-admins', 'flow-admins']);
     expect(settings.workspaceId).toBe('workspace-uuid');
+    expect(settings.sessionMaxAgeSeconds).toBe(3600);
   });
 });
 

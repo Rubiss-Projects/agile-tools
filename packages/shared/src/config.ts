@@ -70,6 +70,13 @@ const configSchema = z.object({
   OIDC_SCOPES: z.string().min(1).default('openid profile email'),
   OIDC_ALLOWED_ISSUERS: z.string().min(1).optional(),
   OIDC_ALLOW_INSECURE_HTTP: z.enum(['true', 'false']).default('false'),
+  OIDC_AUTO_LOGIN: z.enum(['true', 'false']).default('false'),
+  OIDC_SESSION_MAX_AGE_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(60 * 60 * 24 * 365)
+    .default(60 * 60 * 24 * 14),
   OIDC_WORKSPACE_ID: z.string().min(1).optional(),
   OIDC_WORKSPACE_NAME: z.string().min(1).default('Agile Tools'),
   OIDC_DEFAULT_TIMEZONE: z.string().min(1).default('UTC'),

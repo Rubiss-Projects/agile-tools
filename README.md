@@ -71,6 +71,11 @@ Self-hosted SSO is optional. Leave `AUTH_PROVIDER=local_session` to keep the
 existing unauthenticated landing page, read-only fallback option, and local
 admin bootstrap cookie flow. To require organization sign-in instead, set
 `AUTH_PROVIDER=oidc` and configure the `OIDC_*` variables in `.env.example`.
+Set `OIDC_AUTO_LOGIN=true` only when browser page requests without a session
+should immediately redirect to SSO; API routes, metrics, static assets, and
+OIDC callback/logout routes are excluded. `OIDC_SESSION_MAX_AGE_SECONDS`
+controls Agile Tools' OIDC cookie max age, while the effective authenticated
+lifetime remains capped by the IdP token and revocation policy.
 For a local Keycloak walkthrough, see [docs/local-oidc-sso.md](docs/local-oidc-sso.md).
 Hosted Vercel beta remains Clerk-only.
 
@@ -117,8 +122,9 @@ analytics reads, manual sync enqueues, worker job and sync runs, queue depth sna
 Prometheus text, the HTTP series are emitted as `http_server_request_duration` and `http_client_request_duration` with unit
 `s`, plus count, sum, and second-based bucket series; derive request and error rates from each metric's `_count` series
 filtered by `http_response_status_code` or `error_type`. Jira client metrics also include low-cardinality
-`agile_tools_jira_operation` and `agile_tools_jira_result` labels. Labels intentionally avoid workspace IDs, issue keys,
-user data, raw URLs, SQL, or JQL.
+`agile_tools_jira_operation` and `agile_tools_jira_result` labels. OIDC auth events are counted in
+`agile_tools_oidc_auth_events_total` with low-cardinality `event`, `result`, and `reason` labels. Labels intentionally
+avoid workspace IDs, issue keys, user data, raw URLs, SQL, JQL, OIDC issuers, subjects, or email addresses.
 
 ## Docker Runtime
 

@@ -37,13 +37,20 @@ export {
   recordHttpRequest,
   recordJiraRequest,
   recordManualSyncEnqueue,
+  recordOidcAuthEvent,
   recordSyncRun,
   recordThroughputRead,
   recordWorkerJob,
   startMetricsServer,
   stopMetricsServer,
 } from './metrics.js';
-export type { InitializeMetricsOptions, MetricsServerOptions } from './metrics.js';
+export type {
+  InitializeMetricsOptions,
+  MetricsServerOptions,
+  OidcAuthEvent,
+  OidcAuthReason,
+  OidcAuthResult,
+} from './metrics.js';
 
 export { QUEUE_NAMES } from './queue-names.js';
 export type { QueueName } from './queue-names.js';

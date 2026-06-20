@@ -8,6 +8,7 @@ import {
   recordForecastRun,
   recordHttpRequest,
   recordJiraRequest,
+  recordOidcAuthEvent,
   recordSyncRun,
   recordWorkerJob,
   startMetricsServer,
@@ -52,6 +53,11 @@ describe('metrics', () => {
       result: 'network_error',
       durationSeconds: 0.1,
     });
+    recordOidcAuthEvent({
+      event: 'callback',
+      result: 'failure',
+      reason: 'provider_error',
+    });
 
     const { body } = await collectPrometheusMetrics();
 
@@ -72,6 +78,10 @@ describe('metrics', () => {
     expect(body).toContain('agile_tools_jira_operation="board_issues"');
     expect(body).toContain('agile_tools_jira_result="network_error"');
     expect(body).toContain('error_type="_OTHER"');
+    expect(body).toContain('agile_tools_oidc_auth_events_total');
+    expect(body).toContain('event="callback"');
+    expect(body).toContain('result="failure"');
+    expect(body).toContain('reason="provider_error"');
     expect(body).not.toContain('agile_tools_jira_requests_total');
     expect(body).not.toContain('agile_tools_jira_request_duration_seconds');
   });
