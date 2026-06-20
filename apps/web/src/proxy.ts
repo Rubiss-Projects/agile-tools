@@ -10,6 +10,8 @@ const isPublicHostedRoute = createRouteMatcher([
   '/api/hosted/queues/(.*)',
 ]);
 
+const WORKSPACE_SESSION_COOKIE_NAME = 'agile_session';
+
 const hostedClerkProxy = clerkMiddleware(async (auth, request) => {
   const httpsRedirect = enforceProductionHttps(request);
   if (httpsRedirect) return httpsRedirect;
@@ -43,6 +45,9 @@ export async function proxy(
   const httpsRedirect = enforceProductionHttps(request);
   if (httpsRedirect) return httpsRedirect;
 
+  const oidcAutoLoginRedirect = redirectUnauthenticatedOidcPageRequest(request);
+  if (oidcAutoLoginRedirect) return oidcAutoLoginRedirect;
+
   return NextResponse.next();
 }
 
@@ -74,6 +79,50 @@ function enforceProductionHttps(request: NextRequest): Response | null {
   }
 
   return NextResponse.redirect(redirectUrl, 308);
+}
+
+function redirectUnauthenticatedOidcPageRequest(request: NextRequest): Response | null {
+  if (process.env['AUTH_PROVIDER'] !== 'oidc' || process.env['OIDC_AUTO_LOGIN'] !== 'true') {
+    return null;
+  }
+
+  if (request.method !== 'GET') {
+    return null;
+  }
+
+  if (request.cookies.has(WORKSPACE_SESSION_COOKIE_NAME)) {
+    return null;
+  }
+
+  if (!isHtmlNavigationRequest(request) || isOidcAutoLoginBypassPath(request.nextUrl.pathname)) {
+    return null;
+  }
+
+  const redirectUrl = new URL('/api/oidc/login', request.url);
+  redirectUrl.searchParams.set('next', `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.redirect(redirectUrl);
+}
+
+function isHtmlNavigationRequest(request: NextRequest): boolean {
+  const fetchMode = request.headers.get('sec-fetch-mode');
+  if (fetchMode === 'navigate') {
+    return true;
+  }
+
+  return (request.headers.get('accept') ?? '').toLowerCase().includes('text/html');
+}
+
+function isOidcAutoLoginBypassPath(pathname: string): boolean {
+  if (
+    pathname === '/metrics' ||
+    pathname === '/metrics/' ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/_next/')
+  ) {
+    return true;
+  }
+
+  return /\/[^/]+\.[^/]+$/.test(pathname);
 }
 
 export const config = {

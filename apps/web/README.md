@@ -81,6 +81,12 @@ pnpm --filter @agile-tools/web lint
   `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`,
   `OIDC_POST_LOGOUT_REDIRECT_URI`, and `OIDC_WORKSPACE_ID`. Configure
   `OIDC_ALLOWED_ISSUERS` when the `iss` claim differs from the discovery URL.
+  Set `OIDC_AUTO_LOGIN=true` only for private deployments that should redirect
+  unauthenticated browser page requests directly to SSO; API routes, metrics,
+  static assets, and OIDC callback/logout routes keep their existing behavior.
+  `OIDC_SESSION_MAX_AGE_SECONDS` controls the Agile Tools OIDC cookie max age
+  and defaults to 14 days, but the effective authenticated lifetime is still
+  capped by the IdP access-token, refresh-token, and revocation policy.
   New OIDC users are keyed by issuer plus `sub`/`oid`/`email`, seeded as
   `member`, and can be seeded as `admin` with `OIDC_ADMIN_EMAILS` or
   `OIDC_ADMIN_CLAIM` plus `OIDC_ADMIN_CLAIM_VALUES`. Existing user roles stay

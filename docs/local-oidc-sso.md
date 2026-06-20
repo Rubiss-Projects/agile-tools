@@ -48,9 +48,21 @@ OIDC_ADMIN_EMAILS=admin@example.test \
 OIDC_ADMIN_CLAIM=groups \
 OIDC_ADMIN_CLAIM_VALUES=agile-tools-admins \
 OIDC_ALLOW_INSECURE_HTTP=true \
+OIDC_AUTO_LOGIN=false \
+OIDC_SESSION_MAX_AGE_SECONDS=1209600 \
 pnpm --filter @agile-tools/web dev
 ```
 
 Keep `AUTH_PROVIDER=local_session` or leave it unset to use the existing local
 unauthenticated landing page, read-only fallback option, and local admin
 bootstrap cookie flow.
+
+`OIDC_AUTO_LOGIN` is intentionally opt-in. When it is `true`, browser page
+requests without an `agile_session` cookie are redirected to
+`/api/oidc/login?next=<path>`. API routes, metrics, static assets, and OIDC
+callback/logout endpoints are not redirected.
+
+`OIDC_SESSION_MAX_AGE_SECONDS` controls the Agile Tools OIDC cookies only. The
+effective authenticated lifetime is still capped by the IdP access-token and
+refresh-token policy; if token refresh fails, the local OIDC session row is
+deleted and the user must sign in again.

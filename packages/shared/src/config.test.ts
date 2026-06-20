@@ -33,6 +33,8 @@ describe('getConfig', () => {
     delete process.env['DEFAULT_SYNC_INTERVAL_MINUTES'];
     delete process.env['SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS'];
     delete process.env['SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS'];
+    delete process.env['OIDC_AUTO_LOGIN'];
+    delete process.env['OIDC_SESSION_MAX_AGE_SECONDS'];
 
     const config = getConfig();
 
@@ -44,6 +46,8 @@ describe('getConfig', () => {
     expect(config.DEFAULT_SYNC_INTERVAL_MINUTES).toBe(10);
     expect(config.SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS).toBe(10 * 60 * 1000);
     expect(config.SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS).toBe(30_000);
+    expect(config.OIDC_AUTO_LOGIN).toBe('false');
+    expect(config.OIDC_SESSION_MAX_AGE_SECONDS).toBe(60 * 60 * 24 * 14);
   });
 
   it('uses PORT as the metrics port fallback for Kubernetes-style worker environments', () => {
@@ -197,7 +201,29 @@ describe('getConfig', () => {
     const config = getConfig();
 
     expect(config.AUTH_PROVIDER).toBe('oidc');
+    expect(config.OIDC_AUTO_LOGIN).toBe('false');
+    expect(config.OIDC_SESSION_MAX_AGE_SECONDS).toBe(60 * 60 * 24 * 14);
     expect(isHostedMode(config)).toBe(false);
+  });
+
+  it('allows self-hosted OIDC auto-login and session max age to be configured', () => {
+    process.env['DATABASE_URL'] = 'postgresql://localhost:5432/agile_tools';
+    process.env['ENCRYPTION_KEY'] = '12345678901234567890123456789012';
+    process.env['SESSION_SECRET'] = 'session-secret-for-tests-1234567890';
+    process.env['AUTH_PROVIDER'] = 'oidc';
+    process.env['OIDC_ISSUER'] = 'https://idp.example.test';
+    process.env['OIDC_CLIENT_ID'] = 'agile-tools';
+    process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
+    process.env['OIDC_REDIRECT_URI'] = 'https://app.example.test/api/oidc/callback';
+    process.env['OIDC_POST_LOGOUT_REDIRECT_URI'] = 'https://app.example.test/';
+    process.env['OIDC_WORKSPACE_ID'] = 'workspace-uuid';
+    process.env['OIDC_AUTO_LOGIN'] = 'true';
+    process.env['OIDC_SESSION_MAX_AGE_SECONDS'] = '3600';
+
+    const config = getConfig();
+
+    expect(config.OIDC_AUTO_LOGIN).toBe('true');
+    expect(config.OIDC_SESSION_MAX_AGE_SECONDS).toBe(3600);
   });
 
   it('rejects OIDC mode when required provider settings are missing', () => {

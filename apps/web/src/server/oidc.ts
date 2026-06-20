@@ -17,12 +17,12 @@ import {
   getAuthProvider,
   getConfig,
   logger,
+  recordOidcAuthEvent,
 } from '@agile-tools/shared';
 
 import {
   parseWorkspaceContextCookie,
   serializeWorkspaceContext,
-  SESSION_COOKIE_MAX_AGE_SECONDS,
   SESSION_COOKIE_NAME,
   type WorkspaceContext,
   type WorkspaceRole,
@@ -35,7 +35,6 @@ const OIDC_PKCE_COOKIE_NAME = 'agile_oidc_pkce';
 const OIDC_NONCE_COOKIE_NAME = 'agile_oidc_nonce';
 const OIDC_NEXT_COOKIE_NAME = 'agile_oidc_next';
 const OIDC_TRANSIENT_COOKIE_MAX_AGE_SECONDS = 10 * 60;
-const OIDC_SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 const DEFAULT_LOGIN_REDIRECT_PATH = '/';
 
 type OidcClaims = Record<string, unknown>;
@@ -53,6 +52,7 @@ export interface OidcSettings {
   workspaceId: string;
   workspaceName: string;
   defaultTimezone: string;
+  sessionMaxAgeSeconds: number;
   adminEmails: string[];
   adminClaim: string | null;
   adminClaimValues: string[];
@@ -103,6 +103,7 @@ export function getOidcSettings(): OidcSettings {
     workspaceId,
     workspaceName: config.OIDC_WORKSPACE_NAME,
     defaultTimezone: config.OIDC_DEFAULT_TIMEZONE,
+    sessionMaxAgeSeconds: config.OIDC_SESSION_MAX_AGE_SECONDS,
     adminEmails: parseDelimitedList(config.OIDC_ADMIN_EMAILS).map((email) => email.toLowerCase()),
     adminClaim: config.OIDC_ADMIN_CLAIM ?? null,
     adminClaimValues: parseDelimitedList(config.OIDC_ADMIN_CLAIM_VALUES),
@@ -125,18 +126,48 @@ export async function getOidcSessionWorkspaceContext(): Promise<WorkspaceContext
     logger.warn('Failed to parse OIDC workspace session cookie', {
       error: err instanceof Error ? err.message : String(err),
     });
+    recordOidcAuthEvent({
+      event: 'session_rejected',
+      result: 'failure',
+      reason: 'invalid_workspace_cookie',
+    });
     return null;
   }
-  if (!parsed) return null;
+  if (!parsed) {
+    recordOidcAuthEvent({
+      event: 'session_rejected',
+      result: 'failure',
+      reason: 'invalid_workspace_cookie',
+    });
+    return null;
+  }
 
   const oidcSessionId = cookieStore.get(OIDC_SESSION_COOKIE_NAME)?.value;
   if (!oidcSessionId) {
-    return parsed.authProvider === 'oidc' ? null : parsed;
+    if (parsed.authProvider === 'oidc') {
+      recordOidcAuthEvent({
+        event: 'session_rejected',
+        result: 'failure',
+        reason: 'missing_session_cookie',
+      });
+      return null;
+    }
+    return parsed;
   }
 
   const db = getPrismaClient();
   const oidcSession = await getOidcSessionWithUserById(db, oidcSessionId);
-  if (!oidcSession) return parsed.authProvider === 'oidc' ? null : parsed;
+  if (!oidcSession) {
+    if (parsed.authProvider === 'oidc') {
+      recordOidcAuthEvent({
+        event: 'session_rejected',
+        result: 'failure',
+        reason: 'missing_session_row',
+      });
+      return null;
+    }
+    return parsed;
+  }
   if (
     oidcSession.workspaceId !== parsed.workspaceId ||
     oidcSession.workspaceUserId !== parsed.userId ||
@@ -146,6 +177,11 @@ export async function getOidcSessionWorkspaceContext(): Promise<WorkspaceContext
       workspaceId: parsed.workspaceId,
       userId: parsed.userId,
       oidcSessionId,
+    });
+    recordOidcAuthEvent({
+      event: 'session_rejected',
+      result: 'failure',
+      reason: 'session_mismatch',
     });
     return null;
   }
@@ -186,6 +222,11 @@ export async function startOidcLogin(request: NextRequest): Promise<NextResponse
   setOidcCookie(response, request, OIDC_PKCE_COOKIE_NAME, codeVerifier, OIDC_TRANSIENT_COOKIE_MAX_AGE_SECONDS);
   setOidcCookie(response, request, OIDC_NONCE_COOKIE_NAME, nonce, OIDC_TRANSIENT_COOKIE_MAX_AGE_SECONDS);
   setOidcCookie(response, request, OIDC_NEXT_COOKIE_NAME, nextPath, OIDC_TRANSIENT_COOKIE_MAX_AGE_SECONDS);
+  recordOidcAuthEvent({
+    event: 'login_start',
+    result: 'success',
+    reason: 'success',
+  });
   return response;
 }
 
@@ -238,20 +279,30 @@ export async function completeOidcCallback(request: NextRequest): Promise<NextRe
   });
 
   const response = NextResponse.redirect(new URL(nextPath, request.url));
-  setWorkspaceSessionCookie(response, request, {
-    workspaceId: settings.workspaceId,
-    userId: user.id,
-    role: user.role,
-    authProvider: 'oidc',
-  });
+  setWorkspaceSessionCookie(
+    response,
+    request,
+    {
+      workspaceId: settings.workspaceId,
+      userId: user.id,
+      role: user.role,
+      authProvider: 'oidc',
+    },
+    settings.sessionMaxAgeSeconds,
+  );
   setOidcCookie(
     response,
     request,
     OIDC_SESSION_COOKIE_NAME,
     oidcSession.id,
-    OIDC_SESSION_COOKIE_MAX_AGE_SECONDS,
+    settings.sessionMaxAgeSeconds,
   );
   clearOidcTransientCookies(response, request);
+  recordOidcAuthEvent({
+    event: 'callback',
+    result: 'success',
+    reason: 'success',
+  });
   return response;
 }
 
@@ -276,6 +327,11 @@ export async function logoutOidc(request: NextRequest): Promise<NextResponse> {
   clearCookie(response, request, SESSION_COOKIE_NAME);
   clearCookie(response, request, OIDC_SESSION_COOKIE_NAME);
   clearOidcTransientCookies(response, request);
+  recordOidcAuthEvent({
+    event: 'logout',
+    result: 'success',
+    reason: 'success',
+  });
   return response;
 }
 
@@ -318,6 +374,11 @@ async function ensureOidcSessionFresh(session: {
   }
 
   if (!session.refreshTokenSecretRef) {
+    recordOidcAuthEvent({
+      event: 'refresh',
+      result: 'failure',
+      reason: 'no_refresh_token',
+    });
     await deleteOidcSessionById(getPrismaClient(), session.id);
     return false;
   }
@@ -352,11 +413,21 @@ async function ensureOidcSessionFresh(session: {
     await updateOidcSessionTokens(getPrismaClient(), session.id, {
       ...updateInput,
     });
+    recordOidcAuthEvent({
+      event: 'refresh',
+      result: 'success',
+      reason: 'success',
+    });
     return true;
   } catch (err) {
     logger.warn('Failed to refresh OIDC session; deleting local session row', {
       oidcSessionId: session.id,
       error: err instanceof Error ? err.message : String(err),
+    });
+    recordOidcAuthEvent({
+      event: 'refresh',
+      result: 'failure',
+      reason: 'refresh_failed',
     });
     await deleteOidcSessionById(getPrismaClient(), session.id);
     return false;
@@ -542,6 +613,7 @@ function setWorkspaceSessionCookie(
   response: NextResponse,
   request: NextRequest,
   context: WorkspaceContext,
+  maxAge: number,
 ): void {
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
@@ -550,7 +622,7 @@ function setWorkspaceSessionCookie(
     sameSite: 'lax',
     secure: shouldUseSecureCookie(request),
     path: '/',
-    maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
+    maxAge,
   });
 }
 
