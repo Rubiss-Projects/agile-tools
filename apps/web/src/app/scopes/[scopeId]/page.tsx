@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getJiraConnection, getPrismaClient, listSyncRuns } from '@agile-tools/db';
-import { InvalidTimeZoneError, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
+import { getConfig, InvalidTimeZoneError, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
 import { canManageFlowScope, getWorkspaceContext } from '@/server/auth';
 import { buildScopeSummary } from '@/server/views/scope-summary';
 import { SyncCompletionRefresh, TriggerSyncButton } from '@/components/admin/trigger-sync-button';
@@ -116,6 +116,8 @@ export default async function ScopePage({
 }) {
   const { scopeId } = await params;
   const ctx = await getWorkspaceContext();
+  const config = getConfig();
+  const hostedCloudOnly = config.JIRA_CONNECTION_POLICY === 'cloud_oauth_only';
 
   if (!ctx) {
     return (
@@ -140,6 +142,14 @@ export default async function ScopePage({
     canManageFlowScope(ctx, scopeId),
     getJiraConnection(db, ctx.workspaceId, scope.connectionId),
   ]);
+  const scopeIntervalProps = hostedCloudOnly
+    ? {
+        syncIntervalMin: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
+        syncIntervalMax: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
+        syncIntervalDefault: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
+        syncIntervalHelpText: `Hosted beta schedules each scope at most once every ${config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES} minutes.`,
+      }
+    : {};
   const latestSync = latestSyncRuns[0];
   const activeSync =
     latestSync !== undefined
@@ -386,6 +396,7 @@ export default async function ScopePage({
               connections={[mapConnection(scopeConnection)]}
               initialScope={scope}
               lockToInitialBoard={ctx.role !== 'admin'}
+              {...scopeIntervalProps}
             />
           </section>
         )}
