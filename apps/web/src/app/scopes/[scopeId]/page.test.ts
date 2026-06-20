@@ -4,19 +4,32 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
-const { getWorkspaceContextMock, buildScopeSummaryMock, getPrismaClientMock, listSyncRunsMock } = vi.hoisted(() => ({
+const {
+  getWorkspaceContextMock,
+  canManageFlowScopeMock,
+  getConfigMock,
+  buildScopeSummaryMock,
+  getPrismaClientMock,
+  getJiraConnectionMock,
+  listSyncRunsMock,
+} = vi.hoisted(() => ({
   getWorkspaceContextMock: vi.fn(),
+  canManageFlowScopeMock: vi.fn(),
+  getConfigMock: vi.fn(),
   buildScopeSummaryMock: vi.fn(),
   getPrismaClientMock: vi.fn(),
+  getJiraConnectionMock: vi.fn(),
   listSyncRunsMock: vi.fn(),
 }));
 
 vi.mock('@/server/auth', () => ({
   getWorkspaceContext: getWorkspaceContextMock,
+  canManageFlowScope: canManageFlowScopeMock,
 }));
 
 vi.mock('@agile-tools/db', () => ({
   getPrismaClient: getPrismaClientMock,
+  getJiraConnection: getJiraConnectionMock,
   listSyncRuns: listSyncRunsMock,
 }));
 
@@ -41,6 +54,14 @@ vi.mock('@/components/app/auth-required-panel', () => ({
   AuthRequiredPanel: ({ title }: { title: string }) => React.createElement('div', null, title),
 }));
 
+vi.mock('@agile-tools/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agile-tools/shared')>();
+  return {
+    ...actual,
+    getConfig: getConfigMock,
+  };
+});
+
 import ScopePage, {
   formatScopeIssueTypes,
   formatScopeTimestamp,
@@ -53,7 +74,19 @@ beforeEach(() => {
     workspaceId: 'workspace-1',
     role: 'member',
   });
+  getConfigMock.mockReturnValue({
+    JIRA_CONNECTION_POLICY: 'local',
+    HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES: 1440,
+  });
   getPrismaClientMock.mockReturnValue({});
+  canManageFlowScopeMock.mockResolvedValue(false);
+  getJiraConnectionMock.mockResolvedValue({
+    id: 'connection-1',
+    baseUrl: 'https://example.atlassian.net',
+    siteUrl: 'https://example.atlassian.net',
+    authType: 'pat',
+    status: 'healthy',
+  });
   listSyncRunsMock.mockResolvedValue([]);
   buildScopeSummaryMock.mockResolvedValue({
     scope: {
