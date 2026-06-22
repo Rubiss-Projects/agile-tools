@@ -83,6 +83,9 @@ describe('queryHoldStatusOptions', () => {
           ],
         }),
       },
+      workItem: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     };
 
     const options = await queryHoldStatusOptions(db as unknown as PrismaClient, 'scope-1', {
@@ -91,6 +94,47 @@ describe('queryHoldStatusOptions', () => {
       doneStatusIds: ['30'],
     });
 
+    expect(options).toEqual([
+      { id: '5', name: 'Selected', placement: 'before_start', onBoard: true },
+      { id: '10', name: 'In Progress', placement: 'in_flow', onBoard: true },
+      { id: '20', name: 'Blocked', placement: 'in_flow', onBoard: true },
+      { id: '30', name: 'Done', placement: 'done', onBoard: true },
+      { id: '50', name: 'On Hold', placement: 'off_board', onBoard: false },
+    ]);
+  });
+
+  it('uses synced work-item status names when old snapshots only have status IDs', async () => {
+    const db = {
+      boardSnapshot: {
+        findFirst: vi.fn().mockResolvedValue({
+          columns: [
+            { name: 'Backlog', statusIds: ['5'] },
+            { name: 'In Progress', statusIds: ['10', '20'] },
+            { name: 'Done', statusIds: ['30'] },
+          ],
+          workflowStatuses: null,
+        }),
+      },
+      workItem: {
+        findMany: vi.fn().mockResolvedValue([
+          { currentStatusId: '5', currentStatusName: 'Selected' },
+          { currentStatusId: '10', currentStatusName: 'In Progress' },
+          { currentStatusId: '20', currentStatusName: 'Blocked' },
+          { currentStatusId: '50', currentStatusName: 'On Hold' },
+        ]),
+      },
+    };
+
+    const options = await queryHoldStatusOptions(db as unknown as PrismaClient, 'scope-1', {
+      dataVersion: 'sync-1',
+      startStatusIds: ['10'],
+      doneStatusIds: ['30'],
+    });
+
+    expect(db.workItem.findMany).toHaveBeenCalledWith({
+      where: { scopeId: 'scope-1', lastSyncRunId: 'sync-1' },
+      select: { currentStatusId: true, currentStatusName: true },
+    });
     expect(options).toEqual([
       { id: '5', name: 'Selected', placement: 'before_start', onBoard: true },
       { id: '10', name: 'In Progress', placement: 'in_flow', onBoard: true },
