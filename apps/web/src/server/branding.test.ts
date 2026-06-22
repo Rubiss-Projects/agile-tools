@@ -3,6 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { getAppBranding, getBrandingCss, getBrandingCssProperties, getBrandingThemeCss } from './branding';
 
 describe('getAppBranding', () => {
+  const tinySvgDataUrl = 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201%201%22%3E%3C/svg%3E';
+  const tinySvgBase64DataUrl = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
+  const tinyPngDataUrl = 'data:image/png;base64,iVBORw0KGgo=';
+  const tinyXIconDataUrl = 'data:image/x-icon;base64,AAABAAE=';
+  const tinyMicrosoftIconDataUrl = 'data:image/vnd.microsoft.icon;base64,AAABAAE=';
+
   it('returns Agile Tools defaults when branding variables are absent', () => {
     expect(getAppBranding({})).toMatchObject({
       name: 'Agile Tools',
@@ -43,6 +49,28 @@ describe('getAppBranding', () => {
     });
   });
 
+  it('accepts safe data image URLs for self-host branding assets', () => {
+    const branding = getAppBranding({
+      APP_BRAND_LOGO_LIGHT_URL: tinySvgDataUrl,
+      APP_BRAND_LOGO_DARK_URL: tinySvgBase64DataUrl,
+      APP_BRAND_FAVICON_URL: tinyPngDataUrl,
+    });
+
+    expect(branding.logoLightUrl).toBe(tinySvgDataUrl);
+    expect(branding.logoDarkUrl).toBe(tinySvgBase64DataUrl);
+    expect(branding.faviconUrl).toBe(tinyPngDataUrl);
+  });
+
+  it('accepts icon data URL MIME types for favicons', () => {
+    expect(getAppBranding({
+      APP_BRAND_FAVICON_URL: tinyXIconDataUrl,
+    }).faviconUrl).toBe(tinyXIconDataUrl);
+
+    expect(getAppBranding({
+      APP_BRAND_FAVICON_URL: tinyMicrosoftIconDataUrl,
+    }).faviconUrl).toBe(tinyMicrosoftIconDataUrl);
+  });
+
   it('rejects invalid colors and asset URLs with a readable error', () => {
     expect(() => getAppBranding({
       APP_BRAND_LOGO_LIGHT_URL: 'javascript:alert(1)',
@@ -53,6 +81,37 @@ describe('getAppBranding', () => {
   it('rejects insecure external branding asset URLs', () => {
     expect(() => getAppBranding({
       APP_BRAND_LOGO_LIGHT_URL: 'http://assets.example.test/logo.svg',
+    })).toThrowError(/APP_BRAND_LOGO_LIGHT_URL/);
+  });
+
+  it.each([
+    ['HTML data URL', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
+    ['unlisted image MIME type', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='],
+    ['missing MIME type', 'data:;base64,AAAA'],
+    ['wrong charset', 'data:image/svg+xml;charset=utf-16,%3Csvg%3E%3C/svg%3E'],
+    ['unexpected parameter', 'data:image/svg+xml;name=logo,%3Csvg%3E%3C/svg%3E'],
+    ['duplicate base64 marker', 'data:image/png;base64;base64,iVBORw0KGgo='],
+    ['invalid base64 payload', 'data:image/png;base64,not valid base64'],
+    ['base64 before charset', 'data:image/svg+xml;base64;charset=utf-8,PHN2Zy8+'],
+    ['missing comma separator', 'data:image/png;base64iVBORw0KGgo='],
+    ['empty payload', 'data:image/png;base64,'],
+  ])('rejects %s', (_label, value) => {
+    expect(() => getAppBranding({
+      APP_BRAND_LOGO_LIGHT_URL: value,
+    })).toThrowError(/APP_BRAND_LOGO_LIGHT_URL/);
+  });
+
+  it('rejects branding asset URLs over 256 KiB', () => {
+    const prefix = 'data:image/png;base64,';
+    const maxLengthPayload = 'A'.repeat(256 * 1024 - prefix.length);
+    const oversizedPayload = `${maxLengthPayload}A`;
+
+    expect(getAppBranding({
+      APP_BRAND_LOGO_LIGHT_URL: `${prefix}${maxLengthPayload}`,
+    }).logoLightUrl).toHaveLength(256 * 1024);
+
+    expect(() => getAppBranding({
+      APP_BRAND_LOGO_LIGHT_URL: `${prefix}${oversizedPayload}`,
     })).toThrowError(/APP_BRAND_LOGO_LIGHT_URL/);
   });
 });
