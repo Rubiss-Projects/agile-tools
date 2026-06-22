@@ -1,9 +1,15 @@
 'use client';
 
 import { ResponsiveLine } from '@nivo/line';
+import type { PointTooltipProps } from '@nivo/line';
 import type { ThroughputResponse } from '@agile-tools/shared/contracts/api';
 import { formatSampleWindowLabel } from '@agile-tools/shared';
 import { noticeStyle, palette } from '@/components/app/chrome';
+
+type ThroughputSeries = {
+  id: 'stories';
+  data: { x: string; y: number }[];
+};
 
 interface ThroughputChartProps {
   response: ThroughputResponse;
@@ -37,7 +43,7 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
     );
   }
 
-  const chartData = [
+  const chartData: ThroughputSeries[] = [
     {
       id: 'stories',
       data: days.map((d) => ({ x: d.day, y: d.completedStoryCount })),
@@ -47,6 +53,23 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
   // Show every nth tick to avoid label crowding.
   const tickEveryN = Math.max(1, Math.ceil(days.length / 10));
   const tickValues = days.filter((_, i) => i % tickEveryN === 0).map((d) => d.day);
+  const tooltip = ({ point }: PointTooltipProps<ThroughputSeries>) => (
+    <div
+      style={{
+        background: panelColor,
+        border: `1px solid ${gridColor}`,
+        borderRadius: '4px',
+        padding: '0.375rem 0.625rem',
+        fontSize: '0.8125rem',
+        boxShadow: palette.shadowSoft,
+        color: axisColor,
+      }}
+    >
+      <strong>{point.data.x}</strong>
+      <br />
+      {point.data.y} {point.data.y === 1 ? 'story' : 'stories'}
+    </div>
+  );
 
   return (
     <div>
@@ -126,23 +149,7 @@ export function ThroughputChart({ response, height = 200 }: ThroughputChartProps
             legendOffset: -32,
             legendPosition: 'middle',
           }}
-          tooltip={({ point }) => (
-            <div
-              style={{
-                background: panelColor,
-                border: `1px solid ${gridColor}`,
-                borderRadius: '4px',
-                padding: '0.375rem 0.625rem',
-                fontSize: '0.8125rem',
-                boxShadow: palette.shadowSoft,
-                color: axisColor,
-              }}
-            >
-              <strong>{String(point.data.x)}</strong>
-              <br />
-              {Number(point.data.y)} {Number(point.data.y) === 1 ? 'story' : 'stories'}
-            </div>
-          )}
+          tooltip={tooltip}
           useMesh={true}
         />
       </div>

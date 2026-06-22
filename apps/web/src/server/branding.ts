@@ -19,13 +19,28 @@ export interface AppBranding {
 const DEFAULT_BRAND_NAME = 'Agile Tools';
 const DEFAULT_TITLE_SUFFIX = 'Kanban Flow Forecasting';
 const DEFAULT_DESCRIPTION = 'Kanban flow visibility and story-count Monte Carlo forecasting.';
+const MAX_ASSET_URL_LENGTH = 256 * 1024;
+const DATA_URL_PREFIX = 'data:';
+const ALLOWED_DATA_IMAGE_MIME_TYPES = new Set([
+  'image/svg+xml',
+  'image/png',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+]);
 
 const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a 6-digit hex color such as #325796.');
 
-const assetUrlSchema = z.string().refine(
+const assetUrlSchema = z.string().max(
+  MAX_ASSET_URL_LENGTH,
+  'Expected branding asset URLs to be 256 KiB or smaller.',
+).refine(
   (value) => {
     if (value.startsWith('/')) {
       return !value.startsWith('//');
+    }
+
+    if (isSafeDataImageUrl(value)) {
+      return true;
     }
 
     try {
@@ -35,7 +50,7 @@ const assetUrlSchema = z.string().refine(
       return false;
     }
   },
-  'Expected an absolute https URL or an app-root-relative path such as /brand/logo.svg.',
+  'Expected an absolute https URL, an app-root-relative path such as /brand/logo.svg, or a safe data: image URL.',
 );
 
 const brandingEnvSchema = z.object({
@@ -150,4 +165,57 @@ function getReadableTextColor(hexColor: string): '#111827' | '#ffffff' {
   const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 
   return luminance > 0.58 ? '#111827' : '#ffffff';
+}
+
+function isSafeDataImageUrl(value: string): boolean {
+  if (!value.toLowerCase().startsWith(DATA_URL_PREFIX)) {
+    return false;
+  }
+
+  const commaIndex = value.indexOf(',');
+  if (commaIndex <= DATA_URL_PREFIX.length || commaIndex === value.length - 1) {
+    return false;
+  }
+
+  const payload = value.slice(commaIndex + 1);
+  const metadata = value.slice(DATA_URL_PREFIX.length, commaIndex);
+  const metadataParts = metadata.split(';');
+  const mimeType = metadataParts[0]?.toLowerCase();
+
+  if (!mimeType || !ALLOWED_DATA_IMAGE_MIME_TYPES.has(mimeType)) {
+    return false;
+  }
+
+  let sawCharset = false;
+  let sawBase64 = false;
+
+  for (const parameter of metadataParts.slice(1)) {
+    const normalized = parameter.toLowerCase();
+
+    if (normalized === 'charset=utf-8') {
+      if (sawCharset || sawBase64) {
+        return false;
+      }
+
+      sawCharset = true;
+      continue;
+    }
+
+    if (normalized === 'base64') {
+      if (sawBase64) {
+        return false;
+      }
+
+      sawBase64 = true;
+      continue;
+    }
+
+    return false;
+  }
+
+  return sawBase64 ? isValidBase64Payload(payload) : true;
+}
+
+function isValidBase64Payload(payload: string): boolean {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(payload) && payload.length % 4 !== 1;
 }

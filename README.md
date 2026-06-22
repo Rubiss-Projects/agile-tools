@@ -67,6 +67,18 @@ ALLOW_LOOPBACK_HTTP_BYPASS=true
 ALLOW_LOCAL_BOOTSTRAP=true
 ```
 
+Optional self-host branding variables can set the product name, title suffix,
+description, colors, logo, and favicon. Logo and favicon variables accept
+`https://` URLs, app-root-relative paths such as `/brand/logo.svg`, or data
+image URLs up to 256 KiB using `image/svg+xml`, `image/png`, `image/x-icon`, or
+`image/vnd.microsoft.icon`. Data URLs are useful when deploying a prebuilt
+Docker image without mounting or baking brand assets:
+
+```bash
+APP_BRAND_LOGO_LIGHT_URL=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0...
+APP_BRAND_FAVICON_URL=data:image/png;base64,iVBORw0KGgoAAA...
+```
+
 Self-hosted SSO is optional. Leave `AUTH_PROVIDER=local_session` to keep the
 existing unauthenticated landing page, read-only fallback option, and local
 admin bootstrap cookie flow. To require organization sign-in instead, set
