@@ -386,10 +386,20 @@ export async function queryHoldStatusOptions(
 
   const columns = parseBoardColumnMappings(snapshot.columns);
   const workflowStatuses = parseNamedValues(snapshot.workflowStatuses);
+  const workItemStatusNames = await queryCurrentWorkItemStatusNames(db, scopeId, options.dataVersion);
+  const fallbackStatusNames = buildStatusNameFallbacks(columns, workItemStatusNames);
   const statuses =
     workflowStatuses.length > 0
-      ? workflowStatuses
-      : Array.from(new Set(columns.flatMap((column) => column.statusIds))).map((id) => ({ id, name: id }));
+      ? mergeStatusNames(workflowStatuses, fallbackStatusNames)
+      : mergeStatusNames(
+          columns.flatMap((column) =>
+            column.statusIds.map((id) => ({
+              id,
+              name: fallbackStatusNames.get(id) ?? id,
+            })),
+          ),
+          fallbackStatusNames,
+        );
 
   const startStatuses = new Set(options.startStatusIds);
   const doneStatuses = new Set(options.doneStatusIds);
@@ -536,4 +546,76 @@ function parseNamedValues(value: unknown): Array<{ id: string; name: string }> {
   }
 
   return values;
+}
+
+async function queryCurrentWorkItemStatusNames(
+  db: PrismaClient,
+  scopeId: string,
+  dataVersion: string | undefined,
+): Promise<Map<string, string>> {
+  const rows = await db.workItem.findMany({
+    where: {
+      scopeId,
+      ...(dataVersion ? { lastSyncRunId: dataVersion } : {}),
+    },
+    select: {
+      currentStatusId: true,
+      currentStatusName: true,
+    },
+  });
+
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    if (!isUsefulStatusName(row.currentStatusName, row.currentStatusId)) continue;
+    if (!names.has(row.currentStatusId)) {
+      names.set(row.currentStatusId, row.currentStatusName);
+    }
+  }
+  return names;
+}
+
+function mergeStatusNames(
+  statuses: Array<{ id: string; name: string }>,
+  fallbackNames: Map<string, string>,
+): Array<{ id: string; name: string }> {
+  const merged = new Map<string, string>();
+  for (const status of statuses) {
+    merged.set(status.id, resolveStatusName(status.id, status.name, fallbackNames.get(status.id)));
+  }
+  for (const [id, name] of fallbackNames) {
+    if (!merged.has(id)) {
+      merged.set(id, name);
+    }
+  }
+  return Array.from(merged.entries()).map(([id, name]) => ({ id, name }));
+}
+
+function resolveStatusName(id: string, name: string, fallbackName: string | undefined): string {
+  if (isUsefulStatusName(name, id)) return name;
+  return fallbackName ?? name;
+}
+
+function isUsefulStatusName(name: string | null | undefined, id: string): name is string {
+  return typeof name === 'string' && name.trim().length > 0 && name !== id;
+}
+
+function buildStatusNameFallbacks(
+  columns: BoardColumnMapping[],
+  workItemStatusNames: Map<string, string>,
+): Map<string, string> {
+  const names = new Map<string, string>();
+
+  for (const column of columns) {
+    if (column.statusIds.length !== 1) continue;
+    const [statusId] = column.statusIds;
+    if (statusId && isUsefulStatusName(column.name, statusId)) {
+      names.set(statusId, column.name);
+    }
+  }
+
+  for (const [id, name] of workItemStatusNames) {
+    names.set(id, name);
+  }
+
+  return names;
 }
