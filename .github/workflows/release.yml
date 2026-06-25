@@ -64,7 +64,7 @@ jobs:
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || steps.vars.outputs.tag }}
           fetch-depth: 0
