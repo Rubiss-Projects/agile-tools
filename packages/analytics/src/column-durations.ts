@@ -134,16 +134,13 @@ export function buildColumnDurationsForItem({
   }
 
   const currentVisit = completedAt ? null : visits.find((visit) => isCurrentVisit(visit, end, completedAt)) ?? null;
-  const currentColumnDwell = currentVisit
+  const currentColumnDuration = currentVisit ? byColumn.get(currentVisit.columnName) : null;
+  const currentColumnDwell = currentVisit && currentColumnDuration
     ? {
         columnName: currentVisit.columnName,
         statusIds: currentVisit.statusIds,
-        workingDays: Math.max(
-          0,
-          differenceInWorkingDays(currentVisit.startedAt, currentVisit.endedAt, timezone)
-            - workingDaysForOverlaps(currentVisit, mergedHolds, timezone),
-        ),
-        holdWorkingDays: workingDaysForOverlaps(currentVisit, mergedHolds, timezone),
+        workingDays: currentColumnDuration.workingDays,
+        holdWorkingDays: currentColumnDuration.holdWorkingDays,
         enteredAt: currentVisit.startedAt,
       }
     : null;
