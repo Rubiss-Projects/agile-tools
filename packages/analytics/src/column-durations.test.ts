@@ -14,7 +14,7 @@ function d(value: string): Date {
 }
 
 describe('buildColumnDurationsForItem', () => {
-  it('sums repeated visits while keeping current contiguous dwell separate', () => {
+  it('uses cumulative current-column dwell across repeated visits', () => {
     const result = buildColumnDurationsForItem({
       createdAt: d('2025-01-06T00:00:00Z'),
       startedAt: d('2025-01-06T00:00:00Z'),
@@ -36,7 +36,32 @@ describe('buildColumnDurationsForItem', () => {
       expect.objectContaining({ columnName: 'To Do', workingDays: 2, visitCount: 2, current: false }),
       expect.objectContaining({ columnName: 'In Progress', workingDays: 5, visitCount: 2, current: true }),
     ]);
-    expect(result.currentColumnDwell).toEqual(expect.objectContaining({ columnName: 'In Progress', workingDays: 2 }));
+    expect(result.currentColumnDwell).toEqual(expect.objectContaining({ columnName: 'In Progress', workingDays: 5 }));
+  });
+
+  it('does not reset current-column dwell after a hold transition leaves and returns to the column', () => {
+    const result = buildColumnDurationsForItem({
+      createdAt: d('2025-01-06T00:00:00Z'),
+      startedAt: d('2025-01-06T00:00:00Z'),
+      completedAt: null,
+      currentStatusId: 'dev',
+      statusChanges: [
+        { fromStatusId: 'todo', toStatusId: 'dev', changedAt: d('2025-01-07T00:00:00Z') },
+        { fromStatusId: 'dev', toStatusId: 'hold', changedAt: d('2025-01-10T00:00:00Z') },
+        { fromStatusId: 'hold', toStatusId: 'dev', changedAt: d('2025-01-13T00:00:00Z') },
+      ],
+      holdIntervals: [{ startedAt: d('2025-01-10T00:00:00Z'), endedAt: d('2025-01-13T00:00:00Z') }],
+      columns,
+      now: d('2025-01-15T00:00:00Z'),
+      timezone,
+    });
+
+    expect(result.columnDurations).toEqual([
+      expect.objectContaining({ columnName: 'To Do', workingDays: 1, visitCount: 1, current: false }),
+      expect.objectContaining({ columnName: 'In Progress', workingDays: 5, visitCount: 2, current: true }),
+      expect.objectContaining({ columnName: 'Uncategorized', workingDays: 0, holdWorkingDays: 1, current: false }),
+    ]);
+    expect(result.currentColumnDwell).toEqual(expect.objectContaining({ columnName: 'In Progress', workingDays: 5 }));
   });
 
   it('collapses consecutive statuses in the same column into one visit', () => {

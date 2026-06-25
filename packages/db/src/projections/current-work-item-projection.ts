@@ -34,7 +34,7 @@ export interface CurrentWorkItemRow {
   assigneeName: string | null;
   /** Working age in fractional days from startedAt (or createdAt if not yet started). */
   ageInDays: number;
-  /** Working days spent in the current contiguous board-column visit. */
+  /** Working days accumulated in the current board column across repeated visits. */
   currentColumnAgeDays?: number;
   /** Per-column working-day durations, summed across repeated visits. */
   columnDurations?: ColumnDurationResult[];
