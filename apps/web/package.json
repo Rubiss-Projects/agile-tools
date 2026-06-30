@@ -17,7 +17,7 @@
     "@agile-tools/jira-client": "workspace:*",
     "@agile-tools/shared": "workspace:*",
     "@agile-tools/worker": "workspace:*",
-    "@clerk/nextjs": "7.5.3",
+    "@clerk/nextjs": "7.5.10",
     "@nivo/core": "^0.99.0",
     "@nivo/line": "^0.99.0",
     "@nivo/scatterplot": "^0.99.0",
