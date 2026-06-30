@@ -46,8 +46,9 @@ export async function startPostgres(): Promise<PostgresInstance> {
   const host = container.getHost();
   const connectionUrl = `postgresql://${username}:${password}@${host}:${port}/${database}`;
 
-  // Run Prisma migrations so tests work against the real schema.
-  execSync('pnpm --filter @agile-tools/db prisma:migrate', {
+  // Run committed Prisma migrations so tests work against the real schema
+  // without generating migration files from parallel Vitest workers.
+  execSync('pnpm --filter @agile-tools/db exec prisma migrate deploy', {
     env: { ...process.env, DATABASE_URL: connectionUrl },
     stdio: 'inherit',
   });
