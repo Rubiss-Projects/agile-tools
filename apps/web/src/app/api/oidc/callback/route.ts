@@ -2,14 +2,29 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { logger, recordOidcAuthEvent } from '@agile-tools/shared';
 
-import { completeOidcCallback, isOidcAuthEnabled } from '@/server/oidc';
+import { completeOidcCallback, isOidcAuthEnabled, resolveOidcRedirectOrigin } from '@/server/oidc';
 import { withHttpMetrics } from '@/server/route-metrics';
 
 function callbackRedirect(request: NextRequest, code: string): NextResponse {
-  const url = new URL('/', request.url);
+  const url = new URL('/', resolveOidcRedirectOrigin(request));
   url.searchParams.set('auth', 'failed');
   url.searchParams.set('code', code);
   return NextResponse.redirect(url);
+}
+
+function describeError(err: unknown): Record<string, unknown> {
+  if (!(err instanceof Error)) {
+    return { error: String(err) };
+  }
+  const cause = err.cause;
+  if (cause && typeof cause === 'object' && ('error' in cause || 'error_description' in cause)) {
+    const { error, error_description: errorDescription } = cause as {
+      error?: string;
+      error_description?: string;
+    };
+    return { error: err.message, providerError: error, providerErrorDescription: errorDescription };
+  }
+  return { error: err.message };
 }
 
 async function handleGET(request: NextRequest): Promise<Response> {
@@ -46,9 +61,7 @@ async function handleGET(request: NextRequest): Promise<Response> {
   try {
     return await completeOidcCallback(request);
   } catch (err) {
-    logger.warn('Failed to complete OIDC callback', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logger.warn('Failed to complete OIDC callback', describeError(err));
     recordOidcAuthEvent({
       event: 'callback',
       result: 'failure',
