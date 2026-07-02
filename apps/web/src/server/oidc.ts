@@ -240,17 +240,19 @@ export async function completeOidcCallback(request: NextRequest): Promise<NextRe
   const nextPath = sanitizeOidcRedirectPath(request.cookies.get(OIDC_NEXT_COOKIE_NAME)?.value ?? null);
   const configuration = await getOidcConfiguration(settings);
 
-  const tokens = await oidc.authorizationCodeGrant(
-    configuration,
-    new URL(request.url),
-    {
-      pkceCodeVerifier,
-      expectedState,
-      expectedNonce,
-      idTokenExpected: true,
-    },
-    { redirect_uri: settings.redirectUri },
+  // openid-client derives the redirect_uri it sends to the token endpoint from
+  // this URL (stripped of query params), not from an explicit parameter, so it
+  // must reflect the public callback URL rather than the pod's internal address.
+  const currentUrl = new URL(
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    resolveOidcRedirectOrigin(request),
   );
+  const tokens = await oidc.authorizationCodeGrant(configuration, currentUrl, {
+    pkceCodeVerifier,
+    expectedState,
+    expectedNonce,
+    idTokenExpected: true,
+  });
   const idTokenClaims = tokens.claims();
   if (!idTokenClaims) {
     throw new Error('OIDC provider did not return an id_token.');
