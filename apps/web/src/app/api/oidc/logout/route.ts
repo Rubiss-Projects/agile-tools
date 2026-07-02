@@ -3,7 +3,7 @@ import { type NextRequest } from 'next/server';
 import { logger, recordOidcAuthEvent } from '@agile-tools/shared';
 
 import { ResponseError } from '@/server/errors';
-import { isOidcAuthEnabled, logoutOidc } from '@/server/oidc';
+import { isOidcAuthEnabled, logoutOidc, resolveOidcRedirectOrigin } from '@/server/oidc';
 import { assertTrustedMutationRequest } from '@/server/request-security';
 import { withHttpMetrics } from '@/server/route-metrics';
 
@@ -40,7 +40,7 @@ async function handlePOST(request: NextRequest): Promise<Response> {
       result: 'failure',
       reason: 'exception',
     });
-    return Response.redirect(new URL('/', request.url));
+    return Response.redirect(new URL('/', resolveOidcRedirectOrigin(request)));
   }
 }
 

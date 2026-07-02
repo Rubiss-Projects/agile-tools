@@ -280,7 +280,7 @@ export async function completeOidcCallback(request: NextRequest): Promise<NextRe
     accessTokenExpiresAt: accessTokenExpiresAt(tokens.expiresIn()),
   });
 
-  const response = NextResponse.redirect(new URL(nextPath, request.url));
+  const response = NextResponse.redirect(new URL(nextPath, resolveOidcRedirectOrigin(request)));
   setWorkspaceSessionCookie(
     response,
     request,
@@ -674,6 +674,22 @@ function shouldUseSecureCookie(request: NextRequest): boolean {
   const protocol = forwardedProto ?? request.nextUrl.protocol.replace(/:$/, '');
 
   return protocol === 'https';
+}
+
+/**
+ * Behind the ingress, `request.url` reflects the pod's internal address
+ * (e.g. http://localhost:8080), not the public host. Redirects built from
+ * it leak that internal address to the browser, so prefer the forwarded
+ * proto/host the ingress sets (mirrors proxy.ts's enforceProductionHttps).
+ */
+export function resolveOidcRedirectOrigin(request: NextRequest): string {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  if (forwardedHost) {
+    const protocol = forwardedProto || request.nextUrl.protocol.replace(/:$/, '');
+    return `${protocol}://${forwardedHost}`;
+  }
+  return request.nextUrl.origin;
 }
 
 export function sanitizeOidcRedirectPath(value: string | null): string {
