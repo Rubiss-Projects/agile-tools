@@ -33,13 +33,13 @@ export async function startWorker(): Promise<void> {
     const queue = getQueue();
     return Promise.all(
       Object.values(QUEUE_NAMES).map(async (queueName) => {
-        const stats = await queue.getQueueStats(queueName);
+        const [stats] = await queue.getQueueStats(queueName, { force: true });
         return {
           queueName,
-          queuedCount: stats.queuedCount,
-          activeCount: stats.activeCount,
-          deferredCount: stats.deferredCount,
-          totalCount: stats.totalCount,
+          queuedCount: stats?.queuedCount ?? 0,
+          activeCount: stats?.activeCount ?? 0,
+          deferredCount: stats?.deferredCount ?? 0,
+          totalCount: stats?.totalCount ?? 0,
         };
       }),
     );
