@@ -203,6 +203,7 @@ export const SyncRunSchema = z.object({
   scopeId: z.string().uuid(),
   trigger: z.enum(['scheduled', 'manual']),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'canceled']),
+  statusChangedAt: z.string().datetime(),
   requestedBy: z.string().optional(),
   startedAt: z.string().datetime().optional(),
   finishedAt: z.string().datetime().optional(),

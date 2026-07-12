@@ -1,6 +1,35 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildIncludedIssueTypes, formatIssueDetails, hasNamesForAllIds, selectNamedValues } from './_lib';
+import { buildIncludedIssueTypes, formatIssueDetails, hasNamesForAllIds, mapSyncRun, selectNamedValues } from './_lib';
+
+function syncRun(overrides: Partial<Parameters<typeof mapSyncRun>[0]> = {}): Parameters<typeof mapSyncRun>[0] {
+  return {
+    id: '11111111-1111-4111-8111-111111111111',
+    scopeId: '22222222-2222-4222-8222-222222222222',
+    trigger: 'manual',
+    status: 'queued',
+    requestedBy: null,
+    startedAt: null,
+    finishedAt: null,
+    dataVersion: null,
+    errorCode: null,
+    errorSummary: null,
+    createdAt: new Date('2026-07-11T20:00:00.000Z'),
+    updatedAt: new Date('2026-07-11T20:05:00.000Z'),
+    ...overrides,
+  };
+}
+
+describe('mapSyncRun', () => {
+  it('maps the status transition time from the field associated with each status', () => {
+    const startedAt = new Date('2026-07-11T20:01:00.000Z');
+    const finishedAt = new Date('2026-07-11T20:02:00.000Z');
+
+    expect(mapSyncRun(syncRun()).statusChangedAt).toBe('2026-07-11T20:00:00.000Z');
+    expect(mapSyncRun(syncRun({ status: 'running', startedAt })).statusChangedAt).toBe(startedAt.toISOString());
+    expect(mapSyncRun(syncRun({ status: 'failed', finishedAt })).statusChangedAt).toBe(finishedAt.toISOString());
+  });
+});
 
 describe('formatIssueDetails', () => {
   it('formats nested issues with their dotted path', () => {

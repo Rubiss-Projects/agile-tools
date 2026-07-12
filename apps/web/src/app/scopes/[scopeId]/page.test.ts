@@ -223,14 +223,17 @@ describe('ScopePage', () => {
     });
   });
 
-  it('keeps showing the last finished sync timestamp while a newer sync is running', async () => {
+  it('shows the active status-change time while preserving the last finished time in the summary', async () => {
     const isoTimestamp = '2026-04-24T22:00:00.000Z';
+    const statusChangedAt = new Date('2026-04-24T22:14:00.000Z');
     listSyncRunsMock.mockResolvedValue([
       {
         id: 'sync-2',
         scopeId: 'scope-1',
         trigger: 'manual',
         status: 'running',
+        startedAt: statusChangedAt,
+        updatedAt: new Date('2026-04-24T22:20:00.000Z'),
       },
     ]);
 
@@ -239,8 +242,9 @@ describe('ScopePage', () => {
     const timestampNodes = Array.from(
       document.querySelectorAll<HTMLTimeElement>(`time[datetime="${isoTimestamp}"]`),
     );
-    expect(timestampNodes.length).toBeGreaterThanOrEqual(2);
+    expect(timestampNodes).toHaveLength(1);
     expect(screen.getByText('running')).toBeVisible();
+    expect(document.querySelector(`time[datetime="${statusChangedAt.toISOString()}"]`)).not.toBeNull();
     expect(screen.queryByText('No sync yet')).not.toBeInTheDocument();
   });
 
@@ -267,6 +271,8 @@ describe('ScopePage', () => {
         scopeId: 'scope-1',
         trigger: 'manual',
         status: 'queued',
+        createdAt: new Date('2026-04-24T22:14:00.000Z'),
+        updatedAt: new Date('2026-04-24T22:14:00.000Z'),
       },
     ]);
 
@@ -309,6 +315,7 @@ describe('ScopePage', () => {
         scopeId: 'scope-1',
         trigger: 'manual',
         status: 'running',
+        updatedAt: new Date('2026-04-24T22:14:00.000Z'),
       },
     ]);
 
