@@ -11,6 +11,7 @@ import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import { Breadcrumbs } from '@/components/app/breadcrumbs';
 import { ViewerLocalTime } from '@/components/app/viewer-local-time';
 import { mapConnection } from '@/app/api/v1/admin/jira-connections/_lib';
+import { mapSyncRun } from '@/app/api/v1/admin/scopes/_lib';
 import {
   type FlowScope,
   type ScopeSummary,
@@ -150,7 +151,7 @@ export default async function ScopePage({
         syncIntervalHelpText: `Hosted beta schedules each scope at most once every ${config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES} minutes.`,
       }
     : {};
-  const latestSync = latestSyncRuns[0];
+  const latestSync = latestSyncRuns[0] ? mapSyncRun(latestSyncRuns[0]) : undefined;
   const activeSync =
     latestSync !== undefined
     && (latestSync.status === 'queued' || latestSync.status === 'running')
@@ -159,6 +160,7 @@ export default async function ScopePage({
   const displayedSyncStatus = activeSync?.status ?? lastSync?.status;
   const displayedSyncErrorCode = activeSync ? activeSync.errorCode : lastSync?.errorCode;
   const displayedSyncErrorSummary = activeSync ? activeSync.errorSummary : lastSync?.errorSummary;
+  const displayedSyncChangedAt = activeSync?.statusChangedAt ?? lastSync?.statusChangedAt ?? lastSync?.finishedAt;
 
   const healthColor: Record<string, string> = {
     healthy: palette.positive,
@@ -196,6 +198,18 @@ export default async function ScopePage({
       <ViewerLocalTime
         timestamp={lastSyncFinishedAt}
         scopeFallback={formattedLastSyncAt}
+        scopeTimezone={scope.timezone}
+      />
+    )
+    : null;
+  const formattedSyncChangedAt = displayedSyncChangedAt
+    ? formatScopeTimestamp(displayedSyncChangedAt, scope.timezone)
+    : null;
+  const syncChangedTimeNode = displayedSyncChangedAt && formattedSyncChangedAt
+    ? (
+      <ViewerLocalTime
+        timestamp={displayedSyncChangedAt}
+        scopeFallback={formattedSyncChangedAt}
         scopeTimezone={scope.timezone}
       />
     )
@@ -355,9 +369,9 @@ export default async function ScopePage({
                 >
                   {displayedSyncStatus}
                 </strong>
-                {lastSyncTimeNode && (
+                {syncChangedTimeNode && (
                   <span style={{ marginLeft: '0.45rem', color: palette.soft }}>
-                    {lastSyncTimeNode}
+                    {syncChangedTimeNode}
                   </span>
                 )}
               </p>

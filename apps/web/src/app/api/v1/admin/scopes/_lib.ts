@@ -134,11 +134,18 @@ export function mapFlowScopeOwner(assignment: {
  * Map a Prisma SyncRun record to the API response shape.
  */
 export function mapSyncRun(run: DbSyncRun): ApiSyncRun {
+  const statusChangedAt = run.status === 'queued'
+    ? run.createdAt
+    : run.status === 'running'
+      ? (run.startedAt ?? run.updatedAt)
+      : (run.finishedAt ?? run.updatedAt);
+
   return {
     id: run.id,
     scopeId: run.scopeId,
     trigger: run.trigger,
     status: run.status,
+    statusChangedAt: statusChangedAt.toISOString(),
     ...(run.requestedBy != null && { requestedBy: run.requestedBy }),
     ...(run.startedAt != null && { startedAt: run.startedAt.toISOString() }),
     ...(run.finishedAt != null && { finishedAt: run.finishedAt.toISOString() }),

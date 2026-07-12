@@ -799,7 +799,7 @@ components:
           format: date-time
     SyncRun:
       type: object
-      required: [id, scopeId, trigger, status]
+      required: [id, scopeId, trigger, status, statusChangedAt]
       properties:
         id:
           type: string
@@ -813,6 +813,10 @@ components:
         status:
           type: string
           enum: [queued, running, succeeded, failed, canceled]
+        statusChangedAt:
+          type: string
+          format: date-time
+          description: Time of the most recent sync run status transition.
         requestedBy:
           type: string
         startedAt:
