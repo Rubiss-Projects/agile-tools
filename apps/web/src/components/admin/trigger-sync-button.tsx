@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 import type { SyncRun } from '@agile-tools/shared/contracts/api';
 import { buttonStyle, tonePillStyle } from '@/components/app/chrome';
 
@@ -55,7 +56,7 @@ function useRefreshWhenSyncFinishes(
       controller = new AbortController();
 
       try {
-        const res = await fetch(`/api/v1/syncs/${syncRunId}`, {
+        const res = await fetchWithSessionRecovery(`/api/v1/syncs/${syncRunId}`, {
           signal: controller.signal,
         });
         const data: unknown = await res.json().catch(() => null);
@@ -123,7 +124,7 @@ export function TriggerSyncButton({
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch(`/api/v1/admin/scopes/${scopeId}/syncs`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/admin/scopes/${scopeId}/syncs`, {
         method: 'POST',
       });
       const data: unknown = await res.json();

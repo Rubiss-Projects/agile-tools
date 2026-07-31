@@ -11,6 +11,7 @@ import { HoldReviewPanel } from './hold-review-panel';
 import { AgingThresholdDrawer } from './aging-threshold-drawer';
 import { WorkItemDetailDrawer } from './work-item-detail-drawer';
 import { buttonStyle, codeStyle, insetPanelStyle, noticeStyle, palette, tonePillStyle } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface FlowAnalyticsSectionProps {
   scopeId: string;
@@ -214,7 +215,7 @@ export function FlowAnalyticsSection({ scopeId, filterOptions, footer }: FlowAna
         if (f.agingOnly) params.set('agingOnly', 'true');
         if (f.onHoldOnly) params.set('onHoldOnly', 'true');
 
-        const res = await fetch(`/api/v1/scopes/${scopeId}/flow?${params.toString()}`);
+        const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/flow?${params.toString()}`);
         if (mySeq !== requestSeqRef.current) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as FlowAnalyticsResponse;

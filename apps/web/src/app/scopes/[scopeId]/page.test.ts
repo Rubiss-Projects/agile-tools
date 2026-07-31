@@ -12,6 +12,7 @@ const {
   getPrismaClientMock,
   getJiraConnectionMock,
   listSyncRunsMock,
+  redirectMock,
 } = vi.hoisted(() => ({
   getWorkspaceContextMock: vi.fn(),
   canManageFlowScopeMock: vi.fn(),
@@ -20,7 +21,13 @@ const {
   getPrismaClientMock: vi.fn(),
   getJiraConnectionMock: vi.fn(),
   listSyncRunsMock: vi.fn(),
+  redirectMock: vi.fn(),
 }));
+
+vi.mock('next/navigation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/navigation')>();
+  return { ...actual, redirect: redirectMock };
+});
 
 vi.mock('@/server/auth', () => ({
   getWorkspaceContext: getWorkspaceContextMock,
@@ -195,6 +202,25 @@ describe('formatScopeTimestamp', () => {
 });
 
 describe('ScopePage', () => {
+  it('starts OIDC login when a server-rendered page finds an expired session', async () => {
+    getWorkspaceContextMock.mockResolvedValue(null);
+    getConfigMock.mockReturnValue({
+      AUTH_PROVIDER: 'oidc',
+      OIDC_AUTO_LOGIN: 'true',
+      JIRA_CONNECTION_POLICY: 'self_hosted_tokens',
+    });
+    redirectMock.mockImplementation(() => {
+      throw new Error('redirected');
+    });
+
+    await expect(
+      ScopePage({ params: Promise.resolve({ scopeId: 'scope with spaces' }) }),
+    ).rejects.toThrow('redirected');
+    expect(redirectMock).toHaveBeenCalledWith(
+      '/api/oidc/login?next=%2Fscopes%2Fscope%20with%20spaces',
+    );
+  });
+
   it('renders last sync as <time> elements anchored to the ISO timestamp with the scope-zone time in the tooltip and viewer-local text', async () => {
     const isoTimestamp = '2026-04-24T22:00:00.000Z';
     const formattedTimestamp = formatScopeTimestamp(isoTimestamp, 'America/New_York');

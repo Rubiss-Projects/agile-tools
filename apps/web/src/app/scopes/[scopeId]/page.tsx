@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getJiraConnection, getPrismaClient, listSyncRuns } from '@agile-tools/db';
 import { getConfig, InvalidTimeZoneError, normalizeTimeZoneOrThrow } from '@agile-tools/shared';
 import { canManageFlowScope, getWorkspaceContext } from '@/server/auth';
@@ -121,6 +121,9 @@ export default async function ScopePage({
   const hostedCloudOnly = config.JIRA_CONNECTION_POLICY === 'cloud_oauth_only';
 
   if (!ctx) {
+    if (config.AUTH_PROVIDER === 'oidc' && config.OIDC_AUTO_LOGIN === 'true') {
+      redirect(`/api/oidc/login?next=${encodeURIComponent(`/scopes/${scopeId}`)}`);
+    }
     return (
       <AuthRequiredPanel
         title="Scope analytics require a workspace session"

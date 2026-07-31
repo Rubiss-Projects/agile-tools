@@ -3,6 +3,7 @@
 import { useState, useEffect, type CSSProperties, type FormEvent } from 'react';
 import type { HoldDefinitionResponse, HoldStatusOption, NamedValue } from '@agile-tools/shared/contracts/api';
 import { buttonStyle, checkboxChipStyle, insetPanelStyle, noticeStyle, palette, sectionCopyStyle, selectionControlStyle } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface HoldDefinitionFormProps {
   scopeId: string;
@@ -22,7 +23,7 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
     if (!expanded) return;
     setLoading(true);
     setError(null);
-    fetch(`/api/v1/admin/scopes/${scopeId}/hold-definition`)
+    fetchWithSessionRecovery(`/api/v1/admin/scopes/${scopeId}/hold-definition`)
       .then((res) => {
         if (res.status === 404) return null;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -49,7 +50,7 @@ export function HoldDefinitionForm({ scopeId, availableStatuses }: HoldDefinitio
     setError(null);
     setSaved(false);
     try {
-      const res = await fetch(`/api/v1/admin/scopes/${scopeId}/hold-definition`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/admin/scopes/${scopeId}/hold-definition`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ holdStatusIds: selected }),

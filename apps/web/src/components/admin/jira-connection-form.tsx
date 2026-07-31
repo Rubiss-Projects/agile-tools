@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 import type { JiraConnection } from '@agile-tools/shared/contracts/api';
 import {
   buttonStyle,
@@ -56,7 +57,7 @@ export function JiraConnectionForm({ initialConnection }: JiraConnectionFormProp
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(
+      const res = await fetchWithSessionRecovery(
         isEditMode
           ? `/api/v1/admin/jira-connections/${initialConnection.id}`
           : '/api/v1/admin/jira-connections',
@@ -202,7 +203,7 @@ export function ValidateConnectionButton({ connectionId }: { connectionId: strin
     setValidating(true);
     setResult(null);
     try {
-      const res = await fetch(`/api/v1/admin/jira-connections/${connectionId}/validate`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/admin/jira-connections/${connectionId}/validate`, {
         method: 'POST',
       });
       const data: unknown = await res.json();

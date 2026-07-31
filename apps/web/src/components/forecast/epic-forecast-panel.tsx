@@ -24,6 +24,7 @@ import {
   statLabelStyle,
   statValueStyle,
 } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface EpicForecastPanelProps {
   scopeId: string;
@@ -111,7 +112,7 @@ export function EpicForecastPanel({
     }
 
     try {
-      const res = await fetch(
+      const res = await fetchWithSessionRecovery(
         `/api/v1/scopes/${scopeId}/epic-forecasts?${params.toString()}`,
         signal ? { signal } : undefined,
       );
@@ -143,7 +144,7 @@ export function EpicForecastPanel({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/epic-forecasts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -180,7 +181,7 @@ export function EpicForecastPanel({
     setLookupMessage('Loading epic details from Jira...');
     try {
       const params = new URLSearchParams({ issueKey: normalizedKey });
-      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts/lookup?${params.toString()}`);
+      const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/epic-forecasts/lookup?${params.toString()}`);
       const body = (await res.json().catch(() => null)) as EpicLookupResponse | ProblemResponse | null;
       if (!res.ok) {
         throw new Error(getProblemMessage(body as ProblemResponse | null, `HTTP ${res.status}`));
@@ -205,7 +206,7 @@ export function EpicForecastPanel({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts/${targetId}`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/epic-forecasts/${targetId}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -224,7 +225,7 @@ export function EpicForecastPanel({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts/${target.id}`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/epic-forecasts/${target.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -275,7 +276,7 @@ export function EpicForecastPanel({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/scopes/${scopeId}/epic-forecasts/${target.id}`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/epic-forecasts/${target.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -806,7 +807,7 @@ export function EpicForecastPanel({
 }
 
 async function saveTargetOrder(target: EpicForecastTarget, sortOrder: number): Promise<void> {
-  const res = await fetch(`/api/v1/scopes/${target.scopeId}/epic-forecasts`, {
+  const res = await fetchWithSessionRecovery(`/api/v1/scopes/${target.scopeId}/epic-forecasts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
