@@ -17,6 +17,7 @@ import { AuthRequiredPanel } from '@/components/app/auth-required-panel';
 import { Breadcrumbs } from '@/components/app/breadcrumbs';
 import { getMissingAtlassianOAuthConfig } from '@/server/atlassian-oauth';
 import { getHostedBudgetWarnings } from '@/server/hosted-policy';
+import { redirect } from 'next/navigation';
 import {
   codeStyle,
   eyebrowStyle,
@@ -48,6 +49,9 @@ export default async function AdminJiraPage() {
   const ctx = await getWorkspaceContext();
 
   if (!ctx) {
+    if (config.AUTH_PROVIDER === 'oidc' && config.OIDC_AUTO_LOGIN === 'true') {
+      redirect('/api/oidc/login?next=%2Fadmin%2Fjira');
+    }
     if (hostedCloudOnly) {
       return (
         <main style={pageShellStyle}>

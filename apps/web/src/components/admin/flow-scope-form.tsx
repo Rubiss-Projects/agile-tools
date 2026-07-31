@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 import type {
   JiraConnection,
   FlowScope,
@@ -161,7 +162,7 @@ export function FlowScopeForm({
     setBoardDetail(null);
     setInspectError(null);
     try {
-      const res = await fetch(
+      const res = await fetchWithSessionRecovery(
         `/api/v1/admin/jira-connections/${activeConnectionId}/discovery/boards`,
       );
       const data: unknown = await res.json();
@@ -214,7 +215,7 @@ export function FlowScopeForm({
       clearSelections();
     }
     try {
-      const res = await fetch(
+      const res = await fetchWithSessionRecovery(
         `/api/v1/admin/jira-connections/${activeConnectionId}/discovery/boards/${boardId}`,
       );
       const data: unknown = await res.json();
@@ -293,7 +294,7 @@ export function FlowScopeForm({
     setDeleteError(null);
     setConfirmingDelete(false);
     try {
-      const res = await fetch(
+      const res = await fetchWithSessionRecovery(
         isEditMode ? `/api/v1/admin/scopes/${initialScope.id}` : '/api/v1/admin/scopes',
         {
           method: isEditMode ? 'PUT' : 'POST',
@@ -322,7 +323,7 @@ export function FlowScopeForm({
     setDeleteError(null);
     setSubmitError(null);
     try {
-      const res = await fetch(`/api/v1/admin/scopes/${initialScope.id}`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/admin/scopes/${initialScope.id}`, {
         method: 'DELETE',
       });
       if (!res.ok) {

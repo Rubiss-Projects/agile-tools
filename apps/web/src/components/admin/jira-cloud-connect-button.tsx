@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { buttonStyle, noticeStyle, tonePillStyle } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface JiraCloudConnectButtonProps {
   disabledReason?: string | undefined;
@@ -17,7 +18,7 @@ export function JiraCloudConnectButton({ disabledReason }: JiraCloudConnectButto
     setSubmitting(true);
     setError(null);
     try {
-      const response = await fetch('/api/atlassian/oauth/start?returnUrl=/admin/jira', {
+      const response = await fetchWithSessionRecovery('/api/atlassian/oauth/start?returnUrl=/admin/jira', {
         method: 'POST',
       });
       const data = (await response.json().catch(() => null)) as {

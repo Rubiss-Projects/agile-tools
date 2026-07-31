@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorkItemDetail } from '@agile-tools/shared/contracts/api';
 import { linkStyle, palette, sectionTitleStyle } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface WorkItemDetailDrawerProps {
   scopeId: string;
@@ -34,7 +35,7 @@ export function WorkItemDetailDrawer({
     setError(null);
     setDetail(null);
 
-    fetch(`/api/v1/scopes/${scopeId}/items/${workItemId}`)
+    fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/items/${workItemId}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<WorkItemDetail>;

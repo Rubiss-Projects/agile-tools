@@ -19,6 +19,7 @@ import {
   statLabelStyle,
   statValueStyle,
 } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface ForecastCalculationDrawerProps {
   open: boolean;
@@ -181,7 +182,7 @@ export function ForecastCalculationDrawer({
     setError(null);
     setThroughput(null);
 
-    fetch(`/api/v1/scopes/${scopeId}/throughput?${params.toString()}`)
+    fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/throughput?${params.toString()}`)
       .then(async (res) => {
         const body = (await res.json().catch(() => null)) as ProblemResponse | ThroughputResponse | null;
         if (!res.ok) {

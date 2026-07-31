@@ -224,4 +224,36 @@ describe('requireWorkspaceContext', () => {
 
     await expect(requireWorkspaceContext()).rejects.toBeInstanceOf(ResponseError);
   });
+
+  it('advertises OIDC recovery when auto-login is enabled', async () => {
+    process.env['AUTH_PROVIDER'] = 'oidc';
+    process.env['OIDC_AUTO_LOGIN'] = 'true';
+    process.env['OIDC_ISSUER'] = 'https://idp.example.test';
+    process.env['OIDC_CLIENT_ID'] = 'agile-tools';
+    process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
+    process.env['OIDC_REDIRECT_URI'] = 'https://app.example.test/api/oidc/callback';
+    process.env['OIDC_POST_LOGOUT_REDIRECT_URI'] = 'https://app.example.test/';
+    process.env['OIDC_WORKSPACE_ID'] = 'oidc-workspace';
+    resetConfig();
+    vi.mocked(cookies).mockReturnValue(makeCookieStore(null) as never);
+
+    const error = await requireWorkspaceContext().catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ResponseError);
+    expect((error as InstanceType<typeof ResponseError>).response.status).toBe(401);
+    expect((error as InstanceType<typeof ResponseError>).response.headers.get('x-agile-tools-session-recovery')).toBe(
+      'oidc',
+    );
+  });
+
+  it('does not advertise automatic recovery when OIDC auto-login is disabled', async () => {
+    vi.mocked(cookies).mockReturnValue(makeCookieStore(null) as never);
+
+    const error = await requireWorkspaceContext().catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ResponseError);
+    expect(
+      (error as InstanceType<typeof ResponseError>).response.headers.get('x-agile-tools-session-recovery'),
+    ).toBeNull();
+  });
 });

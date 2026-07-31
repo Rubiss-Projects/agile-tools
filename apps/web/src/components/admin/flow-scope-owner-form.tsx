@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 import type { FlowScopeOwner, WorkspaceUserSummary } from '@agile-tools/shared/contracts/api';
 import { buttonStyle, fieldLabelStyle, noticeStyle, palette, selectStyle, tonePillStyle } from '@/components/app/chrome';
 
@@ -27,7 +28,7 @@ export function FlowScopeOwnerForm({ scopeId, owners, workspaceUsers }: Props) {
     setBusyUserId(selectedUserId);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/admin/scopes/${scopeId}/owners`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/admin/scopes/${scopeId}/owners`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceUserId: selectedUserId }),
@@ -50,7 +51,7 @@ export function FlowScopeOwnerForm({ scopeId, owners, workspaceUsers }: Props) {
     setBusyUserId(workspaceUserId);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/admin/scopes/${scopeId}/owners`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/admin/scopes/${scopeId}/owners`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceUserId }),

@@ -35,6 +35,7 @@ import {
   noticeStyle,
   codeStyle,
 } from '@/components/app/chrome';
+import { fetchWithSessionRecovery } from '@/lib/session-recovery';
 
 interface ProblemResponse {
   message?: string;
@@ -101,7 +102,7 @@ export default function ForecastPage() {
 
     setThroughputLoading(true);
     setThroughputError(null);
-    fetch(`/api/v1/scopes/${scopeId}/throughput?${params.toString()}`, {
+    fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/throughput?${params.toString()}`, {
       signal: controller.signal,
     })
       .then(async (res) => {
@@ -158,7 +159,7 @@ export default function ForecastPage() {
         ...(dataVersion ? { dataVersion } : {}),
       };
 
-      const res = await fetch(`/api/v1/scopes/${scopeId}/forecasts`, {
+      const res = await fetchWithSessionRecovery(`/api/v1/scopes/${scopeId}/forecasts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

@@ -12,6 +12,10 @@ import {
   type WorkspaceRole,
 } from './session-cookie';
 import { getOidcSessionWorkspaceContext } from './oidc';
+import {
+  OIDC_SESSION_RECOVERY,
+  SESSION_RECOVERY_HEADER,
+} from '@/lib/session-recovery';
 
 export { SESSION_COOKIE_NAME, serializeWorkspaceContext, type WorkspaceContext, type WorkspaceRole };
 
@@ -163,8 +167,18 @@ function getReadonlyWorkspaceFallback(): WorkspaceContext | null {
 export async function requireWorkspaceContext(): Promise<WorkspaceContext> {
   const ctx = await getWorkspaceContext();
   if (!ctx) {
+    const autoRecoveryEnabled =
+      getAuthProvider() === 'oidc' && process.env['OIDC_AUTO_LOGIN'] === 'true';
     throw new ResponseError(
-      Response.json({ code: 'UNAUTHENTICATED', message: 'Authentication required.' }, { status: 401 }),
+      Response.json(
+        { code: 'UNAUTHENTICATED', message: 'Authentication required.' },
+        {
+          status: 401,
+          ...(autoRecoveryEnabled
+            ? { headers: { [SESSION_RECOVERY_HEADER]: OIDC_SESSION_RECOVERY } }
+            : {}),
+        },
+      ),
     );
   }
   return ctx;
