@@ -265,10 +265,12 @@ function createDb(options?: {
         return Promise.resolve(rows.slice(0, args.take));
       },
     ),
-    deleteMany: vi.fn((args: { where: { syncRunId: string } }) => {
-      const count = stagedItems.filter((item) => item.syncRunId === args.where.syncRunId).length;
+    deleteMany: vi.fn((args: { where: { syncRunId: string; jiraIssueId?: { in: string[] } } }) => {
+      const matches = (item: StagedItem) => item.syncRunId === args.where.syncRunId &&
+        (!args.where.jiraIssueId || args.where.jiraIssueId.in.includes(item.jiraIssueId));
+      const count = stagedItems.filter(matches).length;
       for (let index = stagedItems.length - 1; index >= 0; index -= 1) {
-        if (stagedItems[index]?.syncRunId === args.where.syncRunId) {
+        if (matches(stagedItems[index]!)) {
           stagedItems.splice(index, 1);
         }
       }
@@ -1056,7 +1058,7 @@ describe('runScopeSync', () => {
     ).resolves.toBeUndefined();
 
     expect(db.syncWorkItemStage.createMany).toHaveBeenCalledTimes(1);
-    expect(db.syncWorkItemStage.deleteMany).toHaveBeenCalledTimes(1);
+    expect(db.syncWorkItemStage.deleteMany).toHaveBeenCalledTimes(2);
     expect(db.syncWorkItemStage.deleteMany).toHaveBeenLastCalledWith({
       where: { syncRunId: 'run-1' },
     });
