@@ -1,8 +1,7 @@
 import { type NextRequest } from 'next/server';
 import {
   getPrismaClient,
-  updateConnectionHealth,
-  updateJiraConnectionCapabilities,
+  updateJiraConnectionValidation,
 } from '@agile-tools/db';
 import { logger } from '@agile-tools/shared';
 import { inferChangelogFetchStrategyFromServerInfo } from '@agile-tools/jira-client';
@@ -11,6 +10,13 @@ import { ResponseError } from '@/server/errors';
 import { assertTrustedMutationRequest, enforceRateLimit } from '@/server/request-security';
 import { requireJiraConnection, createClientForConnection, normalizeJiraError } from '../../_lib';
 import { withHttpMetrics } from '@/server/route-metrics';
+
+function validationIdentityChanged(): ResponseError {
+  return new ResponseError(Response.json({
+    code: 'CONNECTION_CHANGED',
+    message: 'The Jira connection changed during validation. Validate the updated connection again.',
+  }, { status: 409 }));
+}
 
 async function handlePOST(
   req: NextRequest,
@@ -32,9 +38,10 @@ async function handlePOST(
 
     // Transition to `validating` before the external call so callers can
     // observe the in-progress state if they poll health concurrently.
-    await updateConnectionHealth(prisma, ctx.workspaceId, connectionId, {
+    const validating = await updateJiraConnectionValidation(prisma, conn, {
       healthStatus: 'validating',
     });
+    if (!validating) throw validationIdentityChanged();
 
     const client = await createClientForConnection(conn);
     const validatedAt = new Date();
@@ -43,23 +50,17 @@ async function handlePOST(
       const serverInfo = await client.validateConnection();
       const changelogStrategy = inferChangelogFetchStrategyFromServerInfo(serverInfo);
 
-      await updateConnectionHealth(prisma, ctx.workspaceId, connectionId, {
+      const validated = await updateJiraConnectionValidation(prisma, conn, {
         healthStatus: 'healthy',
         lastValidatedAt: validatedAt,
         lastHealthyAt: validatedAt,
         lastErrorCode: null,
-      });
-      await updateJiraConnectionCapabilities(prisma, ctx.workspaceId, connectionId, {
         jiraVersion: serverInfo.version,
         jiraDeploymentType: serverInfo.deploymentType,
         ...(changelogStrategy !== undefined ? { changelogStrategy } : {}),
         capabilitiesDetectedAt: validatedAt,
-      }).catch((capabilityErr: unknown) => {
-        logger.warn('Failed to persist Jira connection capabilities after validation', {
-          connectionId,
-          error: capabilityErr instanceof Error ? capabilityErr.message : String(capabilityErr),
-        });
       });
+      if (!validated) throw validationIdentityChanged();
 
       return Response.json({
         connectionId,
@@ -68,15 +69,17 @@ async function handlePOST(
         warnings: [],
       });
     } catch (jiraErr) {
+      if (jiraErr instanceof ResponseError) throw jiraErr;
       const clientErr = normalizeJiraError(jiraErr);
       const errorCode = clientErr?.code ?? 'connection_failed';
       const errorMessage = clientErr?.message ?? 'Failed to connect to Jira.';
 
-      await updateConnectionHealth(prisma, ctx.workspaceId, connectionId, {
+      const validated = await updateJiraConnectionValidation(prisma, conn, {
         healthStatus: 'unhealthy',
         lastValidatedAt: validatedAt,
         lastErrorCode: errorCode,
       });
+      if (!validated) throw validationIdentityChanged();
 
       return Response.json({
         connectionId,
