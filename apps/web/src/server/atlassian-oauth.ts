@@ -11,7 +11,6 @@ import {
   getPrismaClient,
   reserveHostedCapacity,
   upsertJiraCloudOAuthConnection,
-  updateConnectionHealth,
 } from '@agile-tools/db';
 import { decryptSecret, encryptSecret, getConfig } from '@agile-tools/shared';
 
@@ -132,6 +131,7 @@ export async function completeAtlassianOAuthConnection(input: {
 export async function getCloudAccessTokenForConnection(connection: {
   id: string;
   workspaceId: string;
+  authorizationGeneration: number;
   accessTokenSecretRef: string | null;
   refreshTokenSecretRef: string | null;
   accessTokenExpiresAt: Date | null;
@@ -156,7 +156,7 @@ export async function getCloudAccessTokenForConnection(connection: {
     });
 
     await getPrismaClient().jiraConnection.update({
-      where: { workspaceId_id: { workspaceId: connection.workspaceId, id: connection.id } },
+      where: { id: connection.id, workspaceId: connection.workspaceId, authorizationGeneration: connection.authorizationGeneration },
       data: {
         accessTokenSecretRef: encryptSecret(refreshed.accessToken, config.ENCRYPTION_KEY),
         refreshTokenSecretRef: encryptSecret(refreshed.refreshToken, config.ENCRYPTION_KEY),
@@ -170,9 +170,9 @@ export async function getCloudAccessTokenForConnection(connection: {
 
     return refreshed.accessToken;
   } catch (err) {
-    await updateConnectionHealth(getPrismaClient(), connection.workspaceId, connection.id, {
-      healthStatus: 'unhealthy',
-      lastErrorCode: 'ATLASSIAN_TOKEN_REFRESH_FAILED',
+    await getPrismaClient().jiraConnection.updateMany({
+      where: { id: connection.id, workspaceId: connection.workspaceId, authorizationGeneration: connection.authorizationGeneration },
+      data: { healthStatus: 'unhealthy', lastErrorCode: 'ATLASSIAN_TOKEN_REFRESH_FAILED' },
     }).catch(() => undefined);
     throw err;
   }

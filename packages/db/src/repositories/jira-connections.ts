@@ -62,10 +62,21 @@ export async function createJiraConnection(
 }
 
 export async function upsertJiraCloudOAuthConnection(
-  client: JiraConnectionClient,
+  client: PrismaClient,
   workspaceId: string,
   input: CreateJiraCloudOAuthConnectionInput,
 ): Promise<JiraConnection> {
+  return client.$transaction((tx) => replaceJiraCloudOAuthConnection(tx, workspaceId, input));
+}
+
+async function replaceJiraCloudOAuthConnection(
+  client: Prisma.TransactionClient,
+  workspaceId: string,
+  input: CreateJiraCloudOAuthConnectionInput,
+): Promise<JiraConnection> {
+  // Serialize concurrent reconnects, including the first connection to a site.
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`jira-oauth:${workspaceId}:${input.cloudId}`}, 0))`;
+  await client.$queryRaw`SELECT id FROM "JiraConnection" WHERE "workspaceId" = ${workspaceId} AND "cloudId" = ${input.cloudId} AND "authType" = 'cloud_oauth_3lo' FOR UPDATE`;
   const existing = await client.jiraConnection.findFirst({
     where: {
       workspaceId,
@@ -93,6 +104,11 @@ export async function upsertJiraCloudOAuthConnection(
   };
 
   if (existing) {
+    await assertConnectionIdle(client, existing);
+    // Reconnect is a new authorization even when Atlassian omits the account ID.
+    data.authorizationGeneration = { increment: 1 };
+    data.issueCache = { deleteMany: {} };
+    await client.jiraRateLimitState.deleteMany({ where: { connectionId: existing.id } });
     return client.jiraConnection.update({
       where: { workspaceId_id: { workspaceId, id: existing.id } },
       data,
@@ -180,7 +196,7 @@ export async function updateConnectionHealth(
 
 export class JiraConnectionBusyError extends Error {
   constructor() {
-    super('Wait for active or queued syncs to finish before changing the Jira URL or PAT.');
+    super('Wait for active or queued syncs to finish before changing the Jira URL or credentials.');
     this.name = 'JiraConnectionBusyError';
   }
 }
@@ -188,7 +204,7 @@ export class JiraConnectionBusyError extends Error {
 /** Publish validation state only for the identity that made the Jira requests. */
 export async function updateJiraConnectionValidation(
   client: JiraConnectionClient,
-  connection: Pick<JiraConnection, 'id' | 'workspaceId' | 'baseUrl' | 'authType' | 'encryptedSecretRef'>,
+  connection: Pick<JiraConnection, 'id' | 'workspaceId' | 'baseUrl' | 'authType' | 'encryptedSecretRef' | 'authorizationGeneration'>,
   data: UpdateConnectionHealthInput & UpdateJiraConnectionCapabilitiesInput,
 ): Promise<JiraConnection | null> {
   try {
@@ -199,12 +215,23 @@ export async function updateJiraConnectionValidation(
         baseUrl: connection.baseUrl,
         authType: connection.authType,
         encryptedSecretRef: connection.encryptedSecretRef,
+        authorizationGeneration: connection.authorizationGeneration,
       },
       data,
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') return null;
     throw err;
+  }
+}
+
+/** Caller holds the connection row lock, shared with sync creation and claims. */
+async function assertConnectionIdle(client: Prisma.TransactionClient, connection: Pick<JiraConnection, 'id' | 'syncLeaseUntil'>): Promise<void> {
+  const activeRun = await client.syncRun.findFirst({ where: {
+    scope: { connectionId: connection.id }, status: { in: ['queued', 'running'] },
+  }, select: { id: true } });
+  if ((connection.syncLeaseUntil && connection.syncLeaseUntil > new Date()) || activeRun) {
+    throw new JiraConnectionBusyError();
   }
 }
 
@@ -226,11 +253,8 @@ export async function updateJiraConnection(
     if (input.encryptedSecretRef !== undefined) data.encryptedSecretRef = input.encryptedSecretRef;
 
     if (resetValidation) {
-      const activeRun = await tx.syncRun.findFirst({ where: {
-        scope: { connectionId }, status: { in: ['queued', 'running'] },
-      }, select: { id: true } });
-      const leaseActive = existing.syncLeaseUntil && existing.syncLeaseUntil > new Date();
-      if (leaseActive || activeRun) throw new JiraConnectionBusyError();
+      await assertConnectionIdle(tx, existing);
+      data.authorizationGeneration = { increment: 1 };
       data.healthStatus = 'draft';
       data.lastValidatedAt = null;
       data.lastHealthyAt = null;

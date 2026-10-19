@@ -2,15 +2,15 @@ import type { PrismaClient, JiraConnection } from '@prisma/client';
 import { getConfig, JiraRateLimiter, JiraRateStateSchema, type JiraRateStore } from '@agile-tools/shared';
 
 export function createPostgresJiraRateLimiter(db: PrismaClient, connectionId: string, requestBudgetPerMinute?: number | null,
-  identity?: Pick<JiraConnection, 'baseUrl' | 'encryptedSecretRef'>): JiraRateLimiter {
+  identity?: Pick<JiraConnection, 'baseUrl' | 'encryptedSecretRef' | 'authorizationGeneration'>): JiraRateLimiter {
   const config = getConfig();
   const store: JiraRateStore = {
     update: (change) => db.$transaction(async (tx) => {
       if (identity) {
-        const [current] = await tx.$queryRaw<Array<Pick<JiraConnection, 'baseUrl' | 'encryptedSecretRef'>>>`
-          SELECT "baseUrl", "encryptedSecretRef" FROM "JiraConnection" WHERE id = ${connectionId} FOR SHARE
+        const [current] = await tx.$queryRaw<Array<Pick<JiraConnection, 'baseUrl' | 'encryptedSecretRef' | 'authorizationGeneration'>>>`
+          SELECT "baseUrl", "encryptedSecretRef", "authorizationGeneration" FROM "JiraConnection" WHERE id = ${connectionId} FOR SHARE
         `;
-        if (!current || current.baseUrl !== identity.baseUrl || current.encryptedSecretRef !== identity.encryptedSecretRef) {
+        if (!current || current.baseUrl !== identity.baseUrl || current.encryptedSecretRef !== identity.encryptedSecretRef || current.authorizationGeneration !== identity.authorizationGeneration) {
           throw new Error('Jira connection changed; recreate the Jira client.');
         }
       }
