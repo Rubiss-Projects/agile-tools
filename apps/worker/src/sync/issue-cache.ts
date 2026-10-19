@@ -17,7 +17,7 @@ const commentSchema = z.object({
 }).nullable();
 
 /** Cache only complete histories, keyed by connection and Jira's exact updated value. */
-export async function loadIssueDetails(db: PrismaClient, client: JiraClient, connectionId: string, issue: RawJiraIssue, maxAgeMs: number) {
+export async function loadIssueDetails(db: PrismaClient, client: JiraClient, connectionId: string, issue: RawJiraIssue, maxAgeMs: number, leaseToken: string) {
   const key = { connectionId, jiraIssueId: issue.id };
   const cached = await db.jiraIssueCache.findUnique({ where: { connectionId_jiraIssueId: key } });
   const histories = historiesSchema.safeParse(cached?.changelog);
@@ -35,7 +35,14 @@ export async function loadIssueDetails(db: PrismaClient, client: JiraClient, con
   // A missing timestamp cannot establish that the next observation is unchanged.
   if (issue.fields.updated) {
     const data = { jiraUpdatedAt: issue.fields.updated, changelog, latestComment: { value: latestComment }, fetchedAt: new Date() };
-    await db.jiraIssueCache.upsert({ where: { connectionId_jiraIssueId: key }, create: { ...key, ...data }, update: data });
+    await db.$transaction(async (tx) => {
+      const owners = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "JiraConnection" WHERE id = ${connectionId}
+          AND "activeSyncLeaseToken" = ${leaseToken} AND "syncLeaseUntil" > NOW() FOR SHARE
+      `;
+      if (owners.length === 0) throw new Error('Connection lease lost before caching issue details.');
+      await tx.jiraIssueCache.upsert({ where: { connectionId_jiraIssueId: key }, create: { ...key, ...data }, update: data });
+    });
   }
   return { changelog, latestComment };
 }

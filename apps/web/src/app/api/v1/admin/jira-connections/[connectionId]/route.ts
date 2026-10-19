@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getPrismaClient, updateJiraConnection } from '@agile-tools/db';
+import { getPrismaClient, updateJiraConnection, JiraConnectionBusyError } from '@agile-tools/db';
 import { encryptSecret, getConfig, logger } from '@agile-tools/shared';
 import { UpdateJiraConnectionRequestSchema } from '@agile-tools/shared/contracts/api';
 import { requireAdminContext } from '@/server/auth';
@@ -75,6 +75,9 @@ async function handlePUT(
     return Response.json(mapConnection(updatedConnection));
   } catch (err) {
     if (err instanceof ResponseError) return err.response;
+    if (err instanceof JiraConnectionBusyError) {
+      return Response.json({ code: 'CONNECTION_SYNC_ACTIVE', message: err.message }, { status: 409 });
+    }
     logger.error('Failed to update Jira connection', {
       error: err instanceof Error ? err.message : String(err),
     });

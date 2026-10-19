@@ -11,19 +11,27 @@ const issue: RawJiraIssue = {
 };
 
 function fixture(updated = issue.fields.updated, ageMs = 0) {
-  const db = { jiraIssueCache: {
+  const jiraIssueCache = {
     findUnique: vi.fn().mockResolvedValue({ jiraUpdatedAt: updated, fetchedAt: new Date(Date.now() - ageMs), changelog: issue.changelog!.histories, latestComment: { value: null } }),
     upsert: vi.fn().mockResolvedValue({}),
-  } };
+  };
+  const transaction = { jiraIssueCache, $queryRaw: vi.fn().mockResolvedValue([{ id: 'connection' }]) };
+  const db = { ...transaction, $transaction: (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction) };
   const client = createJiraClient('https://fake.test', 'test', { changelogFetchStrategy: 'issue_expand' });
   const get = vi.spyOn(client, 'get').mockResolvedValue({ changelog: issue.changelog });
-  return { db: db as unknown as PrismaClient, cache: db.jiraIssueCache, client, get };
+  return { db: db as unknown as PrismaClient, cache: db.jiraIssueCache, client, get, query: db.$queryRaw };
 }
 
 describe('issue detail cache', () => {
+  it('does not repopulate the cache after its sync lease is replaced or expires', async () => {
+    const { db, cache, client, query } = fixture('old');
+    query.mockResolvedValue([]);
+    await expect(loadIssueDetails(db, client, 'connection', issue, 86_400_000, 'old-lease')).rejects.toThrow('Connection lease lost');
+    expect(cache.upsert).not.toHaveBeenCalled();
+  });
   it('skips unchanged history and comment calls and preserves cached history', async () => {
     const { db, client, get } = fixture();
-    const details = await loadIssueDetails(db, client, 'connection', issue, 86_400_000);
+    const details = await loadIssueDetails(db, client, 'connection', issue, 86_400_000, 'lease');
     expect(details.changelog).toEqual(issue.changelog!.histories);
     expect(details.latestComment).toBeNull();
     expect(get).not.toHaveBeenCalled();
@@ -31,7 +39,7 @@ describe('issue detail cache', () => {
   });
   it.each(['changed', 'expired'])('refreshes %s details from a complete bulk expansion', async (reason) => {
     const { db, cache, client, get } = fixture(reason === 'changed' ? 'old' : issue.fields.updated, reason === 'expired' ? 90_000_000 : 0);
-    await loadIssueDetails(db, client, 'connection', issue, 86_400_000);
+    await loadIssueDetails(db, client, 'connection', issue, 86_400_000, 'lease');
     expect(get).not.toHaveBeenCalled();
     expect(cache.upsert).toHaveBeenCalledOnce();
     expect(client.stats.issuesFetched).toBe(1);
@@ -39,11 +47,11 @@ describe('issue detail cache', () => {
   it('falls back for a truncated expansion and refuses to cache incomplete history', async () => {
     const { db, cache, client, get } = fixture('old');
     const truncated = { ...issue, changelog: { ...issue.changelog!, total: 2 } };
-    await loadIssueDetails(db, client, 'connection', truncated, 86_400_000);
+    await loadIssueDetails(db, client, 'connection', truncated, 86_400_000, 'lease');
     expect(get).toHaveBeenCalledWith('/rest/api/2/issue/1', expect.anything());
     cache.upsert.mockClear();
     get.mockResolvedValue({ changelog: truncated.changelog });
-    await expect(loadIssueDetails(db, client, 'connection', truncated, 86_400_000)).rejects.toMatchObject({ code: 'INCOMPLETE_CHANGELOG' });
+    await expect(loadIssueDetails(db, client, 'connection', truncated, 86_400_000, 'lease')).rejects.toMatchObject({ code: 'INCOMPLETE_CHANGELOG' });
     expect(cache.upsert).not.toHaveBeenCalled();
   });
 });

@@ -277,7 +277,9 @@ function createDb(options?: {
       return Promise.resolve({ count });
     }),
   };
+  const jiraIssueCache = { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() };
   const transactionClient = {
+    jiraIssueCache,
     $executeRaw: vi.fn().mockResolvedValue(0),
     $queryRaw: vi.fn().mockResolvedValue([{ id: syncRun.id }]),
     syncWorkItemStage,
@@ -298,7 +300,7 @@ function createDb(options?: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       update: vi.fn().mockResolvedValue(undefined),
     },
-    jiraIssueCache: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+    jiraIssueCache,
     jiraRequestDay: { upsert: vi.fn().mockResolvedValue({}) },
     syncRunCheckpoint: { upsert: vi.fn().mockResolvedValue({}) },
     flowScope: {
