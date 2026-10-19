@@ -59,6 +59,7 @@ async function handlePUT(
     const prisma = getPrismaClient();
     const updatedConnection = await updateJiraConnection(prisma, ctx.workspaceId, connectionId, {
       baseUrl: normalizedBaseUrl,
+      ...(parsed.data.requestBudgetPerMinute !== undefined ? { requestBudgetPerMinute: parsed.data.requestBudgetPerMinute } : {}),
       ...(normalizedDisplayName !== undefined && { displayName: normalizedDisplayName }),
       ...(encryptedSecretRef !== undefined && { encryptedSecretRef }),
       resetValidationState: shouldResetValidation,

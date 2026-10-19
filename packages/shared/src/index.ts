@@ -97,3 +97,5 @@ export type {
   RollingSampleWindow,
   SampleMode,
 } from './sample-window.js';
+export * from './jira-rate-limit.js';
+export { recordJiraThrottle, recordJiraRateState } from './metrics.js';

@@ -3,7 +3,7 @@ import { logger } from '@agile-tools/shared';
 
 export const WORKER_SHUTDOWN_SYNC_ERROR_CODE = 'SYNC_WORKER_SHUTDOWN';
 const WORKER_SHUTDOWN_SYNC_ERROR_SUMMARY =
-  'Canceled because the worker shut down gracefully while this sync was running.';
+  'Paused for worker shutdown; staged batches will be resumed.';
 
 const activeSyncRunIds = new Set<string>();
 
@@ -20,14 +20,14 @@ export async function cancelActiveSyncRuns(db: PrismaClient, now = new Date()): 
     return 0;
   }
 
-  const canceled = await db.syncRun.updateMany({
+  const paused = await db.syncRun.updateMany({
     where: {
       id: { in: syncRunIds },
       status: 'running',
     },
     data: {
-      status: 'canceled',
-      finishedAt: now,
+      status: 'queued',
+      resumeAfter: now,
       errorCode: WORKER_SHUTDOWN_SYNC_ERROR_CODE,
       errorSummary: WORKER_SHUTDOWN_SYNC_ERROR_SUMMARY,
     },
@@ -37,10 +37,10 @@ export async function cancelActiveSyncRuns(db: PrismaClient, now = new Date()): 
     activeSyncRunIds.delete(syncRunId);
   }
 
-  logger.info('Canceled active sync runs during worker shutdown', {
+  logger.info('Paused active sync runs during worker shutdown', {
     trackedCount: syncRunIds.length,
-    canceledCount: canceled.count,
+    pausedCount: paused.count,
   });
 
-  return canceled.count;
+  return paused.count;
 }

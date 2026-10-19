@@ -203,3 +203,11 @@ Task: "Implement story-count Monte Carlo analytics and ForecastResultCache persi
 - Story labels appear only in user-story phases.
 - Tasks are written against the planned monorepo structure from plan.md.
 - Validation is driven by each story’s independent test criteria plus explicit contract, integration, end-to-end, performance, and final quickstart checks.
+
+## Jira rate-limit follow-up (FR-023–FR-026)
+
+- [x] T043 Add shared header parsing, conservative bucket state, Postgres request coordination, and elapsed-time retries.
+- [x] T044 Reuse cached issue details and bulk expansions while preserving membership reconciliation and atomic publication.
+- [x] T045 Retain staged batches, serialize connections, stagger dispatch, back off failures, and expose admin settings.
+- [x] T046 Validate exact-header pacing and zero Retry-After with a virtual clock; test independent Postgres limiters, 12-scope request reduction, resume, and permanent failure handling.
+- [x] T047 Validate contracts, admin controls, types, and lint; document rollout, alerts, and limitations.

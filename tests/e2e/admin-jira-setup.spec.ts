@@ -197,6 +197,21 @@ test('editing a Jira connection sends a PUT request with rotated credentials', a
   });
 });
 
+test('saving a Jira request budget persists it and shows it after reload', async ({ page }) => {
+  await setAdminSession(page);
+  await page.route('**/discovery/boards', (route) => route.fulfill({ json: { boards: [] } }));
+  await page.goto('/admin/jira');
+  await page.getByRole('button', { name: 'Edit Connection', exact: true }).first().click();
+  const budget = page.getByRole('spinbutton', { name: 'Maximum requests per minute', exact: true }).first();
+  await budget.fill('30');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect(page.getByText('✓ Connection updated', { exact: true })).toBeVisible();
+  expect((await db.jiraConnection.findUniqueOrThrow({ where: { id: connectionId } })).requestBudgetPerMinute).toBe(30);
+  await page.reload();
+  await page.getByRole('button', { name: 'Edit Connection', exact: true }).first().click();
+  await expect(budget).toHaveValue('30');
+});
+
 test('editing a flow scope sends a PUT request and keeps the admin on the setup screen', async ({
   page,
 }) => {

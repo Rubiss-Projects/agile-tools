@@ -106,6 +106,11 @@ As a delivery manager, I want completed-story throughput and Monte Carlo forecas
 - **FR-021**: The system MUST allow an authorized administrator to edit an existing Jira connection's display name, base URL, and PAT rotation, and MUST reset connection validation state whenever the base URL or PAT changes.
 - **FR-022**: The system MUST allow an authorized administrator to edit an existing flow scope, including switching to a different Jira connection or board, and MUST queue a follow-up sync through the existing manual-sync pipeline when board identity or flow boundaries change unless a sync is already queued or running, in which case the update MUST fail with an explicit conflict.
 
+- **FR-023**: Share adaptive Jira header-driven pacing across every process for a connection, defaulting to 50% of refill capacity and a 20% reserve. Treat zero Retry-After as unknown and bound retries by elapsed time.
+- **FR-024**: Cache unchanged issue history/comments, consume complete bulk expansions, and reconcile membership and daily history refresh without exposing partially published data.
+- **FR-025**: Resume rate-limited syncs from durable batches under the same run ID; serialize connection syncs, stagger dispatch, adapt scheduling, and flag repeated permanent failures for administrator attention.
+- **FR-026**: Expose connection request budgets, observed rate limits, daily scope usage, and 5–1440 minute self-hosted intervals. Export request attribution and throttle metrics and document dedicated service accounts.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Jira Connection**: An administrator-managed link to a self-hosted Jira instance, including the service-account credential and current connection health state.

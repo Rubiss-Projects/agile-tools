@@ -163,6 +163,13 @@ model JiraConnection {
   jiraVersion            String?
   jiraDeploymentType     String?
   changelogStrategy      JiraChangelogStrategy?
+  requestBudgetPerMinute Int?
+  activeSyncRunId        String?
+  activeSyncLeaseToken   String?
+  syncLeaseUntil         DateTime?
+  rateState              JiraRateLimitState?
+  requestDays            JiraRequestDay[]
+  issueCache             JiraIssueCache[]
   capabilitiesDetectedAt DateTime?
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
@@ -186,6 +193,10 @@ model FlowScope {
   includedIssueTypeNames String[]        @default([])
   startStatusIds         String[]
   doneStatusIds          String[]
+  nextSyncAt             DateTime?
+  lastFullSyncAt         DateTime?
+  permanentFailureCount Int @default(0)
+  lastSyncError          String?
   syncIntervalMinutes    Int
   status                 FlowScopeStatus @default(active)
   createdAt              DateTime        @default(now())
@@ -267,6 +278,8 @@ model SyncRun {
   scopeId      String
   trigger      SyncRunTrigger
   status       SyncRunStatus  @default(queued)
+  resumeAfter  DateTime?
+  fullResync   Boolean @default(false)
   requestedBy  String?
   startedAt    DateTime?
   finishedAt   DateTime?
@@ -528,4 +541,32 @@ model HostedCapacityReservation {
 
   @@unique([kind, resourceId])
   @@index([workspaceId, kind])
+}
+
+// Shared across web requests, scopes, and worker pods. No credentials in state.
+model JiraRateLimitState {
+  connectionId String @id
+  state Json
+  updatedAt DateTime @updatedAt
+  connection JiraConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+model JiraRequestDay {
+  connectionId String
+  scopeId String
+  day DateTime @db.Date
+  requests Int @default(0)
+  rateLimited Int @default(0)
+  connection JiraConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  @@id([connectionId, scopeId, day])
+}
+// Raw history permits normalization after scope settings change.
+model JiraIssueCache {
+  connectionId String
+  jiraIssueId String
+  jiraUpdatedAt String
+  changelog Json
+  latestComment Json
+  fetchedAt DateTime
+  connection JiraConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  @@id([connectionId, jiraIssueId])
 }

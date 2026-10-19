@@ -4,6 +4,7 @@ import type { ConnectionHealthStatus, JiraAuthType, JiraChangelogStrategy } from
 type JiraConnectionClient = PrismaClient | Prisma.TransactionClient;
 
 export interface CreateJiraConnectionInput {
+  requestBudgetPerMinute?: number | null;
   baseUrl: string;
   encryptedSecretRef: string;
   displayName?: string;
@@ -21,6 +22,7 @@ export interface CreateJiraCloudOAuthConnectionInput {
 }
 
 export interface UpdateJiraConnectionInput {
+  requestBudgetPerMinute?: number | null;
   baseUrl: string;
   displayName?: string | null;
   encryptedSecretRef?: string;
@@ -53,6 +55,7 @@ export async function createJiraConnection(
       baseUrl: input.baseUrl,
       displayName: input.displayName ?? null,
       encryptedSecretRef: input.encryptedSecretRef,
+      requestBudgetPerMinute: input.requestBudgetPerMinute ?? null,
       authType: 'data_center_pat',
     },
   });
@@ -185,6 +188,8 @@ export async function updateJiraConnection(
     baseUrl: input.baseUrl,
   };
 
+  if (input.requestBudgetPerMinute !== undefined) data.requestBudgetPerMinute = input.requestBudgetPerMinute;
+
   if (input.displayName !== undefined) {
     data.displayName = input.displayName;
   }
@@ -202,6 +207,7 @@ export async function updateJiraConnection(
     data.jiraDeploymentType = null;
     data.changelogStrategy = null;
     data.capabilitiesDetectedAt = null;
+    data.issueCache = { deleteMany: {} };
   }
 
   try {

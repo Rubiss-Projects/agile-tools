@@ -8,6 +8,8 @@ import {
   recordForecastRun,
   recordHttpRequest,
   recordJiraRequest,
+  recordJiraRateState,
+  recordJiraThrottle,
   recordOidcAuthEvent,
   recordSyncRun,
   recordWorkerJob,
@@ -16,6 +18,22 @@ import {
 } from './metrics.js';
 
 describe('metrics', () => {
+  it('exports connection rate state and attributable response counts for alerting', async () => {
+    initializeMetrics({ serviceName: 'agile-tools-test', runtime: 'test' });
+    recordJiraRateState('rate-test', 240, 34);
+    recordJiraThrottle('rate-test', 2);
+    recordJiraRequest({
+      method: 'GET', url: new URL('https://jira.example.internal/rest/api/2/issue/A-1'),
+      operation: 'issue_detail', result: 'rate_limited', statusCode: 429,
+      durationSeconds: 0.1, connectionId: 'rate-test', scopeId: 'scope-test',
+    });
+    const { body } = await collectPrometheusMetrics();
+    expect(body).toMatch(/http_client_request_duration_count\{[^\n]*connection_id="rate-test"[^\n]*scope_id="scope-test"/);
+    expect(body).toMatch(/agile_tools_jira_rate_limit\{connection_id="rate-test"\} 240/);
+    expect(body).toMatch(/agile_tools_jira_rate_remaining\{connection_id="rate-test"\} 34/);
+    expect(body).toMatch(/agile_tools_jira_throttle_wait_seconds_sum\{connection_id="rate-test"\} 2/);
+  });
+
   afterAll(async () => {
     await stopMetricsServer();
   });

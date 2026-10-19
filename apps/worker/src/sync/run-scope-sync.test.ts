@@ -37,6 +37,7 @@ const {
 
   const jiraClientStub = {
     name: 'jira-client',
+    stats: { requests: 0, rateLimited: 0, pausedMs: 0, issuesFetched: 0, issuesSkipped: 0 },
     fetchServerInfo: vi.fn(),
     setChangelogFetchStrategy: vi.fn(),
   };
@@ -89,6 +90,10 @@ const {
 
 vi.mock('@agile-tools/db', () => ({
   DEFAULT_COMPLETED_WINDOW_DAYS: 90,
+  createPostgresJiraRateLimiter: vi.fn(),
+  claimConnectionSync: vi.fn().mockResolvedValue(true),
+  renewConnectionSync: vi.fn().mockResolvedValue(true),
+  releaseConnectionSync: vi.fn().mockResolvedValue(undefined),
   getActiveHoldDefinition: getActiveHoldDefinitionMock,
   listEpicForecastTargets: listEpicForecastTargetsMock,
   refreshEpicLinkForecastTargetCounts: refreshEpicLinkForecastTargetCountsMock,
@@ -208,6 +213,7 @@ function createDb(options?: {
     connectionId: 'connection-1',
     boardId: '42',
     status: 'active',
+    syncIntervalMinutes: 10,
     startStatusIds: ['10'],
     doneStatusIds: options?.doneStatusIds ?? ['30', '40'],
     includedIssueTypeIds: ['story'],
@@ -290,7 +296,11 @@ function createDb(options?: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       update: vi.fn().mockResolvedValue(undefined),
     },
+    jiraIssueCache: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+    jiraRequestDay: { upsert: vi.fn().mockResolvedValue({}) },
+    syncRunCheckpoint: { upsert: vi.fn().mockResolvedValue({}) },
     flowScope: {
+      update: vi.fn().mockResolvedValue({ permanentFailureCount: 1 }),
       findUnique: vi.fn().mockResolvedValue(scope),
     },
     jiraConnection: {
@@ -322,6 +332,8 @@ describe('runScopeSync', () => {
 
     getConfigMock.mockReturnValue({
       ENCRYPTION_KEY: 'test-encryption-key',
+      SYNC_FULL_RESYNC_HOURS: 24,
+      SYNC_PERMANENT_FAILURE_LIMIT: 3,
       SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: 600_000,
       SYNC_PUBLISH_TRANSACTION_MAX_WAIT_MS: 30_000,
     });
@@ -551,7 +563,7 @@ describe('runScopeSync', () => {
     expect(streamJqlIssuesMock).toHaveBeenCalledWith(
       jiraClientStub,
       'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
-      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment' },
+      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment', expandChangelog: true },
     );
     expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
     expect(db.workItem.upsert).toHaveBeenNthCalledWith(
@@ -632,7 +644,7 @@ describe('runScopeSync', () => {
       1,
       jiraClientStub,
       'filter = 1001 AND status in ("50")',
-      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment' },
+      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment', expandChangelog: true },
     );
     expect(db.workItem.upsert).toHaveBeenCalledTimes(2);
     expect(db.workItem.upsert).toHaveBeenNthCalledWith(
@@ -798,7 +810,7 @@ describe('runScopeSync', () => {
     expect(streamJqlIssuesMock).toHaveBeenCalledWith(
       jiraClientStub,
       'filter = 1001 AND status in ("30", "40") AND updated >= -90d',
-      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment' },
+      { fields: 'summary,status,issuetype,project,created,updated,resolutiondate,assignee,comment', expandChangelog: true },
     );
     expect(fetchIssueChangelogMock).toHaveBeenCalledTimes(1);
     expect(db.workItem.upsert).toHaveBeenCalledTimes(1);
@@ -1033,6 +1045,7 @@ describe('runScopeSync', () => {
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 0 })
       .mockResolvedValueOnce({ count: 0 });
 
@@ -1043,7 +1056,7 @@ describe('runScopeSync', () => {
     ).resolves.toBeUndefined();
 
     expect(db.syncWorkItemStage.createMany).toHaveBeenCalledTimes(1);
-    expect(db.syncWorkItemStage.deleteMany).toHaveBeenCalledTimes(2);
+    expect(db.syncWorkItemStage.deleteMany).toHaveBeenCalledTimes(1);
     expect(db.syncWorkItemStage.deleteMany).toHaveBeenLastCalledWith({
       where: { syncRunId: 'run-1' },
     });
@@ -1054,6 +1067,7 @@ describe('runScopeSync', () => {
   it('does not update connection health when the run has already been superseded', async () => {
     const db = createDb();
     db.syncRun.updateMany
+      .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 0 });
     getBoardDetailWithFilterIdMock.mockRejectedValueOnce(

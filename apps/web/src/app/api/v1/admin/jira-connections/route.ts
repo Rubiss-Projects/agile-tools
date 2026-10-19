@@ -47,6 +47,7 @@ async function handlePOST(req: NextRequest): Promise<Response> {
     const conn = await createJiraConnection(prisma, ctx.workspaceId, {
       baseUrl,
       encryptedSecretRef,
+      ...(parsed.data.requestBudgetPerMinute !== undefined ? { requestBudgetPerMinute: parsed.data.requestBudgetPerMinute } : {}),
       ...(parsed.data.displayName !== undefined && { displayName: parsed.data.displayName }),
     });
 

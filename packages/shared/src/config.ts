@@ -32,8 +32,14 @@ const configSchema = z.object({
   METRICS_HOST: z.string().min(1).default('0.0.0.0'),
   /** Port for standalone metrics servers. Falls back to PORT when METRICS_PORT is unset. */
   METRICS_PORT: z.coerce.number().int().positive().default(9464),
-  /** 5–15 minute default sync interval guard — scopes override this per board */
-  DEFAULT_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(15).default(10),
+  /** Default for new self-hosted scopes; existing scopes retain their interval. */
+  DEFAULT_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(10),
+  JIRA_RATE_FRACTION: z.coerce.number().positive().max(1).default(0.5),
+  JIRA_RATE_RESERVE_FRACTION: z.coerce.number().min(0).max(0.9).default(0.2),
+  JIRA_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(3),
+  JIRA_RATE_RETRY_BUDGET_MS: z.coerce.number().int().min(1000).max(600_000).default(120_000),
+  SYNC_FULL_RESYNC_HOURS: z.coerce.number().positive().default(24),
+  SYNC_PERMANENT_FAILURE_LIMIT: z.coerce.number().int().positive().default(3),
   /**
    * Maximum runtime (ms) of the Prisma interactive transaction that publishes
    * staged Jira sync results to `WorkItem`/`WorkItemLifecycleEvent`. Prisma's

@@ -5,7 +5,7 @@ import {
   listFlowScopes,
   listWorkspaceUsers,
 } from '@agile-tools/db';
-import { getConfig } from '@agile-tools/shared';
+import { getConfig, JiraRateStateSchema } from '@agile-tools/shared';
 import { getWorkspaceContext } from '@/server/auth';
 import { mapConnection } from '@/app/api/v1/admin/jira-connections/_lib';
 import { mapFlowScopeOwner, mapScope } from '@/app/api/v1/admin/scopes/_lib';
@@ -97,6 +97,11 @@ export default async function AdminJiraPage() {
     listFlowScopes(db, ctx.workspaceId),
     listWorkspaceUsers(db, ctx.workspaceId),
   ]);
+  const [rateRows, requestDays] = await Promise.all([
+    db.jiraRateLimitState.findMany({ where: { connection: { workspaceId: ctx.workspaceId } } }),
+    db.jiraRequestDay.findMany({ where: { connection: { workspaceId: ctx.workspaceId }, day: new Date(new Date().toISOString().slice(0, 10)) } }),
+  ]);
+  const rates = new Map(rateRows.map((row) => [row.connectionId, JiraRateStateSchema.parse(row.state)]));
   const hostedWarnings = hostedCloudOnly ? await getHostedBudgetWarnings() : [];
   const missingAtlassianOAuthConfig = hostedCloudOnly ? getMissingAtlassianOAuthConfig() : [];
   const jiraCloudDisabledReason =
@@ -110,7 +115,7 @@ export default async function AdminJiraPage() {
         syncIntervalDefault: config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES,
         syncIntervalHelpText: `Hosted beta schedules each scope at most once every ${config.HOSTED_BETA_MIN_SCHEDULED_SYNC_INTERVAL_MINUTES} minutes.`,
       }
-    : {};
+    : { syncIntervalDefault: config.DEFAULT_SYNC_INTERVAL_MINUTES };
 
   const connectionSummaries = connections.map(mapConnection);
   const jiraBaseUrlByConnectionId = new Map(
@@ -230,6 +235,10 @@ export default async function AdminJiraPage() {
                   </div>
                   <span style={tonePillStyle(connectionTone(conn.healthStatus))}>{conn.healthStatus}</span>
                 </div>
+                <p style={sectionCopyStyle}>
+                  Observed bucket: {rates.get(conn.id)?.observedAt ? rates.get(conn.id)?.limit : 'Not observed'} · Remaining: {rates.get(conn.id)?.observedRemaining ?? 'Not observed'}
+                  {rates.get(conn.id)?.observedAt ? ' · Last observed ' + new Date(rates.get(conn.id)!.observedAt).toISOString() : ''}
+                </p>
                 {conn.lastErrorCode && (
                   <p style={{ margin: '0.75rem 0 0', color: palette.warning, fontSize: '0.84rem' }}>
                     Last error: <span style={codeStyle}>{conn.lastErrorCode}</span>
@@ -278,7 +287,7 @@ export default async function AdminJiraPage() {
                     <span style={tonePillStyle(scopeTone(scope.status))}>{scope.status}</span>
                   </div>
                   <p style={{ margin: '0.45rem 0 0', color: palette.muted, fontSize: '0.92rem' }}>
-                    Board {scope.boardId} · every {scope.syncIntervalMinutes} minutes
+                    Board {scope.boardId} · every {scope.syncIntervalMinutes} minutes · {requestDays.filter((row) => row.scopeId === scope.id).reduce((sum, row) => sum + row.requests, 0)} Jira requests today (UTC)
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -296,6 +305,9 @@ export default async function AdminJiraPage() {
                     </a>
                   )}
                 </div>
+                {scopes.find((item) => item.id === scope.id)?.lastSyncError && (
+                  <p style={{ color: palette.warning }}>{scopes.find((item) => item.id === scope.id)?.lastSyncError} Fix Jira access or the board selection, then save this scope to resume.</p>
+                )}
                 <div style={{ width: '100%' }}>
                   <div style={{ marginTop: '0.75rem' }}>
                     <FlowScopeOwnerForm

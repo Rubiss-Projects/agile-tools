@@ -9,6 +9,7 @@ function syncRun(overrides: Partial<Parameters<typeof mapSyncRun>[0]> = {}): Par
     trigger: 'manual',
     status: 'queued',
     requestedBy: null,
+    resumeAfter: null, fullResync: false,
     startedAt: null,
     finishedAt: null,
     dataVersion: null,

@@ -97,7 +97,7 @@ beforeEach(async () => {
 });
 
 describe('resolveActiveSyncRun', () => {
-  it('fails a stale queued sync and returns no active run', async () => {
+  it('resumes a stale queued sync in place', async () => {
     const db = getPrismaClient();
     const now = new Date('2026-04-30T12:00:00.000Z');
     const staleCreatedAt = new Date(now.getTime() - STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS - 1_000);
@@ -111,7 +111,7 @@ describe('resolveActiveSyncRun', () => {
     });
     await db.$executeRaw`
       UPDATE "SyncRun"
-      SET "createdAt" = ${staleCreatedAt}
+      SET "createdAt" = ${staleCreatedAt}, "updatedAt" = ${staleCreatedAt}
       WHERE id = ${staleRun.id}
     `;
 
@@ -120,16 +120,16 @@ describe('resolveActiveSyncRun', () => {
       return resolveActiveSyncRun(tx, workspaceId, scopeId, now);
     });
 
-    expect(activeRun).toBeNull();
+    expect(activeRun?.id).toBe(staleRun.id);
 
     const updatedRun = await db.syncRun.findUniqueOrThrow({ where: { id: staleRun.id } });
-    expect(updatedRun.status).toBe('failed');
-    expect(updatedRun.errorCode).toBe('SYNC_STALE_TIMEOUT');
-    expect(updatedRun.errorSummary).toContain('60-minute timeout');
-    expect(updatedRun.finishedAt?.toISOString()).toBe(now.toISOString());
+    expect(updatedRun.status).toBe('queued');
+    expect(updatedRun.errorCode).toBe('SYNC_RESUMING');
+    expect(updatedRun.errorSummary).toContain('60-minute heartbeat timeout');
+    expect(updatedRun.resumeAfter?.toISOString()).toBe(now.toISOString());
   });
 
-  it('fails a stale running sync when its heartbeat is stale', async () => {
+  it('resumes a stale running sync when its heartbeat is stale', async () => {
     const db = getPrismaClient();
     const now = new Date('2026-04-30T12:00:00.000Z');
     const staleStartedAt = new Date(now.getTime() - STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS - 1_000);
@@ -154,12 +154,12 @@ describe('resolveActiveSyncRun', () => {
       return resolveActiveSyncRun(tx, workspaceId, scopeId, now);
     });
 
-    expect(activeRun).toBeNull();
+    expect(activeRun?.id).toBe(staleRun.id);
 
     const updatedRun = await db.syncRun.findUniqueOrThrow({ where: { id: staleRun.id } });
-    expect(updatedRun.status).toBe('failed');
-    expect(updatedRun.errorCode).toBe('SYNC_STALE_TIMEOUT');
-    expect(updatedRun.finishedAt?.toISOString()).toBe(now.toISOString());
+    expect(updatedRun.status).toBe('queued');
+    expect(updatedRun.errorCode).toBe('SYNC_RESUMING');
+    expect(updatedRun.resumeAfter?.toISOString()).toBe(now.toISOString());
   });
 
   it('keeps a running sync active when its heartbeat is fresh', async () => {

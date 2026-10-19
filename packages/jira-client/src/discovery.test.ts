@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createJiraClient } from './client.js';
+import { createJiraClient as createClient } from './client.js';
 import { getBoardDetail, getBoardDetailWithFilterId, getBoardFilterId, listBoards } from './discovery.js';
 
+import { JiraRateLimiter, createMemoryJiraRateStore } from '@agile-tools/shared';
+function createJiraClient(...[baseUrl, pat, options]: Parameters<typeof createClient>) {
+  const store = createMemoryJiraRateStore();
+  void store.update((state) => { state.fillRate = 120000; });
+  return createClient(baseUrl, pat, { ...options, rateLimiter: new JiraRateLimiter(store) });
+}
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status: 200,

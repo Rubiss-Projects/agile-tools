@@ -561,6 +561,11 @@ components:
       type: object
       required: [baseUrl, pat]
       properties:
+        requestBudgetPerMinute:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 60000
+          description: Optional additional per-connection request cap; header-derived pacing still applies.
         baseUrl:
           type: string
           format: uri
@@ -573,6 +578,11 @@ components:
       type: object
       required: [baseUrl]
       properties:
+        requestBudgetPerMinute:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 60000
+          description: Optional additional per-connection request cap; header-derived pacing still applies.
         baseUrl:
           type: string
           format: uri
@@ -589,6 +599,11 @@ components:
         id:
           type: string
           format: uuid
+        requestBudgetPerMinute:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 60000
+          description: Optional additional per-connection request cap; header-derived pacing still applies.
         baseUrl:
           type: string
           format: uri
@@ -723,7 +738,7 @@ components:
         syncIntervalMinutes:
           type: integer
           minimum: 5
-          maximum: 15
+          maximum: 1440
     UpdateFlowScopeRequest:
       allOf:
         - $ref: '#/components/schemas/CreateFlowScopeRequest'

@@ -18,7 +18,7 @@ Build a self-hosted internal web application for kanban teams as a TypeScript mo
 **Target Platform**: Internal Linux container or VM deployment with network access to self-hosted Jira  
 **Project Type**: Web application with separate web and worker deployables in a pnpm workspace monorepo  
 **Performance Goals**: Flow and detail reads served from local projections at p95 < 500 ms; forecast responses < 3 s for 10k-20k trials on datasets with at least 60 completed stories  
-**Constraints**: Jira Data Center 8.14+ with service-account PAT, scheduled sync every 5-15 minutes plus manual refresh, one active sync per scope, story-count forecasting only, no live Jira dependency on UI request paths, and reliance on existing workspace authentication for user identity and role context  
+**Constraints**: Jira Data Center 8.14+ with service-account PAT, scheduled sync every 5-1440 minutes plus manual refresh, one active sync per connection, story-count forecasting only, no live Jira dependency on UI request paths, and reliance on existing workspace authentication for user identity and role context
 **Scale/Scope**: Single-tenant internal rollout, one kanban team scope at a time, hundreds of active stories, up to 24 months of history, and low hundreds of thousands of lifecycle events
 
 ## Constitution Check
@@ -102,3 +102,11 @@ Use the current spec, plan, tasks, and analysis artifacts as the source package 
 ## Complexity Tracking
 
 No constitution violations or extra complexity justifications are currently identified.
+
+## Jira request reduction and resilience (2026-10-18)
+
+Keep the monolith and existing atomic staging/publish flow. A Postgres row and short advisory-locked transactions coordinate header observations, request leases, and burst-free pacing across web and worker processes. Default allocation is half of Jira's advertised refill, with a 20% reserve. A separate renewable connection lease serializes scope syncs. Publication checks and locks the owning connection to fence expired workers.
+
+Cache complete raw issue history and latest comment by connection, issue ID, and Jira updated timestamp. Scan membership each sync, reuse details for unchanged issues, and refresh expired cache entries daily. Inline complete changelogs avoid detail requests; truncated histories fall back to issue endpoints. Keep staged batches when retry time expires and requeue the same run. Resuming scans membership again and skips staged IDs, avoiding fragile offset checkpoints on live Jira ordering.
+
+Constitution check: no new services; analytics still use local versions; migration and OpenAPI accompany settings changes; virtual-clock limiter and real Postgres sync tests cover pacing/persistence; PAT secrecy and scope locking remain required. Request metrics use connection/scope labels; sync_run_id is in structured summaries to avoid an unbounded metric label.

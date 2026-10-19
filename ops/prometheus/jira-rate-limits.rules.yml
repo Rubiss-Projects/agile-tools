@@ -1,0 +1,15 @@
+groups:
+  - name: jira-rate-limits
+    rules:
+      - alert: JiraRateLimitRatioHigh
+        expr: |
+          sum by (connection_id) (rate(http_client_request_duration_count{agile_tools_jira_result="rate_limited"}[15m]))
+          /
+          sum by (connection_id) (rate(http_client_request_duration_count{agile_tools_jira_result!="",agile_tools_jira_result!="network_error"}[15m]))
+          > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Jira 429 responses exceed 1% over 15 minutes
+          description: Check connection traffic, shared-account activity, and configured Jira request allocation.
