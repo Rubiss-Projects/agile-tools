@@ -28,6 +28,25 @@ afterEach(() => {
 });
 
 describe('createJiraClient', () => {
+  it('bounds sibling requests waiting on a shared ten-minute Retry-After', async () => {
+    vi.useFakeTimers();
+    const store = createMemoryJiraRateStore();
+    const fetchMock = vi.fn().mockImplementation(() => new Response('{}', {
+      status: 429, headers: { 'Retry-After': '600' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const clients = Array.from({ length: 2 }, () => createClient('https://fake.test', 'test', {
+      retryBudgetMs: 120_000, rateLimiter: new JiraRateLimiter(store),
+    }));
+    const results = Promise.allSettled(clients.map((client) => client.get('/rest/api/2/issue/1')));
+    await vi.advanceTimersByTimeAsync(125_000);
+    expect(await results).toEqual(clients.map(() => ({
+      status: 'rejected', reason: expect.objectContaining({ code: 'RATE_LIMITED', statusCode: 429 }),
+    })));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(clients[1]!.stats.requests).toBe(0);
+  });
+
   it('pauses on Retry-After: 0 and retries the same request after refill', async () => {
     vi.useFakeTimers();
     const headers = { 'X-RateLimit-Limit': '240', 'X-RateLimit-Remaining': '0', 'X-RateLimit-FillRate': '120', 'X-RateLimit-Interval-Seconds': '60', 'Retry-After': '0' };

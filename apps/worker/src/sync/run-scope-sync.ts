@@ -45,7 +45,7 @@ import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js
 
 import { loadIssueDetails } from './issue-cache.js';
 
-type SyncNormalizeContext = NormalizeContext & { connectionId: string; cacheMaxAgeMs: number };
+type SyncNormalizeContext = NormalizeContext & { connectionId: string; leaseToken: string; cacheMaxAgeMs: number };
 
 const BATCH_SIZE = 10;
 const STAGED_ITEM_PAGE_SIZE = 100;
@@ -388,6 +388,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       scopeId: scope.id,
       syncRunId,
       connectionId: connection.id,
+      leaseToken,
       cacheMaxAgeMs: getConfig().SYNC_FULL_RESYNC_HOURS * 3_600_000,
       startStatusIds,
       doneStatusIds,
@@ -402,19 +403,29 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     let batch: RawJiraIssue[] = [];
     const projectIdsSet = new Set<string>();
     const checkpointItems = await db.syncWorkItemStage.findMany({
-      where: { syncRunId }, select: { jiraIssueId: true, projectId: true },
+      where: { syncRunId }, select: { jiraIssueId: true, projectId: true, jiraUpdatedAt: true },
     });
-    const processedIssueIds = new Set(checkpointItems.map((item) => item.jiraIssueId));
-    for (const item of checkpointItems) projectIdsSet.add(item.projectId);
+    const checkpoints = new Map(checkpointItems.map((item) => [item.jiraIssueId, item]));
+    const processedIssueIds = new Set<string>();
+    // A durable stage is reusable only after this attempt observes current membership
+    // and confirms Jira's update timestamp. Missing timestamps require reprocessing.
+    const shouldProcessIssue = (issue: RawJiraIssue) => {
+      if (processedIssueIds.has(issue.id)) return false;
+      processedIssueIds.add(issue.id);
+      const staged = checkpoints.get(issue.id);
+      if (issue.fields.updated && staged?.jiraUpdatedAt?.getTime() === Date.parse(issue.fields.updated)) {
+        projectIdsSet.add(staged.projectId);
+        jiraClient.stats.issuesSkipped++;
+        return false;
+      }
+      return true;
+    };
 
     for await (const issue of streamBoardIssues(jiraClient, boardId, {
       fields: SYNC_ISSUE_FIELDS,
       expandChangelog: true,
     })) {
-      if (processedIssueIds.has(issue.id)) {
-        continue;
-      }
-      processedIssueIds.add(issue.id);
+      if (!shouldProcessIssue(issue)) continue;
       batch.push(issue);
       if (batch.length >= BATCH_SIZE) {
         await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
@@ -450,10 +461,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
           fields: SYNC_ISSUE_FIELDS,
           expandChangelog: true,
         })) {
-          if (processedIssueIds.has(issue.id)) {
-            continue;
-          }
-          processedIssueIds.add(issue.id);
+          if (!shouldProcessIssue(issue)) continue;
           batch.push(issue);
           if (batch.length >= BATCH_SIZE) {
             await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
@@ -502,10 +510,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
           fields: SYNC_ISSUE_FIELDS,
           expandChangelog: true,
         })) {
-          if (processedIssueIds.has(issue.id)) {
-            continue;
-          }
-          processedIssueIds.add(issue.id);
+          if (!shouldProcessIssue(issue)) continue;
           batch.push(issue);
           if (batch.length >= BATCH_SIZE) {
             await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
@@ -541,6 +546,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       claimedStartedAt,
       scope.id,
       leaseToken,
+      checkpointItems.filter((item) => !processedIssueIds.has(item.jiraIssueId)).map((item) => item.jiraIssueId),
     );
     if (!succeeded) {
       recordSyncMetric('skipped', 'SYNC_RUN_NOT_RUNNING', processedIssueIds.size);
@@ -909,7 +915,7 @@ async function processBatch(
   if (failed?.status === 'rejected') throw failed.reason;
   const normalizedItems = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
 
-  await stageWorkItems(db, ctx.scopeId, ctx.syncRunId, normalizedItems);
+  await stageWorkItems(db, ctx, normalizedItems);
   await db.syncRunCheckpoint.upsert({ where: { syncRunId: ctx.syncRunId },
     create: { syncRunId: ctx.syncRunId, phase: 'fetch', counts: { ...jiraClient.stats } },
     update: { phase: 'fetch', counts: { ...jiraClient.stats } },
@@ -1011,43 +1017,63 @@ function isStagedLifecycleEvent(value: unknown): value is StagedLifecycleEvent {
   );
 }
 
+async function lockSyncAttempt(db: Pick<PrismaClient, '$queryRaw'>, syncRunId: string, leaseToken: string): Promise<boolean> {
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT run.id
+    FROM "SyncRun" run
+    JOIN "FlowScope" scope ON scope.id = run."scopeId"
+    JOIN "JiraConnection" connection ON connection.id = scope."connectionId"
+    WHERE run.id = ${syncRunId} AND run.status = 'running'
+      AND connection."activeSyncRunId" = ${syncRunId} AND connection."activeSyncLeaseToken" = ${leaseToken} AND connection."syncLeaseUntil" > NOW()
+    FOR UPDATE OF run, connection
+  `;
+  return rows.length > 0;
+}
+
 async function stageWorkItems(
   db: PrismaClient,
-  scopeId: string,
-  syncRunId: string,
+  ctx: SyncNormalizeContext,
   items: NormalizedWorkItem[],
 ): Promise<void> {
+  const { scopeId, syncRunId, leaseToken } = ctx;
   if (items.length === 0) {
     return;
   }
 
-  await db.syncWorkItemStage.createMany({
-    data: items.map((item) => ({
-      syncRunId,
-      scopeId,
-      jiraIssueId: item.jiraIssueId,
-      issueKey: item.issueKey,
-      summary: item.summary,
-      issueTypeId: item.issueTypeId,
-      issueTypeName: item.issueTypeName,
-      projectId: item.projectId,
-      currentStatusId: item.currentStatusId,
-      currentStatusName: item.currentStatusName,
-      currentColumn: item.currentColumn,
-      assigneeName: item.assigneeName,
-      jiraCreatedAt: item.createdAt,
-      jiraUpdatedAt: item.jiraUpdatedAt,
-      latestCommentAuthor: item.latestCommentAuthor,
-      latestCommentBody: item.latestCommentBody,
-      latestCommentCreatedAt: item.latestCommentCreatedAt,
-      startedAt: item.startedAt,
-      completedAt: item.completedAt,
-      reopenedCount: item.reopenedCount,
-      directUrl: item.directUrl,
-      excludedReason: item.excludedReason,
-      lifecycleEvents: stageLifecycleEvents(item.lifecycleEvents),
-    })),
-    skipDuplicates: true,
+  await db.$transaction(async (tx) => {
+    if (!await lockSyncAttempt(tx, syncRunId, leaseToken)) {
+      throw new SyncError('SYNC_LEASE_LOST', 'Connection lease is no longer owned by this attempt');
+    }
+    // Replace changed stages atomically; failed detail loads never erase a checkpoint.
+    await tx.syncWorkItemStage.deleteMany({ where: { syncRunId, jiraIssueId: { in: items.map((item) => item.jiraIssueId) } } });
+    await tx.syncWorkItemStage.createMany({
+      data: items.map((item) => ({
+        syncRunId,
+        scopeId,
+        jiraIssueId: item.jiraIssueId,
+        issueKey: item.issueKey,
+        summary: item.summary,
+        issueTypeId: item.issueTypeId,
+        issueTypeName: item.issueTypeName,
+        projectId: item.projectId,
+        currentStatusId: item.currentStatusId,
+        currentStatusName: item.currentStatusName,
+        currentColumn: item.currentColumn,
+        assigneeName: item.assigneeName,
+        jiraCreatedAt: item.createdAt,
+        jiraUpdatedAt: item.jiraUpdatedAt,
+        latestCommentAuthor: item.latestCommentAuthor,
+        latestCommentBody: item.latestCommentBody,
+        latestCommentCreatedAt: item.latestCommentCreatedAt,
+        startedAt: item.startedAt,
+        completedAt: item.completedAt,
+        reopenedCount: item.reopenedCount,
+        directUrl: item.directUrl,
+        excludedReason: item.excludedReason,
+        lifecycleEvents: stageLifecycleEvents(item.lifecycleEvents),
+      })),
+      skipDuplicates: true,
+    });
   });
 }
 
@@ -1057,6 +1083,7 @@ async function publishSyncedWorkItems(
   startedAt: Date,
   scopeId: string,
   leaseToken: string,
+  departedIssueIds: string[],
 ): Promise<boolean> {
   const {
     SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: publishTimeoutMs,
@@ -1070,16 +1097,8 @@ async function publishSyncedWorkItems(
   // of staged items.
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
-    const rows = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT run.id
-      FROM "SyncRun" run
-      JOIN "FlowScope" scope ON scope.id = run."scopeId"
-      JOIN "JiraConnection" connection ON connection.id = scope."connectionId"
-      WHERE run.id = ${syncRunId} AND run.status = 'running'
-        AND connection."activeSyncRunId" = ${syncRunId} AND connection."activeSyncLeaseToken" = ${leaseToken} AND connection."syncLeaseUntil" > NOW()
-      FOR UPDATE OF run, connection
-    `;
-    if (rows.length === 0) {
+    const ownsAttempt = await lockSyncAttempt(tx, syncRunId, leaseToken);
+    if (!ownsAttempt) {
       logger.warn('SyncRun left running state before publish; skipping', {
         syncRunId,
       });
@@ -1092,6 +1111,12 @@ async function publishSyncedWorkItems(
         AND status = 'running'
     `;
 
+    // Prune only after all membership scans finish, inside the fenced publication.
+    for (let offset = 0; offset < departedIssueIds.length; offset += STAGED_ITEM_PAGE_SIZE) {
+      await tx.syncWorkItemStage.deleteMany({ where: { syncRunId,
+        jiraIssueId: { in: departedIssueIds.slice(offset, offset + STAGED_ITEM_PAGE_SIZE) },
+      } });
+    }
     const syncedAt = new Date();
     let lastStageId: string | undefined;
 

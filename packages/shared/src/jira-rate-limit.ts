@@ -54,7 +54,7 @@ export class JiraRateLimiter {
     readonly settings: JiraRateSettings = DEFAULT_JIRA_RATE_SETTINGS,
   ) {}
 
-  async acquire(onWait?: (milliseconds: number) => Promise<void>): Promise<() => Promise<void>> {
+  async acquire(onWait?: (milliseconds: number, rateLimited: boolean) => Promise<void>): Promise<() => Promise<void>> {
     const id = randomUUID();
     for (;;) {
       const wait = await this.store.update((state, now) => {
@@ -64,16 +64,19 @@ export class JiraRateLimiter {
         const tokenWait = Math.max(0, reserve + 1 - state.remaining) / this.rate(state) * 1000;
         const concurrencyWait = state.leases.length >= this.settings.maxConcurrency ? 100 : 0;
         const delay = Math.max(0, state.nextAt - now, state.blockedUntil - now, tokenWait, concurrencyWait);
-        if (delay > 0) return Math.min(5_000, Math.ceil(delay));
+        if (delay > 0) return {
+          milliseconds: Math.min(5_000, Math.ceil(delay)),
+          rateLimited: state.blockedUntil > now || tokenWait > 0,
+        };
         // The lease outlives the client's 30-second HTTP timeout, including body consumption.
         state.leases.push({ id, expiresAt: now + 60_000 });
         state.remaining = Math.max(0, state.remaining - 1);
         state.nextAt = now + 1000 / this.rate(state);
-        return 0;
+        return { milliseconds: 0, rateLimited: false };
       });
-      if (wait === 0) break;
-      await onWait?.(wait);
-      await new Promise((resolve) => setTimeout(resolve, wait));
+      if (wait.milliseconds === 0) break;
+      await onWait?.(wait.milliseconds, wait.rateLimited);
+      await new Promise((resolve) => setTimeout(resolve, wait.milliseconds));
     }
     return async () => {
       await this.store.update((state) => { state.leases = state.leases.filter((lease) => lease.id !== id); });

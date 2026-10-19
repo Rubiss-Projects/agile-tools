@@ -11,6 +11,8 @@ let issueCount = 100;
 let blocked = false;
 let missingBoard = false;
 let removedFirstIssue = false;
+let changedSecondIssue = false;
+let missingThirdTimestamp = false;
 const requests: string[] = [];
 
 beforeAll(async () => {
@@ -29,6 +31,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   requests.length = 0; blocked = false; missingBoard = false; removedFirstIssue = false; issueCount = 100;
+  changedSecondIssue = false; missingThirdTimestamp = false;
   const db = getPrismaClient();
   const workspace = await db.workspace.create({ data: { name: `rate-test-${crypto.randomUUID()}`, defaultTimezone: 'UTC' } });
   workspaceId = workspace.id;
@@ -53,8 +56,10 @@ beforeEach(async () => {
     if (boardMatch) {
       const issues = Array.from({ length: issueCount }, (_, index) => ({
         id: `${boardMatch[1]}-${index}`, key: `TEST-${boardMatch[1]}-${index}`,
-        fields: { summary: 'Story', issuetype: { id: 'story', name: 'Story' }, project: { id: '1', key: 'TEST' },
-          status: { id: '10', name: 'Doing' }, created: '2026-01-01T00:00:00Z', updated: '2026-10-18T00:00:00Z', comment: { total: 0, comments: [] } },
+        fields: { summary: changedSecondIssue && index === 1 ? 'Updated story' : 'Story', issuetype: { id: 'story', name: 'Story' }, project: { id: '1', key: 'TEST' },
+          status: { id: '10', name: 'Doing' }, created: '2026-01-01T00:00:00Z',
+          ...(missingThirdTimestamp && index === 2 ? {} : { updated: changedSecondIssue && index === 1 ? '2026-10-19T00:00:00Z' : '2026-10-18T00:00:00Z' }),
+          comment: { total: 0, comments: [] } },
         changelog: { startAt: 0, maxResults: 0, total: 1, histories: [] },
       })).filter((_, index) => !removedFirstIssue || index !== 0);
       const startAt = Number(url.searchParams.get('startAt'));
@@ -119,6 +124,33 @@ describe('shared Jira sync persistence', () => {
     expect(await db.syncRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({ status: 'succeeded', errorCode: null });
     expect(requests.filter((path) => path === '/rest/api/2/issue/99-0')).toHaveLength(before);
     expect(await db.workItem.count({ where: { scopeId: item.id, lastSyncRunId: run.id } })).toBe(20);
+  });
+
+  it('reconciles changed, departed, and undated staged issues before publishing a resumed run', async () => {
+    issueCount = 20; blocked = true;
+    const db = getPrismaClient();
+    const item = await scope(98);
+    const run = await sync(item.id);
+    expect(run).toMatchObject({ status: 'queued', errorCode: 'RATE_LIMITED' });
+    expect(await db.syncWorkItemStage.count({ where: { syncRunId: run.id } })).toBe(10);
+    removedFirstIssue = true;
+    changedSecondIssue = true;
+    missingThirdTimestamp = true;
+    blocked = false;
+    requests.length = 0;
+    await db.jiraRateLimitState.update({ where: { connectionId }, data: { state: JiraRateStateSchema.parse({ fillRate: 120000, updatedAt: Date.now() }) } });
+    await runScopeSync(db, run.id);
+    expect(await db.syncRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({ status: 'succeeded' });
+    const published = await db.workItem.findMany({ where: { scopeId: item.id, lastSyncRunId: run.id } });
+    expect(published).toHaveLength(19);
+    expect(published.some((issue) => issue.jiraIssueId === '98-0')).toBe(false);
+    expect(published.find((issue) => issue.jiraIssueId === '98-1')).toMatchObject({
+      summary: 'Updated story', jiraUpdatedAt: new Date('2026-10-19T00:00:00Z'),
+    });
+    expect(published.find((issue) => issue.jiraIssueId === '98-2')).toMatchObject({ jiraUpdatedAt: null });
+    expect(requests).toContain('/rest/api/2/issue/98-1');
+    expect(requests).toContain('/rest/api/2/issue/98-2');
+    expect(requests).not.toContain('/rest/api/2/issue/98-3');
   });
 
   it('backs off permanent board failures and requires attention after the third failure', async () => {
