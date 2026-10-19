@@ -16,7 +16,7 @@ import { http, HttpResponse } from 'msw';
 import { NextRequest } from 'next/server';
 import { resetConfig, encryptSecret, JiraRateStateSchema } from '@agile-tools/shared';
 import { JiraClient } from '@agile-tools/jira-client';
-import { getPrismaClient, disconnectPrisma, createPostgresJiraRateLimiter, claimConnectionSync } from '@agile-tools/db';
+import { getPrismaClient, disconnectPrisma, createPostgresJiraRateLimiter, claimConnectionSync, upsertJiraCloudOAuthConnection, updateJiraConnectionValidation, JiraConnectionBusyError } from '@agile-tools/db';
 import {
   JiraConnectionSchema,
   JiraConnectionValidationSchema,
@@ -26,6 +26,7 @@ import {
 import { startPostgres, stopPostgres } from '../integration/support/postgres';
 import { jiraHandlers, jiraUnauthorisedHandlers } from '../msw/jira-handlers';
 import { serializeWorkspaceContext } from '../../apps/web/src/server/session-cookie';
+import { getCloudAccessTokenForConnection } from '../../apps/web/src/server/atlassian-oauth';
 
 // ─── Mock Next.js server-only modules ─────────────────────────────────────────
 
@@ -404,6 +405,95 @@ describe('PUT /v1/admin/jira-connections/:id', () => {
 });
 
 // ─── POST /v1/admin/jira-connections/:id/validate ────────────────────────────
+
+describe('Jira Cloud OAuth reconnection', () => {
+  const oauthInput = (): Parameters<typeof upsertJiraCloudOAuthConnection>[2] => ({
+    cloudId: crypto.randomUUID(), siteUrl: 'https://cloud.atlassian.net',
+    atlassianAccountId: 'account-a', oauthScopes: ['read:jira-work'],
+    accessTokenSecretRef: 'encrypted-access', refreshTokenSecretRef: 'encrypted-refresh',
+    accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
+  });
+
+  it.each([200, 400])('discards an in-flight HTTP %s token refresh after reconnection', async (status) => {
+    vi.stubEnv('ATLASSIAN_CLIENT_ID', 'test-client');
+    vi.stubEnv('ATLASSIAN_CLIENT_SECRET', 'test-secret');
+    resetConfig();
+    const db = getPrismaClient();
+    const input = { ...oauthInput(),
+      accessTokenExpiresAt: new Date(0),
+      refreshTokenSecretRef: encryptSecret('old-refresh', TEST_ENCRYPTION_KEY),
+    };
+    const original = await upsertJiraCloudOAuthConnection(db, workspaceId, input);
+    let reconnected = false;
+    mswServer.use(http.post('https://auth.atlassian.com/oauth/token', async () => {
+      await upsertJiraCloudOAuthConnection(db, workspaceId, {
+        ...input, atlassianAccountId: 'account-b', accessTokenSecretRef: 'new-access', refreshTokenSecretRef: 'new-refresh',
+      });
+      reconnected = true;
+      return HttpResponse.json({ access_token: 'stale-access', refresh_token: 'stale-refresh', expires_in: 3600 }, { status });
+    }));
+    try {
+      await expect(getCloudAccessTokenForConnection(original)).rejects.toThrow();
+      expect(reconnected).toBe(true);
+      expect(await db.jiraConnection.findUniqueOrThrow({ where: { id: original.id } })).toMatchObject({
+        authorizationGeneration: original.authorizationGeneration + 1,
+        atlassianAccountId: 'account-b', accessTokenSecretRef: 'new-access', refreshTokenSecretRef: 'new-refresh',
+        healthStatus: 'healthy', lastErrorCode: null,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      resetConfig();
+    }
+  });
+
+  it.each(['account', 'scopes', 'unknown-account'] as const)('invalidates old authorization on %s reconnection', async (kind) => {
+    const db = getPrismaClient();
+    const input = oauthInput();
+    if (kind === 'unknown-account') delete input.atlassianAccountId;
+    const original = await upsertJiraCloudOAuthConnection(db, workspaceId, input);
+    await db.jiraIssueCache.create({ data: {
+      connectionId: original.id, jiraIssueId: '1', jiraUpdatedAt: 'unchanged',
+      changelog: [], latestComment: { value: { body: 'Old principal comment' } }, fetchedAt: new Date(),
+    } });
+    const oldLimiter = createPostgresJiraRateLimiter(db, original.id, null, original);
+    await oldLimiter.observe(new Headers({ 'Retry-After': '600' }), 429, 0);
+    const reconnected = await upsertJiraCloudOAuthConnection(db, workspaceId, {
+      ...input,
+      ...(kind === 'account' ? { atlassianAccountId: 'account-b' } : {}),
+      ...(kind === 'scopes' ? { oauthScopes: ['read:issue:jira'] } : {}),
+      accessTokenSecretRef: 'replacement-access', refreshTokenSecretRef: 'replacement-refresh',
+    });
+    expect(reconnected.id).toBe(original.id);
+    expect(reconnected.authorizationGeneration).toBe(original.authorizationGeneration + 1);
+    expect(await db.jiraIssueCache.count({ where: { connectionId: original.id } })).toBe(0);
+    expect(await db.jiraRateLimitState.findUnique({ where: { connectionId: original.id } })).toBeNull();
+    await expect(oldLimiter.observe(new Headers(), 200, 0)).rejects.toThrow('Jira connection changed');
+    expect(await updateJiraConnectionValidation(db, original, { healthStatus: 'unhealthy' })).toBeNull();
+    expect(await claimConnectionSync(db, original.id, 'stale-run', 'stale-lease', original.updatedAt)).toBe(false);
+  });
+
+  it.each(['running', 'queued', 'lease'] as const)('rejects OAuth replacement while a %s sync owns the connection', async (status) => {
+    const db = getPrismaClient();
+    const input = oauthInput();
+    const original = await upsertJiraCloudOAuthConnection(db, workspaceId, input);
+    if (status === 'lease') {
+      expect(await claimConnectionSync(db, original.id, 'active-run')).toBe(true);
+    } else {
+      const scope = await db.flowScope.create({ data: {
+        workspaceId, connectionId: original.id, boardId: '1', boardName: 'Board', timezone: 'UTC',
+        includedIssueTypeIds: ['1'], startStatusIds: ['1'], doneStatusIds: ['2'], syncIntervalMinutes: 10,
+      } });
+      await db.syncRun.create({ data: { scopeId: scope.id, trigger: 'scheduled', status } });
+    }
+    await expect(upsertJiraCloudOAuthConnection(db, workspaceId, {
+      ...input, atlassianAccountId: 'account-b', accessTokenSecretRef: 'replacement-access',
+    })).rejects.toBeInstanceOf(JiraConnectionBusyError);
+    expect(await db.jiraConnection.findUniqueOrThrow({ where: { id: original.id } })).toMatchObject({
+      authorizationGeneration: original.authorizationGeneration, atlassianAccountId: 'account-a',
+      accessTokenSecretRef: input.accessTokenSecretRef,
+    });
+  });
+});
 
 describe('POST /v1/admin/jira-connections/:id/validate', () => {
   it.each([

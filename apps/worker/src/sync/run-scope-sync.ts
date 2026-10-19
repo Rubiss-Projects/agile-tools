@@ -711,6 +711,7 @@ async function resolveJiraAccessToken(
     id: string;
     workspaceId: string;
     authType: string;
+    authorizationGeneration: number;
     encryptedSecretRef: string | null;
     accessTokenSecretRef: string | null;
     refreshTokenSecretRef: string | null;
@@ -744,7 +745,7 @@ async function resolveJiraAccessToken(
     });
 
     await db.jiraConnection.update({
-      where: { workspaceId_id: { workspaceId: connection.workspaceId, id: connection.id } },
+      where: { id: connection.id, workspaceId: connection.workspaceId, authorizationGeneration: connection.authorizationGeneration },
       data: {
         accessTokenSecretRef: encryptSecret(refreshed.accessToken, config.ENCRYPTION_KEY),
         refreshTokenSecretRef: encryptSecret(refreshed.refreshToken, config.ENCRYPTION_KEY),
@@ -758,8 +759,8 @@ async function resolveJiraAccessToken(
 
     return refreshed.accessToken;
   } catch (err) {
-    await db.jiraConnection.update({
-      where: { workspaceId_id: { workspaceId: connection.workspaceId, id: connection.id } },
+    await db.jiraConnection.updateMany({
+      where: { id: connection.id, workspaceId: connection.workspaceId, authorizationGeneration: connection.authorizationGeneration },
       data: {
         healthStatus: 'unhealthy',
         lastErrorCode: 'ATLASSIAN_TOKEN_REFRESH_FAILED',

@@ -149,6 +149,7 @@ model JiraConnection {
   displayName            String?
   authType               JiraAuthType           @default(data_center_pat)
   encryptedSecretRef     String?
+  authorizationGeneration Int                   @default(0)
   cloudId                String?
   siteUrl                String?
   atlassianAccountId     String?
