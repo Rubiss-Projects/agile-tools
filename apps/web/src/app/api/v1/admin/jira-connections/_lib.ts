@@ -79,7 +79,7 @@ export async function createClientForConnection(conn: {
     return createJiraClient(conn.baseUrl, accessToken, {
       changelogFetchStrategy: 'subresource',
       connectionId: conn.id,
-      rateLimiter: createPostgresJiraRateLimiter(getPrismaClient(), conn.id, conn.requestBudgetPerMinute),
+      rateLimiter: createPostgresJiraRateLimiter(getPrismaClient(), conn.id, conn.requestBudgetPerMinute, { baseUrl: conn.baseUrl, encryptedSecretRef: conn.encryptedSecretRef ?? null }),
     });
   }
 
@@ -99,7 +99,7 @@ export async function createClientForConnection(conn: {
 
   return createJiraClient(conn.baseUrl, pat, {
     connectionId: conn.id,
-    rateLimiter: createPostgresJiraRateLimiter(getPrismaClient(), conn.id, conn.requestBudgetPerMinute),
+    rateLimiter: createPostgresJiraRateLimiter(getPrismaClient(), conn.id, conn.requestBudgetPerMinute, { baseUrl: conn.baseUrl, encryptedSecretRef: conn.encryptedSecretRef ?? null }),
     ...(changelogFetchStrategy !== undefined ? { changelogFetchStrategy } : {}),
   });
 }

@@ -14,8 +14,8 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vites
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { NextRequest } from 'next/server';
-import { resetConfig, encryptSecret } from '@agile-tools/shared';
-import { getPrismaClient, disconnectPrisma } from '@agile-tools/db';
+import { resetConfig, encryptSecret, JiraRateStateSchema } from '@agile-tools/shared';
+import { getPrismaClient, disconnectPrisma, createPostgresJiraRateLimiter, claimConnectionSync } from '@agile-tools/db';
 import {
   JiraConnectionSchema,
   JiraConnectionValidationSchema,
@@ -213,6 +213,60 @@ describe('POST /v1/admin/jira-connections', () => {
 // ─── PUT /v1/admin/jira-connections/:id ────────────────────────────────────────
 
 describe('PUT /v1/admin/jira-connections/:id', () => {
+  it.each(['running', 'queued'] as const)('rejects identity replacement while a sync is %s', async (status) => {
+    const db = getPrismaClient();
+    const connection = await db.jiraConnection.create({ data: {
+      workspaceId, baseUrl: JIRA_BASE, encryptedSecretRef: encryptSecret(TEST_PAT, TEST_ENCRYPTION_KEY),
+    } });
+    const scope = await db.flowScope.create({ data: {
+      workspaceId, connectionId: connection.id, boardId: '1', boardName: 'Board', timezone: 'UTC',
+      includedIssueTypeIds: ['story'], startStatusIds: ['10'], doneStatusIds: [], syncIntervalMinutes: 10,
+    } });
+    await db.syncRun.create({ data: { scopeId: scope.id, trigger: 'scheduled', status } });
+    const res = await updateConnection(makeRequest(`http://localhost/api/v1/admin/jira-connections/${connection.id}`, 'PUT', {
+      baseUrl: status === 'running' ? 'https://replacement.test' : JIRA_BASE,
+      ...(status === 'queued' ? { pat: 'replacement-pat' } : {}),
+    }), { params: Promise.resolve({ connectionId: connection.id }) });
+    expect(res.status).toBe(409);
+    expect(ProblemSchema.parse(await res.json()).code).toBe('CONNECTION_SYNC_ACTIVE');
+    expect(await db.jiraConnection.findUniqueOrThrow({ where: { id: connection.id } })).toMatchObject({
+      baseUrl: connection.baseUrl, encryptedSecretRef: connection.encryptedSecretRef,
+    });
+    const budgetResponse = await updateConnection(makeRequest(`http://localhost/api/v1/admin/jira-connections/${connection.id}`, 'PUT', {
+      baseUrl: JIRA_BASE, requestBudgetPerMinute: 30,
+    }), { params: Promise.resolve({ connectionId: connection.id }) });
+    expect(budgetResponse.status).toBe(200);
+  });
+
+  it.each(['url', 'pat'] as const)('resets cached details and limiter state on %s replacement and rejects old clients', async (kind) => {
+    const db = getPrismaClient();
+    const connection = await db.jiraConnection.create({ data: {
+      workspaceId, baseUrl: JIRA_BASE, encryptedSecretRef: encryptSecret(TEST_PAT, TEST_ENCRYPTION_KEY),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      activeSyncRunId: 'expired-run', activeSyncLeaseToken: 'expired-lease', syncLeaseUntil: new Date('2026-01-01T00:00:00Z'),
+    } });
+    const oldLimiter = createPostgresJiraRateLimiter(db, connection.id, null, connection);
+    await db.jiraIssueCache.create({ data: {
+      connectionId: connection.id, jiraIssueId: '1', jiraUpdatedAt: '2026-01-01T00:00:00Z',
+      changelog: [], latestComment: { value: null }, fetchedAt: new Date(),
+    } });
+    await oldLimiter.observe(new Headers({ 'Retry-After': '7200' }), 429, 0);
+    const res = await updateConnection(makeRequest(`http://localhost/api/v1/admin/jira-connections/${connection.id}`, 'PUT', {
+      baseUrl: kind === 'url' ? 'https://replacement.test' : JIRA_BASE,
+      ...(kind === 'pat' ? { pat: 'replacement-pat' } : {}),
+    }), { params: Promise.resolve({ connectionId: connection.id }) });
+    expect(res.status).toBe(200);
+    expect(await db.jiraIssueCache.count({ where: { connectionId: connection.id } })).toBe(0);
+    expect(await db.jiraRateLimitState.findUnique({ where: { connectionId: connection.id } })).toBeNull();
+    await expect(oldLimiter.observe(new Headers(), 200, 0)).rejects.toThrow('Jira connection changed');
+    expect(await claimConnectionSync(db, connection.id, 'old-run', 'old-lease', connection.updatedAt)).toBe(false);
+    const updated = await db.jiraConnection.findUniqueOrThrow({ where: { id: connection.id } });
+    const release = await createPostgresJiraRateLimiter(db, updated.id, null, updated).acquire();
+    await release();
+    const row = await db.jiraRateLimitState.findUniqueOrThrow({ where: { connectionId: updated.id } });
+    expect(JiraRateStateSchema.parse(row.state).blockedUntil).toBe(0);
+  });
+
   it('persists and clears a per-connection request budget without rotating the PAT', async () => {
     for (const requestBudgetPerMinute of [30, null]) {
       const response = await updateConnection(makeRequest(`http://localhost/api/v1/admin/jira-connections/${connectionId}`, 'PUT', {

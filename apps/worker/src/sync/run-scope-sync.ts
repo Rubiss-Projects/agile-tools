@@ -255,6 +255,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       if (!canceled) {
         return;
       }
+      await cleanupStagedWorkItems(db, syncRunId);
       logger.info('Scope sync canceled: scope is not active', {
         syncRunId,
         scopeId: scope.id,
@@ -274,7 +275,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       );
     }
 
-    leaseClaimed = await claimConnectionSync(db, connection.id, syncRunId, leaseToken);
+    leaseClaimed = await claimConnectionSync(db, connection.id, syncRunId, leaseToken, connection.updatedAt);
     if (!leaseClaimed) {
       await db.syncRun.updateMany({ where: { id: syncRunId, status: 'running' }, data: {
         status: 'queued', errorCode: 'CONNECTION_BUSY', resumeAfter: new Date(Date.now() + 60_000),
@@ -295,7 +296,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     const initialChangelogStrategy = getInitialChangelogFetchStrategy(connection);
     const jiraClient = createJiraClient(connection.baseUrl, token, {
       connectionId: connection.id, scopeId: scope.id, syncRunId,
-      rateLimiter: createPostgresJiraRateLimiter(db, connection.id, connection.requestBudgetPerMinute),
+      rateLimiter: createPostgresJiraRateLimiter(db, connection.id, connection.requestBudgetPerMinute, connection),
       retryBudgetMs: getConfig().JIRA_RATE_RETRY_BUDGET_MS,
       onProgress: heartbeat,
       ...(initialChangelogStrategy !== undefined
@@ -331,6 +332,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       if (!canceled) {
         return;
       }
+      await cleanupStagedWorkItems(db, syncRunId);
       logger.info('Scope sync canceled due to board drift', { syncRunId, scopeId: scope.id });
       recordSyncMetric('canceled', 'BOARD_DRIFT_DETECTED');
       return;
@@ -906,7 +908,7 @@ async function processBatch(
 ): Promise<void> {
   // Finish all in-flight work before releasing a connection lease on failure.
   const results = await Promise.allSettled(issues.map(async (issue) => {
-    const { changelog, latestComment } = await loadIssueDetails(db, jiraClient, ctx.connectionId, issue, ctx.cacheMaxAgeMs);
+    const { changelog, latestComment } = await loadIssueDetails(db, jiraClient, ctx.connectionId, issue, ctx.cacheMaxAgeMs, ctx.leaseToken);
     const normalized = normalizeJiraIssue(issue, changelog, ctx, latestComment);
     projectIdsSet.add(normalized.projectId);
     return normalized;

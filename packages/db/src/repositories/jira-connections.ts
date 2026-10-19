@@ -178,49 +178,51 @@ export async function updateConnectionHealth(
   }
 }
 
+export class JiraConnectionBusyError extends Error {
+  constructor() {
+    super('Wait for active or queued syncs to finish before changing the Jira URL or PAT.');
+    this.name = 'JiraConnectionBusyError';
+  }
+}
+
 export async function updateJiraConnection(
-  client: JiraConnectionClient,
+  client: PrismaClient,
   workspaceId: string,
   connectionId: string,
   input: UpdateJiraConnectionInput,
 ): Promise<JiraConnection | null> {
-  const data: Prisma.JiraConnectionUpdateInput = {
-    baseUrl: input.baseUrl,
-  };
+  return client.$transaction(async (tx) => {
+    // Serialize identity replacement with worker claims and limiter observations.
+    await tx.$queryRaw`SELECT id FROM "JiraConnection" WHERE id = ${connectionId} AND "workspaceId" = ${workspaceId} FOR UPDATE`;
+    const existing = await getJiraConnection(tx, workspaceId, connectionId);
+    if (!existing) return null;
+    const resetValidation = input.resetValidationState || input.baseUrl !== existing.baseUrl || input.encryptedSecretRef !== undefined;
+    const data: Prisma.JiraConnectionUpdateInput = { baseUrl: input.baseUrl };
+    if (input.requestBudgetPerMinute !== undefined) data.requestBudgetPerMinute = input.requestBudgetPerMinute;
+    if (input.displayName !== undefined) data.displayName = input.displayName;
+    if (input.encryptedSecretRef !== undefined) data.encryptedSecretRef = input.encryptedSecretRef;
 
-  if (input.requestBudgetPerMinute !== undefined) data.requestBudgetPerMinute = input.requestBudgetPerMinute;
-
-  if (input.displayName !== undefined) {
-    data.displayName = input.displayName;
-  }
-
-  if (input.encryptedSecretRef !== undefined) {
-    data.encryptedSecretRef = input.encryptedSecretRef;
-  }
-
-  if (input.resetValidationState) {
-    data.healthStatus = 'draft';
-    data.lastValidatedAt = null;
-    data.lastHealthyAt = null;
-    data.lastErrorCode = null;
-    data.jiraVersion = null;
-    data.jiraDeploymentType = null;
-    data.changelogStrategy = null;
-    data.capabilitiesDetectedAt = null;
-    data.issueCache = { deleteMany: {} };
-  }
-
-  try {
-    return await client.jiraConnection.update({
-      where: { workspaceId_id: { workspaceId, id: connectionId } },
-      data,
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-      return null;
+    if (resetValidation) {
+      const activeRun = await tx.syncRun.findFirst({ where: {
+        scope: { connectionId }, status: { in: ['queued', 'running'] },
+      }, select: { id: true } });
+      const leaseActive = existing.syncLeaseUntil && existing.syncLeaseUntil > new Date();
+      if (leaseActive || activeRun) throw new JiraConnectionBusyError();
+      data.healthStatus = 'draft';
+      data.lastValidatedAt = null;
+      data.lastHealthyAt = null;
+      data.lastErrorCode = null;
+      data.jiraVersion = null;
+      data.jiraDeploymentType = null;
+      data.changelogStrategy = null;
+      data.capabilitiesDetectedAt = null;
+      data.issueCache = { deleteMany: {} };
+      await tx.jiraRateLimitState.deleteMany({ where: { connectionId } });
     }
-    throw err;
-  }
+    return tx.jiraConnection.update({
+      where: { workspaceId_id: { workspaceId, id: connectionId } }, data,
+    });
+  });
 }
 
 /**

@@ -153,6 +153,24 @@ describe('shared Jira sync persistence', () => {
     expect(requests).not.toContain('/rest/api/2/issue/98-3');
   });
 
+  it.each(['paused', 'drift'] as const)('cleans retained stages when resumption is canceled by %s', async (reason) => {
+    issueCount = 20; blocked = true;
+    const db = getPrismaClient();
+    const item = await scope(97);
+    const run = await sync(item.id);
+    expect(run.status).toBe('queued');
+    expect(await db.syncWorkItemStage.count({ where: { syncRunId: run.id } })).toBe(10);
+    await db.flowScope.update({ where: { id: item.id }, data: reason === 'paused'
+      ? { status: 'paused' } : { startStatusIds: ['20'] } });
+    await db.jiraRateLimitState.update({ where: { connectionId }, data: { state: JiraRateStateSchema.parse({ fillRate: 120000, updatedAt: Date.now() }) } });
+    await runScopeSync(db, run.id);
+    expect(await db.syncRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+      status: 'canceled', errorCode: reason === 'paused' ? 'SCOPE_NOT_ACTIVE' : 'BOARD_DRIFT_DETECTED',
+    });
+    expect(await db.syncWorkItemStage.count({ where: { syncRunId: run.id } })).toBe(0);
+    expect(await db.workItem.count({ where: { scopeId: item.id } })).toBe(0);
+  });
+
   it('backs off permanent board failures and requires attention after the third failure', async () => {
     missingBoard = true;
     const item = await scope(404);
