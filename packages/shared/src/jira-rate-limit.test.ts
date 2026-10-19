@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMemoryJiraRateStore, JiraRateLimiter, parseJiraRateHeaders } from './jira-rate-limit.js';
+import { createMemoryJiraRateStore, DEFAULT_JIRA_RATE_SETTINGS, JiraRateLimiter, parseJiraRateHeaders } from './jira-rate-limit.js';
 
 const headers = (remaining = 240) => new Headers({
   'X-RateLimit-Limit': '240', 'X-RateLimit-FillRate': '120',
@@ -8,6 +8,29 @@ const headers = (remaining = 240) => new Headers({
 afterEach(() => vi.useRealTimers());
 
 describe('Jira rate limiting', () => {
+  it.each([200, 429])('refills quota independently of a one-request-per-minute budget after HTTP %s', async (status) => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    const limiter = new JiraRateLimiter(createMemoryJiraRateStore(), {
+      ...DEFAULT_JIRA_RATE_SETTINGS, requestBudgetPerMinute: 1,
+    });
+    const state = await limiter.observe(headers(0), status, 0);
+    if (status === 429) expect(state.blockedUntil - startedAt).toBe(49_000);
+    const starts: number[] = [];
+    const requests = (async () => {
+      for (let i = 0; i < 2; i++) {
+        const release = await limiter.acquire();
+        starts.push(Date.now() - startedAt);
+        await release();
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(starts).toEqual([60_000]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await requests;
+    expect(starts).toEqual([60_000, 120_000]);
+  });
+
   it('parses zero remaining, ignores invalid values and treats Retry-After: 0 as unknown', () => {
     expect(parseJiraRateHeaders(headers(0))).toMatchObject({ limit: 240, remaining: 0, fillRate: 120, intervalSeconds: 60, retryAfterMs: 0 });
     expect(parseJiraRateHeaders(new Headers({ 'X-RateLimit-Limit': '-1', 'X-RateLimit-FillRate': 'NaN', 'X-RateLimit-Remaining': '' })))

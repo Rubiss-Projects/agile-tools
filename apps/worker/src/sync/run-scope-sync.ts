@@ -647,7 +647,12 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
         errorSummary,
       });
       if (!finalized) {
-        await cleanupStagedWorkItems(db, syncRunId);
+        // Shutdown or recovery may already have queued this run for resumption.
+        // Keep checkpoints unless another operation made the run terminal.
+        const current = await db.syncRun.findUnique({ where: { id: syncRunId }, select: { status: true } });
+        if (current && ['succeeded', 'failed', 'canceled'].includes(current.status)) {
+          await cleanupStagedWorkItems(db, syncRunId);
+        }
         return;
       }
       await cleanupStagedWorkItems(db, syncRunId);
