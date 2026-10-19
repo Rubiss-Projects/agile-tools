@@ -4,13 +4,13 @@ import { JiraClientError, type JiraChangelogFetchStrategy, type JiraClient } fro
 
 export interface ChangelogItem {
   field: string;
-  fieldId?: string;
-  fromString?: string | null;
-  toString?: string | null;
+  fieldId?: string | undefined;
+  fromString?: string | null | undefined;
+  toString?: string | null | undefined;
   /** Status/user ID of the "from" value */
-  from?: string | null;
+  from?: string | null | undefined;
   /** Status/user ID of the "to" value */
-  to?: string | null;
+  to?: string | null | undefined;
 }
 
 export interface ChangelogHistory {
@@ -27,10 +27,10 @@ export interface RawJiraIssueFields {
   /** ISO 8601 Jira creation timestamp */
   created: string;
   /** ISO 8601 Jira last-updated timestamp */
-  updated?: string;
+  updated?: string | undefined;
   /** ISO 8601 Jira resolution timestamp. Present for resolved/done issues. */
-  resolutiondate?: string | null;
-  assignee?: { accountId?: string; name?: string } | null;
+  resolutiondate?: string | null | undefined;
+  assignee?: { accountId?: string | undefined; name?: string } | null;
   comment?: {
     startAt?: number;
     maxResults?: number;
@@ -41,15 +41,15 @@ export interface RawJiraIssueFields {
 }
 
 export interface JiraComment {
-  id?: string;
-  body?: string;
-  created?: string;
-  updated?: string;
+  id?: string | undefined;
+  body?: string | undefined;
+  created?: string | undefined;
+  updated?: string | undefined;
   author?: {
-    displayName?: string;
-    name?: string;
-    accountId?: string;
-  };
+    displayName?: string | undefined;
+    name?: string | undefined;
+    accountId?: string | undefined;
+  } | undefined;
 }
 
 export interface RawJiraIssue {
@@ -58,7 +58,7 @@ export interface RawJiraIssue {
   fields: RawJiraIssueFields;
   /**
    * Inline changelog when fetched with `expand=changelog`.
-   * Treat as opportunistic/partial — use fetchIssueChangelog for the full history.
+   * Use directly only when startAt is zero and histories.length equals total.
    */
   changelog?: {
     startAt: number;
@@ -109,14 +109,14 @@ export interface FetchBoardIssuesOptions {
   /**
    * Expand inline changelog with the issues response.
    * **Opportunistic only**: the inline changelog may be truncated by Jira.
-   * Always use `fetchIssueChangelog()` for complete lifecycle history.
+   * Use `fetchIssueChangelog()` when startAt is nonzero or histories.length differs from total.
    */
   expandChangelog?: boolean;
   /**
    * Comma-separated list of fields to include in the response.
    * Omit to use Jira's board endpoint defaults.
    */
-  fields?: string;
+  fields?: string | undefined;
 }
 
 export interface FetchBoardIssuesResult {
@@ -176,8 +176,8 @@ export async function* streamBoardIssues(
       }
     }
 
-    // Stop if the page was empty or shorter than requested (last page)
-    if (page.issues.length === 0 || page.issues.length < pageSize) break;
+    // Jira may cap page sizes below our request; total determines the last page.
+    if (page.issues.length === 0) break;
     startAt += page.issues.length;
   }
 }
@@ -332,7 +332,7 @@ async function fetchIssueChangelogSubresource(
     histories.push(...page.values);
 
     // Stop when Jira signals last page, or on a short/empty page
-    if (page.isLast || page.values.length === 0 || page.values.length < maxResults) break;
+    if (page.isLast || page.values.length === 0 || startAt + page.values.length >= page.total) break;
     startAt += page.values.length;
   }
 
@@ -360,7 +360,11 @@ async function fetchIssueChangelogExpansion(
     { params: { expand: 'changelog', fields: 'summary' } },
   );
 
-  return issue.changelog?.histories ?? [];
+  const changelog = issue.changelog;
+  if (!changelog || changelog.startAt !== 0 || changelog.histories.length !== changelog.total) {
+    throw new JiraClientError('Jira returned an incomplete expanded changelog', 502, 'INCOMPLETE_CHANGELOG');
+  }
+  return changelog.histories;
 }
 
 // ─── JQL issue search ─────────────────────────────────────────────────────────
@@ -379,7 +383,7 @@ interface JiraSearchCountResponse {
 interface JiraCloudSearchResponse {
   issues: RawJiraIssue[];
   isLast?: boolean;
-  nextPageToken?: string;
+  nextPageToken?: string | undefined;
 }
 
 interface JiraCloudSearchCountResponse {
@@ -387,13 +391,14 @@ interface JiraCloudSearchCountResponse {
 }
 
 export interface StreamJqlIssuesOptions {
+  expandChangelog?: boolean;
   /** Page size — Jira default is 50, max 100. */
   maxResults?: number;
   /**
    * Comma-separated list of fields to include in the response.
    * Omit to receive all fields.
    */
-  fields?: string;
+  fields?: string | undefined;
 }
 
 /**
@@ -423,6 +428,7 @@ export async function* streamJqlIssues(
 
   while (startAt < total) {
     const params: Record<string, string | number> = { jql, startAt, maxResults: pageSize };
+    if (options.expandChangelog) params['expand'] = 'changelog';
     if (options.fields) {
       params['fields'] = options.fields;
     }
@@ -437,7 +443,7 @@ export async function* streamJqlIssues(
       }
     }
 
-    if (page.issues.length === 0 || page.issues.length < pageSize) break;
+    if (page.issues.length === 0) break;
     startAt += page.issues.length;
   }
 }
@@ -470,6 +476,7 @@ async function* streamJiraCloudJqlIssues(
     if (nextPageToken) {
       params['nextPageToken'] = nextPageToken;
     }
+    if (options.expandChangelog) params['expand'] = 'changelog';
     if (options.fields) {
       params['fields'] = options.fields;
     }

@@ -15,3 +15,4 @@ export * from './repositories/work-items.js';
 export * from './repositories/forecast-result-cache.js';
 export * from './repositories/epic-forecast-targets.js';
 export * from './projections/throughput-projection.js';
+export * from './jira-rate-limit.js';

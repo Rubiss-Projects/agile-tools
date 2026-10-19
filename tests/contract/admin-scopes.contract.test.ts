@@ -384,7 +384,7 @@ describe('PUT /v1/admin/scopes/:id', () => {
     expect(res.status).toBe(409);
   });
 
-  it('fails a stale active sync before queueing a boundary-changing update', async () => {
+  it('preserves a stale run for resumption and rejects boundary changes', async () => {
     const db = getPrismaClient();
     const staleRun = await db.syncRun.create({
       data: {
@@ -401,16 +401,16 @@ describe('PUT /v1/admin/scopes/:id', () => {
       doneStatusIds: ['4'],
     });
     const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
 
     const syncRuns = await db.syncRun.findMany({
       where: { scopeId },
       orderBy: { createdAt: 'asc' },
     });
-    expect(syncRuns).toHaveLength(2);
-    expect(syncRuns[0]?.status).toBe('failed');
-    expect(syncRuns[0]?.errorCode).toBe('SYNC_STALE_TIMEOUT');
-    expect(syncRuns[1]?.status).toBe('queued');
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('queued');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_RESUMING');
+    expect(syncRuns[0]?.id).toBe(staleRun.id);
   });
 
   it('updates flow boundaries without Jira availability when the board stays the same', async () => {
@@ -543,7 +543,7 @@ describe('POST /v1/admin/scopes/:id/syncs', () => {
     expect(res.status).toBe(409);
   });
 
-  it('fails a stale running sync before queueing a fresh manual sync', async () => {
+  it('resumes a stale run instead of creating a new manual sync', async () => {
     const db = getPrismaClient();
     const staleRun = await db.syncRun.create({
       data: {
@@ -558,16 +558,16 @@ describe('POST /v1/admin/scopes/:id/syncs', () => {
       makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}/syncs`, 'POST'),
       { params: Promise.resolve({ scopeId }) },
     );
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(409);
 
     const syncRuns = await db.syncRun.findMany({
       where: { scopeId },
       orderBy: { createdAt: 'asc' },
     });
-    expect(syncRuns).toHaveLength(2);
-    expect(syncRuns[0]?.status).toBe('failed');
-    expect(syncRuns[0]?.errorCode).toBe('SYNC_STALE_TIMEOUT');
-    expect(syncRuns[1]?.status).toBe('queued');
+    expect(syncRuns).toHaveLength(1);
+    expect(syncRuns[0]?.status).toBe('queued');
+    expect(syncRuns[0]?.errorCode).toBe('SYNC_RESUMING');
+    expect(syncRuns[0]?.id).toBe(staleRun.id);
   });
 
   it('returns 503 and cancels the sync run when queue insertion fails', async () => {
@@ -626,7 +626,7 @@ describe('GET /v1/admin/scopes/:id/syncs', () => {
 });
 
 describe('DELETE /v1/admin/scopes/:id', () => {
-  it('deletes the scope when the only active sync is stale', async () => {
+  it('rejects deletion while a stale sync awaits resumption', async () => {
     const db = getPrismaClient();
     const scopeToDelete = await db.flowScope.create({
       data: {
@@ -654,7 +654,7 @@ describe('DELETE /v1/admin/scopes/:id', () => {
 
     const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeToDelete.id}`, 'DELETE');
     const res = await deleteScope(req, { params: Promise.resolve({ scopeId: scopeToDelete.id }) });
-    expect(res.status).toBe(204);
-    expect(await db.flowScope.findUnique({ where: { id: scopeToDelete.id } })).toBeNull();
+    expect(res.status).toBe(409);
+    expect(await db.flowScope.findUnique({ where: { id: scopeToDelete.id } })).not.toBeNull();
   });
 });

@@ -90,6 +90,14 @@ export async function processHostedScopeSyncMessage(message: unknown): Promise<v
 
   try {
     await runScopeSync(db, parsed.syncRunId);
+    const run = await db.syncRun.findUniqueOrThrow({ where: { id: parsed.syncRunId } });
+    if (run.status !== 'succeeded') {
+      // A paused run is dispatched again by the tick with a fresh message identity.
+      await db.hostedSyncTask.update({ where: { dedupeKey: parsed.dedupeKey }, data: {
+        status: 'completed', completedAt: new Date(), error: run.errorCode,
+      } });
+      return;
+    }
     await db.syncRunCheckpoint.upsert({
       where: { syncRunId: parsed.syncRunId },
       create: {
@@ -198,7 +206,15 @@ async function maybeEnqueueHostedScheduledSync(
   const syncRun = await db.$transaction(async (tx) => {
     await acquireScopeSyncLock(tx, scopeId);
     const activeRun = await resolveActiveSyncRun(tx, workspaceId, scopeId);
-    if (activeRun) return null;
+    if (activeRun) {
+      if (activeRun.status === 'queued' && activeRun.resumeAfter && activeRun.resumeAfter.getTime() <= now) {
+        await tx.syncRun.update({ where: { id: activeRun.id }, data: { resumeAfter: new Date(now + 120_000) } });
+        return activeRun;
+      }
+      return null;
+    }
+    const scope = await tx.flowScope.findUniqueOrThrow({ where: { id: scopeId } });
+    if (scope.nextSyncAt && scope.nextSyncAt.getTime() > now) return null;
 
     const lastStartedRun = await tx.syncRun.findFirst({
       where: {
@@ -220,11 +236,12 @@ async function maybeEnqueueHostedScheduledSync(
       scopeId,
       syncRunId: syncRun.id,
       trigger: 'scheduled',
+      ...(syncRun.resumeAfter ? { resumeKey: syncRun.updatedAt.toISOString() } : {}),
     });
   } catch (err) {
     await updateSyncRun(db, syncRun.id, {
-      status: 'canceled',
-      finishedAt: new Date(),
+      status: 'queued',
+      resumeAfter: new Date(Date.now() + 60_000),
       errorCode: 'SYNC_ENQUEUE_FAILED',
       errorSummary: err instanceof Error ? err.message.slice(0, 500) : String(err),
     });

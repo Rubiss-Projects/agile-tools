@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { metrics, type Counter, type Histogram, type MetricAttributes } from '@opentelemetry/api';
+import { metrics, type Counter, type Gauge, type Histogram, type MetricAttributes } from '@opentelemetry/api';
 import { PrometheusExporter, PrometheusSerializer } from '@opentelemetry/exporter-prometheus';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { AggregationType, MeterProvider } from '@opentelemetry/sdk-metrics';
@@ -64,6 +64,9 @@ interface MetricsState {
   syncItemsProcessed: Histogram;
   oidcAuthEventsCounter: Counter;
   httpClientRequestDuration: Histogram;
+  jiraThrottleWait: Histogram;
+  jiraRateLimit: Gauge;
+  jiraRateRemaining: Gauge;
   databaseQueryDuration: Histogram;
   queueStatsProvider?: () => Promise<QueueStatsSnapshot[]>;
   queueStatsRegistered: boolean;
@@ -304,6 +307,9 @@ function createMetricsState(options: InitializeMetricsOptions): MetricsState {
       description: 'Duration of HTTP client requests.',
       unit: 's',
     }),
+    jiraThrottleWait: meter.createHistogram('agile_tools_jira_throttle_wait_seconds', { unit: 's' }),
+    jiraRateLimit: meter.createGauge('agile_tools_jira_rate_limit'),
+    jiraRateRemaining: meter.createGauge('agile_tools_jira_rate_remaining'),
     databaseQueryDuration: meter.createHistogram(METRIC_DATABASE_QUERY_DURATION, {
       description: 'Prisma database query duration in seconds by SQL operation.',
       unit: 's',
@@ -580,6 +586,8 @@ export function recordOidcAuthEvent(input: {
 }
 
 export function recordJiraRequest(input: {
+  connectionId?: string;
+  scopeId?: string;
   method: string;
   url: URL;
   operation: string;
@@ -596,6 +604,8 @@ export function recordJiraRequest(input: {
     [ATTR_URL_SCHEME]: input.url.protocol.replace(/:$/, ''),
     'agile_tools.jira.operation': input.operation,
     'agile_tools.jira.result': input.result,
+    ...(input.connectionId ? { connection_id: input.connectionId } : {}),
+    ...(input.scopeId ? { scope_id: input.scopeId } : {}),
     ...(port !== undefined ? { [ATTR_SERVER_PORT]: port } : {}),
     ...(input.statusCode !== undefined ? { [ATTR_HTTP_RESPONSE_STATUS_CODE]: input.statusCode } : {}),
     ...(input.errorType !== undefined
@@ -607,6 +617,16 @@ export function recordJiraRequest(input: {
           : {}),
   };
   state.httpClientRequestDuration.record(input.durationSeconds, attributes);
+}
+
+export function recordJiraThrottle(connectionId: string, seconds: number): void {
+  getMetricsState().jiraThrottleWait.record(seconds, { connection_id: connectionId });
+}
+
+export function recordJiraRateState(connectionId: string, limit: number, remaining: number): void {
+  const state = getMetricsState();
+  state.jiraRateLimit.record(limit, { connection_id: connectionId });
+  state.jiraRateRemaining.record(remaining, { connection_id: connectionId });
 }
 
 export function recordDatabaseQuery(input: { operation: string; durationSeconds: number }): void {

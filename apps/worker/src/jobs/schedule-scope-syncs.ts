@@ -35,7 +35,7 @@ export async function registerScopeSyncDispatch(db: PrismaClient): Promise<void>
 }
 
 async function dispatchDueScopes(boss: PgBoss, db: PrismaClient): Promise<void> {
-  const activeScopes = await db.flowScope.findMany({ where: { status: 'active' } });
+  const activeScopes = await db.flowScope.findMany({ where: { status: 'active' }, orderBy: { nextSyncAt: { sort: 'asc', nulls: 'first' } } });
   const now = Date.now();
 
   for (const scope of activeScopes) {
@@ -63,7 +63,17 @@ async function maybeDispatchScopeSync(
     await acquireScopeSyncLock(tx, scopeId);
 
     const activeSyncRun = await resolveActiveSyncRun(tx, workspaceId, scopeId);
-    if (activeSyncRun) return null;
+    if (activeSyncRun) {
+      if (activeSyncRun.status === 'queued' && activeSyncRun.resumeAfter && activeSyncRun.resumeAfter.getTime() <= now) {
+        await tx.syncRun.update({ where: { id: activeSyncRun.id }, data: { resumeAfter: new Date(now + 120_000) } });
+        return activeSyncRun;
+      }
+      return null;
+    }
+    const scope = await tx.flowScope.findUniqueOrThrow({ where: { id: scopeId } });
+    if (scope.nextSyncAt && scope.nextSyncAt.getTime() > now) return null;
+    const connection = await tx.jiraConnection.findUniqueOrThrow({ where: { id: scope.connectionId } });
+    if (connection.syncLeaseUntil && connection.syncLeaseUntil.getTime() > now) return null;
 
     const lastStartedRun = await tx.syncRun.findFirst({
       where: {
@@ -88,14 +98,15 @@ async function maybeDispatchScopeSync(
       { scopeId, syncRunId: syncRun.id, trigger: 'scheduled' },
       {
         singletonKey: scopeId, // extra guard: only one pending job per scope in the queue
+        startAfter: new Date(Date.now() + Math.random() * 60_000),
         retryLimit: 1,
         expireInSeconds: 60 * 60,
       },
     );
   } catch (err) {
     await updateSyncRun(db, syncRun.id, {
-      status: 'canceled',
-      finishedAt: new Date(),
+      status: 'queued',
+      resumeAfter: new Date(Date.now() + 60_000),
       errorCode: 'SYNC_ENQUEUE_FAILED',
       errorSummary: err instanceof Error ? err.message.slice(0, 500) : String(err),
     });
@@ -104,10 +115,10 @@ async function maybeDispatchScopeSync(
 
   if (jobId) {
     logger.info('Dispatched scheduled scope sync', { scopeId, syncRunId: syncRun.id });
-  } else {
+  } else if (!syncRun.resumeAfter) {
     await updateSyncRun(db, syncRun.id, {
-      status: 'canceled',
-      finishedAt: new Date(),
+      status: 'queued',
+      resumeAfter: new Date(Date.now() + 60_000),
       errorCode: 'SYNC_ENQUEUE_DEDUPED',
       errorSummary: 'pg-boss did not enqueue the scheduled scope sync job.',
     });

@@ -7,9 +7,9 @@ type SyncRunFindFirstClient = {
 
 export const STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS = 60 * 60 * 1000;
 const ACTIVE_SYNC_RUN_STATUSES: SyncRunStatus[] = ['queued', 'running'];
-const STALE_ACTIVE_SYNC_ERROR_CODE = 'SYNC_STALE_TIMEOUT';
+const STALE_ACTIVE_SYNC_ERROR_CODE = 'SYNC_RESUMING';
 const STALE_ACTIVE_SYNC_ERROR_SUMMARY =
-  'Auto-failed a stale queued or running sync after it exceeded the 60-minute timeout.';
+  'Resuming a stale sync from its staged batches after the 60-minute heartbeat timeout.';
 
 export interface CreateSyncRunInput {
   scopeId: string;
@@ -64,6 +64,7 @@ export async function listSyncRuns(
 }
 
 export interface UpdateSyncRunInput {
+  resumeAfter?: Date;
   status?: SyncRunStatus;
   startedAt?: Date;
   finishedAt?: Date;
@@ -82,6 +83,7 @@ export async function updateSyncRun(
   input: UpdateSyncRunInput,
 ): Promise<SyncRun> {
   const data: Prisma.SyncRunUpdateInput = {};
+  if (input.resumeAfter !== undefined) data.resumeAfter = input.resumeAfter;
   if (input.status !== undefined) data.status = input.status;
   if (input.startedAt !== undefined) data.startedAt = input.startedAt;
   if (input.finishedAt !== undefined) data.finishedAt = input.finishedAt;
@@ -175,8 +177,8 @@ export async function getActiveSyncRun(
 
 /**
  * Resolve queued/running sync rows for a scope after the per-scope advisory lock
- * has been acquired. Stale active rows are failed in-place and excluded from the
- * returned result.
+ * has been acquired. Stale active rows are requeued in-place, preserving their
+ * staged batches and run identity for the scheduler to resume.
  */
 export async function resolveActiveSyncRun(
   client: SyncRunClient,
@@ -193,7 +195,7 @@ export async function resolveActiveSyncRun(
       OR: [
         {
           status: 'queued',
-          createdAt: { lte: staleCutoff },
+          updatedAt: { lte: staleCutoff },
         },
         {
           status: 'running',
@@ -202,8 +204,8 @@ export async function resolveActiveSyncRun(
       ],
     },
     data: {
-      status: 'failed',
-      finishedAt: now,
+      status: 'queued',
+      resumeAfter: now,
       errorCode: STALE_ACTIVE_SYNC_ERROR_CODE,
       errorSummary: STALE_ACTIVE_SYNC_ERROR_SUMMARY,
     },

@@ -147,3 +147,32 @@ Performance benchmarks run via `pnpm test:perf` (Vitest with Testcontainers Post
 These are query-level guardrails measured against a seeded dataset of 500 active work items with lifecycle and hold-period history. They do not include Next.js route handling or network latency.
 
 Performance validation should confirm that the flow view and item detail read paths stay under the plan target of `p95 < 500 ms` and forecast responses stay under `3 s` on representative historical datasets.
+
+## Jira rate limits and resumable syncs
+
+Use a dedicated Jira service-account PAT. Jira Data Center limits are per account; a person's PAT shares their interactive quota. Reuse one connection for all boards using that account: separate connection records have separate app budgets.
+
+Apply migrations before starting updated processes (`pnpm --filter @agile-tools/db exec prisma migrate deploy`). Roll out web and all workers together; old workers bypass the limiter. The migration adds tables/columns without rewriting existing data. The first sync warms the history cache; subsequent syncs benefit from unchanged-issue reuse.
+
+Defaults allocate 50% of reported FillRate/Interval, reserve 20% of bucket capacity, and allow three concurrent HTTP calls per connection. Before headers are available, assume a 240-token bucket refilling at 120/minute. Every response updates shared state. Higher readings from another node do not erase the conservative remaining estimate; refill uses the app's allocated share. A zero Retry-After is unknown; 429 waits use the largest of reserve refill time, positive Retry-After, and exponential backoff with jitter.
+
+Configure `JIRA_RATE_FRACTION` (>0–1), `JIRA_RATE_RESERVE_FRACTION` (0–0.9), `JIRA_MAX_CONCURRENCY` (1–20), and `JIRA_RATE_RETRY_BUDGET_MS` (1000–600000). In `/admin/jira`, an optional requests-per-minute budget adds a cap without overriding header-derived pacing. Manual refresh and discovery share the limiter. Manual cooldown remains enforced.
+
+Each sync reconciles board, hold, and completed membership. Complete inline changelogs avoid detail requests; truncated expansions fall back to issue endpoints. Raw history and latest comments are cached by connection/issue/updated timestamp and expire after `SYNC_FULL_RESYNC_HOURS` (24). Missing timestamps cannot establish that an issue is unchanged. If Jira cannot supply complete history even through fallback, sync fails explicitly rather than publishing truncated lifecycle data.
+
+Requests retry in place until the elapsed-time budget expires. Then the run returns to queued with `RATE_LIMITED` and a resume time. Completed batches stay staged. The dispatcher resumes the same run ID, scans membership from the beginning, and skips staged IDs; offset checkpoints would be unsafe with Jira's live ordering. Graceful shutdown queues active runs; a lost worker heartbeat is recovered after 60 minutes. A unique lease token prevents an older attempt from publishing over or releasing a replacement attempt.
+
+Dispatch adds up to one minute of jitter. Rate-limit pressure doubles the next normal interval. Permanent 403/404 failures back off for 15, 30, then 60 minutes and flag `needs_attention` after `SYNC_PERMANENT_FAILURE_LIMIT` failures (default 3). Fix Jira access or board selection, then save the scope to reactivate it. Self-hosted intervals accept 5–1440 minutes; new scopes use `DEFAULT_SYNC_INTERVAL_MINUTES`.
+
+The admin page shows observed limit/remaining with observation time and requests per scope for the current UTC day. Totals are recorded when each attempt ends; a process crash can lose that attempt's usage summary. Request metrics carry connection_id and scope_id. Structured attempt summaries carry syncRunId, requests, 429s, paused milliseconds, and fetched/skipped issue counts. Run IDs stay out of Prometheus labels to avoid creating new time series on every sync. Gauges expose `agile_tools_jira_rate_limit` and `agile_tools_jira_rate_remaining`; `agile_tools_jira_throttle_wait_seconds` records waits.
+
+Load `ops/prometheus/jira-rate-limits.rules.yml` through Prometheus's `rule_files` to alert above 1% 429 responses over 15 minutes. Check label names if your scraper relabels metrics. No alert is installed on an external Prometheus server by this code change.
+
+Focused validation:
+
+```sh
+pnpm exec vitest run packages/shared/src/jira-rate-limit.test.ts packages/jira-client/src/client.test.ts apps/worker/src/sync/issue-cache.test.ts
+pnpm exec vitest run --config tests/integration/vitest.config.ts tests/integration/jira-rate-sync.integration.test.ts
+```
+
+The virtual-clock test uses the exact 240/120/60 headers across 12 concurrent scopes. The Postgres suite accelerates refill for full 12-scope persistence, request reduction, resume, and permanent-failure tests. Neither establishes the live Jira account's configuration or exemptions. Compare production request totals after rollout against the prior baseline.

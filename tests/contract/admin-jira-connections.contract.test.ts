@@ -213,6 +213,16 @@ describe('POST /v1/admin/jira-connections', () => {
 // ─── PUT /v1/admin/jira-connections/:id ────────────────────────────────────────
 
 describe('PUT /v1/admin/jira-connections/:id', () => {
+  it('persists and clears a per-connection request budget without rotating the PAT', async () => {
+    for (const requestBudgetPerMinute of [30, null]) {
+      const response = await updateConnection(makeRequest(`http://localhost/api/v1/admin/jira-connections/${connectionId}`, 'PUT', {
+        baseUrl: JIRA_BASE, requestBudgetPerMinute,
+      }), { params: Promise.resolve({ connectionId }) });
+      expect(response.status).toBe(200);
+      expect(JiraConnectionSchema.parse(await response.json()).requestBudgetPerMinute).toBe(requestBudgetPerMinute);
+      expect((await getPrismaClient().jiraConnection.findUniqueOrThrow({ where: { id: connectionId } })).requestBudgetPerMinute).toBe(requestBudgetPerMinute);
+    }
+  });
   it('returns 200 with a JiraConnection shape and resets validation state after base URL or PAT changes', async () => {
     const db = getPrismaClient();
     await db.jiraConnection.update({

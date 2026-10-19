@@ -34,6 +34,7 @@ async function getBoss(): Promise<PgBoss> {
 }
 
 export interface ScopeSyncJobData {
+  resumeKey?: string;
   scopeId: string;
   syncRunId: string;
   requestedBy?: string;
@@ -80,7 +81,7 @@ class PgBossSyncDispatchBackend implements SyncDispatchBackend {
 class VercelQueuesSyncDispatchBackend implements SyncDispatchBackend {
   async enqueueScopeSync(data: ScopeSyncJobData): Promise<{ messageId: string | null }> {
     const prisma = getPrismaClient();
-    const dedupeKey = `${QUEUE_NAMES.HOSTED_SYNC}:${data.syncRunId}:initialize`;
+    const dedupeKey = `${QUEUE_NAMES.HOSTED_SYNC}:${data.syncRunId}:initialize${data.resumeKey ? `:${data.resumeKey}` : ''}`;
     await prisma.hostedSyncTask.upsert({
       where: { dedupeKey },
       create: {

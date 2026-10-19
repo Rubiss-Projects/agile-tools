@@ -21,7 +21,7 @@ describe('active sync run shutdown handling', () => {
     vi.clearAllMocks();
   });
 
-  it('cancels tracked running sync runs with a shutdown error code', async () => {
+  it('pauses tracked running sync runs with a shutdown error code', async () => {
     const db = {
       syncRun: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -41,16 +41,16 @@ describe('active sync run shutdown handling', () => {
         status: 'running',
       },
       data: expect.objectContaining({
-        status: 'canceled',
-        finishedAt: now,
+        status: 'queued',
+        resumeAfter: now,
         errorCode: WORKER_SHUTDOWN_SYNC_ERROR_CODE,
       }),
     });
     expect(loggerMock.info).toHaveBeenCalledWith(
-      'Canceled active sync runs during worker shutdown',
+      'Paused active sync runs during worker shutdown',
       {
         trackedCount: 1,
-        canceledCount: 1,
+        pausedCount: 1,
       },
     );
   });

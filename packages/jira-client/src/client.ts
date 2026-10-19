@@ -1,8 +1,7 @@
-import pRetry, { AbortError } from 'p-retry';
-import pLimit from 'p-limit';
-import { metricsClock, recordJiraRequest } from '@agile-tools/shared';
+import { createHash } from 'node:crypto';
+import { metricsClock, recordJiraRequest, recordJiraThrottle, recordJiraRateState, JiraRateLimiter, createMemoryJiraRateStore, type JiraRateState } from '@agile-tools/shared';
 
-const CONCURRENCY_LIMIT = 3;
+const connectionLimiters = new Map<string, JiraRateLimiter>();
 const RETRY_ATTEMPTS = 3;
 
 export type JiraChangelogFetchStrategy = 'subresource' | 'issue_expand';
@@ -24,6 +23,12 @@ export type JiraAuthStrategy =
     };
 
 export interface JiraClientOptions {
+  rateLimiter?: JiraRateLimiter;
+  connectionId?: string;
+  scopeId?: string;
+  syncRunId?: string;
+  retryBudgetMs?: number;
+  onProgress?: () => Promise<void>;
   changelogFetchStrategy?: JiraChangelogFetchStrategy | null;
   onChangelogFetchStrategyDetected?: (strategy: JiraChangelogFetchStrategy) => void | Promise<void>;
 }
@@ -69,12 +74,10 @@ function jiraOperation(path: string): string {
   return 'other';
 }
 
-function metricsErrorType(error: unknown): string | undefined {
-  return error instanceof Error && error.name ? error.name : undefined;
-}
-
 export class JiraClient {
-  private readonly limiter = pLimit(CONCURRENCY_LIMIT);
+  private readonly limiter: JiraRateLimiter;
+  readonly stats = { requests: 0, rateLimited: 0, pausedMs: 0, issuesFetched: 0, issuesSkipped: 0 };
+  lastRateState: JiraRateState | undefined;
   private changelogFetchStrategy: JiraChangelogFetchStrategy | undefined;
   private changelogStrategyProbe: Promise<JiraChangelogFetchStrategy> | undefined;
   readonly baseUrl: string;
@@ -87,6 +90,9 @@ export class JiraClient {
     // Normalize base URL: strip trailing slash
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.changelogFetchStrategy = options.changelogFetchStrategy ?? undefined;
+    const key = options.connectionId ?? createHash('sha256').update(this.baseUrl).update(pat).digest('hex');
+    this.limiter = options.rateLimiter ?? connectionLimiters.get(key) ?? new JiraRateLimiter(createMemoryJiraRateStore());
+    if (!options.rateLimiter) connectionLimiters.set(key, this.limiter);
   }
 
   getChangelogFetchStrategy(): JiraChangelogFetchStrategy | undefined {
@@ -145,88 +151,76 @@ export class JiraClient {
       }
     }
 
-    return this.limiter(() =>
-      pRetry(
-        async () => {
-          const operation = jiraOperation(path);
-          const requestStartedAt = metricsClock.now();
-          let response: Response;
-          try {
-            response = await fetch(url.toString(), {
-              method,
-              headers: {
-                Authorization: `Bearer ${this.pat}`,
-                Accept: 'application/json',
-                ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
-              },
-              ...(method === 'POST' ? { body: JSON.stringify(options.body ?? {}) } : {}),
-            });
-          } catch (error) {
-            const errorType = metricsErrorType(error);
-            recordJiraRequest({
-              method,
-              url,
-              operation,
-              result: 'network_error',
-              durationSeconds: metricsClock.durationSecondsSince(requestStartedAt),
-              ...(errorType === undefined ? {} : { errorType }),
-            });
-            throw error;
-          }
-
-          recordJiraRequest({
-            method,
-            url,
-            operation,
-            result: response.ok ? 'success' : response.status === 429 ? 'rate_limited' : 'error',
-            statusCode: response.status,
-            durationSeconds: metricsClock.durationSecondsSince(requestStartedAt),
-          });
-
-          if (response.status === 429) {
-            const retryAfter = Number(response.headers.get('Retry-After') ?? 10);
-            await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-            // Throw a regular error so p-retry will retry
-            throw new Error(`Rate limited — retry after ${retryAfter}s`);
-          }
-
-          if (!response.ok) {
-            const body = await response.text().catch(() => '');
-            const truncated = body.slice(0, 200);
-
-            if (response.status === 401 || response.status === 403) {
-              throw new AbortError(
-                new JiraClientError(
-                  `Jira auth error ${response.status}: ${truncated}`,
-                  response.status,
-                  response.status === 401 ? 'unauthorized' : 'forbidden',
-                ),
-              );
-            }
-            if (response.status === 404) {
-              throw new AbortError(
-                new JiraClientError(`Jira resource not found: ${truncated}`, 404, 'not_found'),
-              );
-            }
-
-            throw new JiraClientError(
-              `Jira API error ${response.status}: ${truncated}`,
-              response.status,
-              'http_error',
-            );
-          }
-
-          return response.json() as Promise<T>;
-        },
-        {
-          retries: RETRY_ATTEMPTS,
-          onFailedAttempt: (err) => {
-            // Abort errors propagate immediately via AbortError above
-            if (err instanceof AbortError) return;
+    const startedAt = Date.now();
+    let rateLimited = false;
+    let transientFailures = 0;
+    const budget = this.options.retryBudgetMs ?? 120_000;
+    const checkBudget = () => {
+      if (rateLimited && Date.now() - startedAt >= budget) {
+        throw new JiraClientError('Jira rate-limit retry budget exhausted; resume this sync later.', 429, 'RATE_LIMITED');
+      }
+    };
+    for (let attempt = 0; ; attempt++) {
+      checkBudget();
+      await this.options.onProgress?.();
+      const release = await this.limiter.acquire(async (milliseconds) => {
+        checkBudget();
+        await this.options.onProgress?.();
+        this.stats.pausedMs += milliseconds;
+        recordJiraThrottle(this.options.connectionId ?? 'unassigned', milliseconds / 1000);
+      });
+      const requestStartedAt = metricsClock.now();
+      let response: Response | undefined;
+      let requestSent = false;
+      try {
+        checkBudget();
+        await this.options.onProgress?.();
+        this.stats.requests++;
+        requestSent = true;
+        response = await fetch(url.toString(), {
+          method,
+          signal: AbortSignal.timeout(30_000),
+          headers: {
+            Authorization: `Bearer ${this.pat}`,
+            Accept: 'application/json',
+            ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
           },
-        },
-      ),
-    );
+          ...(method === 'POST' ? { body: JSON.stringify(options.body ?? {}) } : {}),
+        });
+        this.lastRateState = await this.limiter.observe(response.headers, response.status, attempt);
+        if (this.options.connectionId && this.lastRateState.observedRemaining !== null) {
+          recordJiraRateState(this.options.connectionId, this.lastRateState.limit, this.lastRateState.observedRemaining);
+        }
+        if (response.status === 429) {
+          rateLimited = true;
+          this.stats.rateLimited++;
+          await response.body?.cancel();
+          continue;
+        }
+        if (!response.ok) {
+          const body = (await response.text()).slice(0, 200);
+          throw new JiraClientError(`Jira API error ${response.status}: ${body}`, response.status,
+            response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : response.status === 404 ? 'not_found' : 'http_error');
+        }
+        return await response.json() as T;
+      } catch (error) {
+        // Lease/heartbeat failures must stop this attempt, not become HTTP retries.
+        if (!requestSent) throw error;
+        if (error instanceof JiraClientError && error.statusCode < 500) throw error;
+        if (++transientFailures > RETRY_ATTEMPTS) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (transientFailures - 1)));
+      } finally {
+        if (requestSent) recordJiraRequest({
+          method, url, operation: jiraOperation(path),
+          result: response ? response.ok ? 'success' : response.status === 429 ? 'rate_limited' : 'error' : 'network_error',
+          ...(response ? { statusCode: response.status } : {}),
+          ...(this.options.connectionId ? { connectionId: this.options.connectionId } : {}),
+          ...(this.options.scopeId ? { scopeId: this.options.scopeId } : {}),
+          durationSeconds: metricsClock.durationSecondsSince(requestStartedAt),
+        });
+        await release();
+      }
+    }
   }
 
   async fetchServerInfo(): Promise<JiraServerInfo> {

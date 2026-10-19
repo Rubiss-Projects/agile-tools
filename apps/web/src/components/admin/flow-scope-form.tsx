@@ -65,9 +65,9 @@ export function FlowScopeForm({
   connections,
   initialScope,
   syncIntervalMin = 5,
-  syncIntervalMax = 15,
-  syncIntervalDefault = 5,
-  syncIntervalHelpText = 'Use a 5 to 15 minute cadence to stay within the default guard rails.',
+  syncIntervalMax = 1440,
+  syncIntervalDefault = 10,
+  syncIntervalHelpText = 'Choose an interval from 5 minutes to 24 hours. Longer intervals reduce Jira traffic.',
   lockToInitialBoard = false,
 }: Props) {
   const router = useRouter();

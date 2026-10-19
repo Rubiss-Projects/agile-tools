@@ -31,6 +31,7 @@ export function JiraConnectionForm({ initialConnection }: JiraConnectionFormProp
   const [expanded, setExpanded] = useState(!isEditMode);
   const [baseUrl, setBaseUrl] = useState(initialConnection?.baseUrl ?? '');
   const [pat, setPat] = useState('');
+  const [requestBudget, setRequestBudget] = useState(initialConnection?.requestBudgetPerMinute?.toString() ?? '');
   const [displayName, setDisplayName] = useState(initialConnection?.displayName ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -39,6 +40,7 @@ export function JiraConnectionForm({ initialConnection }: JiraConnectionFormProp
   function resetEditState() {
     setBaseUrl(initialConnection?.baseUrl ?? '');
     setPat('');
+    setRequestBudget(initialConnection?.requestBudgetPerMinute?.toString() ?? '');
     setDisplayName(initialConnection?.displayName ?? '');
     setError(null);
     setResult(null);
@@ -66,6 +68,7 @@ export function JiraConnectionForm({ initialConnection }: JiraConnectionFormProp
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             baseUrl: trimmedBaseUrl,
+            requestBudgetPerMinute: requestBudget ? Number(requestBudget) : null,
             ...(!isEditMode || shouldRotatePat ? { pat: trimmedPat } : {}),
             ...(!isEditMode
               ? (trimmedDisplayName && { displayName: trimmedDisplayName })
@@ -155,6 +158,14 @@ export function JiraConnectionForm({ initialConnection }: JiraConnectionFormProp
             />
           </label>
           <p style={helperTextStyle}>Optional label used to distinguish multiple Jira instances in the workspace.</p>
+        </div>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <label>
+            <span style={fieldLabelStyle}>Maximum requests per minute</span>
+            <input type="number" min={1} max={60000} value={requestBudget} onChange={(e) => setRequestBudget(e.target.value)} style={inputStyle} />
+          </label>
+          <p style={helperTextStyle}>Optional additional cap. The configured share of Jira’s reported refill rate still applies.</p>
+          <p style={helperTextStyle}>Use a dedicated service-account PAT. A personal account shares its quota with these syncs.</p>
         </div>
         {error && <div style={{ ...noticeStyle('danger'), marginBottom: '0.75rem' }}><p style={{ margin: 0 }}>{error}</p></div>}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>

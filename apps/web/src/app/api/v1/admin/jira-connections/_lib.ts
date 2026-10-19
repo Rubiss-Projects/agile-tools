@@ -1,5 +1,5 @@
 import type { JiraConnection as ApiConnection } from '@agile-tools/shared/contracts/api';
-import { getPrismaClient, getJiraConnection } from '@agile-tools/db';
+import { getPrismaClient, getJiraConnection, createPostgresJiraRateLimiter } from '@agile-tools/db';
 import { decryptSecret, getConfig } from '@agile-tools/shared';
 import {
   createJiraClient,
@@ -22,6 +22,7 @@ export function mapConnection(conn: DbConnection): ApiConnection {
   return {
     id: conn.id,
     baseUrl: conn.baseUrl,
+    requestBudgetPerMinute: conn.requestBudgetPerMinute ?? null,
     authType: conn.authType,
     ...(conn.displayName != null && { displayName: conn.displayName }),
     ...(conn.cloudId != null && { cloudId: conn.cloudId }),
@@ -69,6 +70,7 @@ export async function createClientForConnection(conn: {
   jiraVersion?: string | null;
   jiraDeploymentType?: string | null;
   changelogStrategy?: string | null;
+  requestBudgetPerMinute?: number | null;
 }): Promise<JiraClient> {
   const { ENCRYPTION_KEY } = getConfig();
 
@@ -76,6 +78,8 @@ export async function createClientForConnection(conn: {
     const accessToken = await getCloudAccessTokenForConnection(conn);
     return createJiraClient(conn.baseUrl, accessToken, {
       changelogFetchStrategy: 'subresource',
+      connectionId: conn.id,
+      rateLimiter: createPostgresJiraRateLimiter(getPrismaClient(), conn.id, conn.requestBudgetPerMinute),
     });
   }
 
@@ -94,6 +98,8 @@ export async function createClientForConnection(conn: {
       : undefined);
 
   return createJiraClient(conn.baseUrl, pat, {
+    connectionId: conn.id,
+    rateLimiter: createPostgresJiraRateLimiter(getPrismaClient(), conn.id, conn.requestBudgetPerMinute),
     ...(changelogFetchStrategy !== undefined ? { changelogFetchStrategy } : {}),
   });
 }

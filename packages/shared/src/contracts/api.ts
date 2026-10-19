@@ -65,6 +65,7 @@ const HttpUrlSchema = z.string().url().refine((value) => {
 export const JiraConnectionSchema = z.object({
   id: z.string().uuid(),
   baseUrl: HttpUrlSchema,
+  requestBudgetPerMinute: z.number().int().min(1).max(60000).nullable().optional(),
   authType: JiraAuthTypeSchema,
   displayName: z.string().optional(),
   cloudId: z.string().optional(),
@@ -78,6 +79,7 @@ export type JiraConnection = z.infer<typeof JiraConnectionSchema>;
 
 export const CreateJiraConnectionRequestSchema = z.object({
   baseUrl: HttpUrlSchema,
+  requestBudgetPerMinute: z.number().int().min(1).max(60000).nullable().optional(),
   /** Raw PAT — write-only; never returned in responses. */
   pat: z.string().min(1),
   displayName: z.string().optional(),
@@ -86,6 +88,7 @@ export type CreateJiraConnectionRequest = z.infer<typeof CreateJiraConnectionReq
 
 export const UpdateJiraConnectionRequestSchema = z.object({
   baseUrl: HttpUrlSchema,
+  requestBudgetPerMinute: z.number().int().min(1).max(60000).nullable().optional(),
   /** Raw PAT replacement — optional so display-name-only edits do not force rotation. */
   pat: z.string().min(1).optional(),
   displayName: z.string().optional(),

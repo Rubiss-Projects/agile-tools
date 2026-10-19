@@ -181,11 +181,11 @@ async function handlePUT(
           { status: 400 },
         );
       }
-    } else if (parsed.data.syncIntervalMinutes > 15) {
+    } else if (parsed.data.syncIntervalMinutes > 1440) {
       return Response.json(
         {
           code: 'INVALID_REQUEST',
-          message: 'Self-hosted sync interval must be between 5 and 15 minutes.',
+          message: 'Self-hosted sync interval must be between 5 and 1440 minutes.',
         },
         { status: 400 },
       );

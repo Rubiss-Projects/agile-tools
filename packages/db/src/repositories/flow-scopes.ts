@@ -100,6 +100,8 @@ export async function updateFlowScope(
         startStatusIds: input.startStatusIds,
         doneStatusIds: input.doneStatusIds,
         syncIntervalMinutes: input.syncIntervalMinutes,
+        nextSyncAt: null, permanentFailureCount: 0, lastSyncError: null,
+        status: 'active',
       },
     });
   } catch (err) {

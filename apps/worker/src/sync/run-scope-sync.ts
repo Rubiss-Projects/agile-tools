@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@agile-tools/db';
 import {
   DEFAULT_COMPLETED_WINDOW_DAYS,
+  createPostgresJiraRateLimiter,
+  claimConnectionSync,
+  renewConnectionSync,
+  releaseConnectionSync,
   getActiveHoldDefinition,
   listEpicForecastTargets,
   refreshEpicLinkForecastTargetCounts,
@@ -25,8 +30,6 @@ import {
   streamBoardIssues,
   streamJqlIssues,
   fetchJqlIssueCount,
-  fetchIssueChangelog,
-  fetchLatestIssueComment,
   refreshAtlassianOAuthToken,
 } from '@agile-tools/jira-client';
 import type { JiraClient, JiraChangelogFetchStrategy, RawJiraIssue } from '@agile-tools/jira-client';
@@ -39,6 +42,10 @@ import {
   type NormalizedWorkItem,
 } from './normalize-jira-issues.js';
 import { rebuildScopeProjections } from '../projections/rebuild-scope-summary.js';
+
+import { loadIssueDetails } from './issue-cache.js';
+
+type SyncNormalizeContext = NormalizeContext & { connectionId: string; cacheMaxAgeMs: number };
 
 const BATCH_SIZE = 10;
 const STAGED_ITEM_PAGE_SIZE = 100;
@@ -122,7 +129,12 @@ async function requireRunningSyncRun(
   db: PrismaClient,
   syncRunId: string,
   startedAt: Date,
+  connectionId: string,
+  leaseToken: string,
 ): Promise<void> {
+  if (!await renewConnectionSync(db, connectionId, syncRunId, leaseToken)) {
+    throw new SyncError('SYNC_LEASE_LOST', 'Connection lease is no longer owned by this attempt');
+  }
   const stillRunning = await touchRunningSyncRun(db, syncRunId, startedAt);
   if (!stillRunning) {
     throw new SyncError('SYNC_RUN_ABORTED', `SyncRun ${syncRunId} is no longer running`);
@@ -201,7 +213,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     });
   }
 
-  const claimedStartedAt = new Date();
+  const claimedStartedAt = syncRun.startedAt ?? new Date();
 
   // Atomically claim: only advance if still in queued state, preventing duplicate execution.
   const claimed = await db.syncRun.updateMany({
@@ -216,11 +228,14 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     recordSyncMetric('skipped', 'SYNC_RUN_NOT_QUEUED');
     return;
   }
-  await cleanupStagedWorkItems(db, syncRunId);
+  // Staged batches survive rate-limit pauses.
 
   // Track connection context so the catch block can update health even on early errors.
   let scopeWorkspaceId: string | undefined;
   let scopeConnectionId: string | undefined;
+  let leaseClaimed = false;
+  const leaseToken = randomUUID();
+  let syncClient: JiraClient | undefined;
 
   try {
     const scope = await db.flowScope.findUnique({ where: { id: syncRun.scopeId } });
@@ -259,15 +274,37 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       );
     }
 
+    leaseClaimed = await claimConnectionSync(db, connection.id, syncRunId, leaseToken);
+    if (!leaseClaimed) {
+      await db.syncRun.updateMany({ where: { id: syncRunId, status: 'running' }, data: {
+        status: 'queued', errorCode: 'CONNECTION_BUSY', resumeAfter: new Date(Date.now() + 60_000),
+      } });
+      recordSyncMetric('paused', 'CONNECTION_BUSY');
+      return;
+    }
+    let lastHeartbeat = 0;
+    const heartbeat = async () => {
+      if (Date.now() - lastHeartbeat < 15_000) return;
+      await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
+      lastHeartbeat = Date.now();
+    };
+    const fullResync = syncRun.fullResync || !scope.lastFullSyncAt ||
+      Date.now() - scope.lastFullSyncAt.getTime() >= getConfig().SYNC_FULL_RESYNC_HOURS * 3_600_000;
+    await db.syncRun.updateMany({ where: { id: syncRunId, status: 'running' }, data: { fullResync, resumeAfter: null } });
     const token = await resolveJiraAccessToken(db, connection);
     const initialChangelogStrategy = getInitialChangelogFetchStrategy(connection);
     const jiraClient = createJiraClient(connection.baseUrl, token, {
+      connectionId: connection.id, scopeId: scope.id, syncRunId,
+      rateLimiter: createPostgresJiraRateLimiter(db, connection.id, connection.requestBudgetPerMinute),
+      retryBudgetMs: getConfig().JIRA_RATE_RETRY_BUDGET_MS,
+      onProgress: heartbeat,
       ...(initialChangelogStrategy !== undefined
         ? { changelogFetchStrategy: initialChangelogStrategy }
         : {}),
       onChangelogFetchStrategyDetected: (strategy) =>
         persistChangelogStrategy(db, connection, strategy),
     });
+    syncClient = jiraClient;
     if (initialChangelogStrategy && connection.changelogStrategy == null) {
       void persistChangelogStrategy(db, connection, initialChangelogStrategy);
     }
@@ -278,7 +315,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       jiraClient,
       boardId,
     );
-    await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+    await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
 
     // Abort early if the board layout has drifted away from the scope's configured statuses.
     // Continuing would produce incorrect lifecycle data (startedAt/completedAt derivation
@@ -304,6 +341,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       const boardIssueCount = await fetchBoardIssues(jiraClient, boardId, {
         maxResults: 1,
         fields: SYNC_ISSUE_FIELDS,
+        expandChangelog: true,
       });
       if (boardIssueCount.total > hostedCaps.maxActiveIssues) {
         throw new SyncError(
@@ -312,7 +350,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
         );
       }
     }
-    await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+    await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
 
     // Build inverted status → column lookup from board configuration.
     const statusIdsByColumn: Record<string, string> = {};
@@ -344,11 +382,13 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
         projectRefs: [],
       },
     });
-    await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+    await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
 
-    const ctx: NormalizeContext = {
+    const ctx: SyncNormalizeContext = {
       scopeId: scope.id,
       syncRunId,
+      connectionId: connection.id,
+      cacheMaxAgeMs: getConfig().SYNC_FULL_RESYNC_HOURS * 3_600_000,
       startStatusIds,
       doneStatusIds,
       inScopeStatusIds,
@@ -358,13 +398,18 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     };
 
     // Stream and process issues in fixed-size batches to bound memory and exploit
-    // parallelism in changelog fetching (the Jira client's internal pLimit throttles HTTP).
+    // parallelism in detail loading; HTTP uses the shared connection limiter.
     let batch: RawJiraIssue[] = [];
     const projectIdsSet = new Set<string>();
-    const processedIssueIds = new Set<string>();
+    const checkpointItems = await db.syncWorkItemStage.findMany({
+      where: { syncRunId }, select: { jiraIssueId: true, projectId: true },
+    });
+    const processedIssueIds = new Set(checkpointItems.map((item) => item.jiraIssueId));
+    for (const item of checkpointItems) projectIdsSet.add(item.projectId);
 
     for await (const issue of streamBoardIssues(jiraClient, boardId, {
       fields: SYNC_ISSUE_FIELDS,
+      expandChangelog: true,
     })) {
       if (processedIssueIds.has(issue.id)) {
         continue;
@@ -373,13 +418,13 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       batch.push(issue);
       if (batch.length >= BATCH_SIZE) {
         await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-        await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+        await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
         batch = [];
       }
     }
     if (batch.length > 0) {
       await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-      await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+      await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
       batch = [];
     }
 
@@ -398,11 +443,12 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
               `Hosted beta allows at most ${hostedCaps.maxActiveIssues} active board issues per scope; Jira returned ${holdIssueCount} configured hold issues.`,
             );
           }
-          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
         }
 
         for await (const issue of streamJqlIssues(jiraClient, holdJql, {
           fields: SYNC_ISSUE_FIELDS,
+          expandChangelog: true,
         })) {
           if (processedIssueIds.has(issue.id)) {
             continue;
@@ -411,13 +457,13 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
           batch.push(issue);
           if (batch.length >= BATCH_SIZE) {
             await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-            await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+            await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
             batch = [];
           }
         }
         if (batch.length > 0) {
           await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
           batch = [];
         }
 
@@ -449,11 +495,12 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
               `Hosted beta allows at most ${hostedCaps.maxCompletedIssues} completed issues per sync; Jira returned ${completedIssueCount}.`,
             );
           }
-          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
         }
 
         for await (const issue of streamJqlIssues(jiraClient, completedJql, {
           fields: SYNC_ISSUE_FIELDS,
+          expandChangelog: true,
         })) {
           if (processedIssueIds.has(issue.id)) {
             continue;
@@ -462,13 +509,13 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
           batch.push(issue);
           if (batch.length >= BATCH_SIZE) {
             await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-            await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+            await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
             batch = [];
           }
         }
         if (batch.length > 0) {
           await processBatch(db, jiraClient, batch, ctx, projectIdsSet);
-          await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+          await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
         }
 
         logger.info('Completed-issue sync pass finished', { syncRunId, scopeId: scope.id });
@@ -485,7 +532,7 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       where: { id: snapshot.id },
       data: { projectRefs: Array.from(projectIdsSet).map((id) => ({ id })) },
     });
-    await requireRunningSyncRun(db, syncRunId, claimedStartedAt);
+    await requireRunningSyncRun(db, syncRunId, claimedStartedAt, connection.id, leaseToken);
 
     // Use syncRunId as the dataVersion — it is already a UUID and unique per sync.
     const succeeded = await publishSyncedWorkItems(
@@ -493,12 +540,22 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
       syncRunId,
       claimedStartedAt,
       scope.id,
+      leaseToken,
     );
     if (!succeeded) {
       recordSyncMetric('skipped', 'SYNC_RUN_NOT_RUNNING', processedIssueIds.size);
       return;
     }
 
+    const pressured = syncRun.errorCode === 'RATE_LIMITED' || jiraClient.stats.rateLimited > 0 || (jiraClient.lastRateState &&
+      jiraClient.lastRateState.remaining <= jiraClient.lastRateState.limit * getConfig().JIRA_RATE_RESERVE_FRACTION);
+    await db.flowScope.update({ where: { id: scope.id }, data: {
+      permanentFailureCount: 0, lastSyncError: null,
+      ...(fullResync ? { lastFullSyncAt: new Date() } : {}),
+      nextSyncAt: new Date(Date.now() + scope.syncIntervalMinutes * 60_000 * (pressured ? 2 : 1) + Math.random() * 60_000),
+    } });
+    // Auxiliary reads run after the SyncRun has succeeded.
+    lastHeartbeat = Infinity;
     await refreshEpicForecastTargetsAfterSync(db, jiraClient, {
       scopeId: scope.id,
       issueTypeIds: scope.includedIssueTypeIds,
@@ -540,6 +597,28 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     });
     recordSyncMetric('succeeded', undefined, processedIssueIds.size);
   } catch (err) {
+    if (leaseClaimed && scopeConnectionId && !await renewConnectionSync(db, scopeConnectionId, syncRunId, leaseToken)) {
+      logger.warn('Sync attempt lost its connection lease; preserving the replacement attempt', { syncRunId });
+      return;
+    }
+    if (err instanceof JiraClientError && err.code === 'RATE_LIMITED') {
+      await db.syncRun.updateMany({ where: { id: syncRunId, status: 'running' }, data: {
+        status: 'queued', errorCode: 'RATE_LIMITED', errorSummary: err.message,
+        resumeAfter: new Date(Math.max(Date.now() + 60_000, syncClient?.lastRateState?.blockedUntil ?? 0)),
+      } });
+      logger.info('Scope sync paused; staged batches retained', { syncRunId, scopeId: syncRun.scopeId, errorCode: 'RATE_LIMITED' });
+      recordSyncMetric('paused', 'RATE_LIMITED');
+      return;
+    }
+    if (err instanceof JiraClientError && (err.statusCode === 403 || err.statusCode === 404)) {
+      const failedScope = await db.flowScope.update({ where: { id: syncRun.scopeId }, data: {
+        permanentFailureCount: { increment: 1 }, lastSyncError: err.message.slice(0, 500),
+      } });
+      await db.flowScope.update({ where: { id: syncRun.scopeId }, data: {
+        nextSyncAt: new Date(Date.now() + Math.min(1440, 15 * 2 ** (failedScope.permanentFailureCount - 1)) * 60_000),
+        ...(failedScope.permanentFailureCount >= getConfig().SYNC_PERMANENT_FAILURE_LIMIT ? { status: 'needs_attention' } : {}),
+      } });
+    }
     // Map errors to deterministic codes so the health updater can classify failures.
     let errorCode: string;
     let errorSummary: string;
@@ -594,6 +673,17 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     logger.error('Scope sync failed', { syncRunId, errorCode, errorSummary });
     recordSyncMetric('failed', errorCode);
     throw err;
+  } finally {
+    if (syncClient && scopeConnectionId) {
+      logger.info('Jira sync request summary', { syncRunId, scopeId: syncRun.scopeId, connectionId: scopeConnectionId, ...syncClient.stats });
+      const day = new Date(new Date().toISOString().slice(0, 10));
+      await db.jiraRequestDay.upsert({
+        where: { connectionId_scopeId_day: { connectionId: scopeConnectionId, scopeId: syncRun.scopeId, day } },
+        create: { connectionId: scopeConnectionId, scopeId: syncRun.scopeId, day, requests: syncClient.stats.requests, rateLimited: syncClient.stats.rateLimited },
+        update: { requests: { increment: syncClient.stats.requests }, rateLimited: { increment: syncClient.stats.rateLimited } },
+      }).catch((error: unknown) => logger.warn('Could not persist Jira request summary', { syncRunId, error: String(error) }));
+    }
+    if (leaseClaimed && scopeConnectionId) await releaseConnectionSync(db, scopeConnectionId, syncRunId, leaseToken);
   }
 }
 
@@ -739,6 +829,7 @@ async function ensureJiraServerCapabilities(
       capabilitiesDetectedAt: new Date(),
     });
   } catch (err) {
+    if (err instanceof JiraClientError && err.code === 'RATE_LIMITED') throw err;
     logger.warn('Failed to detect Jira server capabilities before sync; continuing with runtime probing', {
       syncRunId,
       connectionId: connection.id,
@@ -797,30 +888,32 @@ async function refreshEpicForecastTargetsAfterSync(
 }
 
 /**
- * Fetch changelogs for a batch of issues concurrently, then normalize each item.
- * Concurrency for HTTP is bounded by the Jira client's internal pLimit.
+ * Reuse complete issue details and durably stage a normalized batch.
+ * HTTP requests share the connection limiter across scopes and worker processes.
  */
 async function processBatch(
   db: PrismaClient,
   jiraClient: JiraClient,
   issues: RawJiraIssue[],
-  ctx: NormalizeContext,
+  ctx: SyncNormalizeContext,
   projectIdsSet: Set<string>,
 ): Promise<void> {
-  const changelogs = await Promise.all(
-    issues.map((issue) => fetchIssueChangelog(jiraClient, issue.id)),
-  );
-  const latestComments = await Promise.all(
-    issues.map((issue) => fetchLatestIssueComment(jiraClient, issue.id, issue.fields.comment)),
-  );
-
-  const normalizedItems = issues.map((issue, index) => {
-    const normalized = normalizeJiraIssue(issue, changelogs[index]!, ctx, latestComments[index]);
+  // Finish all in-flight work before releasing a connection lease on failure.
+  const results = await Promise.allSettled(issues.map(async (issue) => {
+    const { changelog, latestComment } = await loadIssueDetails(db, jiraClient, ctx.connectionId, issue, ctx.cacheMaxAgeMs);
+    const normalized = normalizeJiraIssue(issue, changelog, ctx, latestComment);
     projectIdsSet.add(normalized.projectId);
     return normalized;
-  });
+  }));
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed?.status === 'rejected') throw failed.reason;
+  const normalizedItems = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
 
   await stageWorkItems(db, ctx.scopeId, ctx.syncRunId, normalizedItems);
+  await db.syncRunCheckpoint.upsert({ where: { syncRunId: ctx.syncRunId },
+    create: { syncRunId: ctx.syncRunId, phase: 'fetch', counts: { ...jiraClient.stats } },
+    update: { phase: 'fetch', counts: { ...jiraClient.stats } },
+  });
 }
 
 /**
@@ -963,6 +1056,7 @@ async function publishSyncedWorkItems(
   syncRunId: string,
   startedAt: Date,
   scopeId: string,
+  leaseToken: string,
 ): Promise<boolean> {
   const {
     SYNC_PUBLISH_TRANSACTION_TIMEOUT_MS: publishTimeoutMs,
@@ -977,17 +1071,18 @@ async function publishSyncedWorkItems(
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id
-      FROM "SyncRun"
-      WHERE id = ${syncRunId}
-        AND status = 'running'
-      FOR UPDATE
+      SELECT run.id
+      FROM "SyncRun" run
+      JOIN "FlowScope" scope ON scope.id = run."scopeId"
+      JOIN "JiraConnection" connection ON connection.id = scope."connectionId"
+      WHERE run.id = ${syncRunId} AND run.status = 'running'
+        AND connection."activeSyncRunId" = ${syncRunId} AND connection."activeSyncLeaseToken" = ${leaseToken} AND connection."syncLeaseUntil" > NOW()
+      FOR UPDATE OF run, connection
     `;
     if (rows.length === 0) {
       logger.warn('SyncRun left running state before publish; skipping', {
         syncRunId,
       });
-      await tx.syncWorkItemStage.deleteMany({ where: { syncRunId } });
       return false;
     }
     await tx.$executeRaw`
@@ -1094,6 +1189,7 @@ async function publishSyncedWorkItems(
       where: { id: syncRunId, status: 'running' },
       data: {
         status: 'succeeded',
+        errorCode: null, errorSummary: null, resumeAfter: null,
         finishedAt: new Date(),
         dataVersion: syncRunId,
       },

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createJiraClient } from './client.js';
+import { createJiraClient as createClient } from './client.js';
 import {
   fetchIssueChangelog,
   fetchJqlIssueCount,
@@ -8,6 +8,10 @@ import {
   streamJqlIssues,
 } from './issues.js';
 
+import { JiraRateLimiter, createMemoryJiraRateStore } from '@agile-tools/shared';
+function createJiraClient(...[baseUrl, pat, options]: Parameters<typeof createClient>) {
+  return createClient(baseUrl, pat, { ...options, rateLimiter: new JiraRateLimiter(createMemoryJiraRateStore()) });
+}
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status: 200,

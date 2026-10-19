@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   JiraClientError,
-  createJiraClient,
+  createJiraClient as createClient,
   inferChangelogFetchStrategyFromServerInfo,
 } from './client.js';
 
+import { JiraRateLimiter, createMemoryJiraRateStore } from '@agile-tools/shared';
+function createJiraClient(...[baseUrl, pat, options]: Parameters<typeof createClient>) {
+  return createClient(baseUrl, pat, { ...options, rateLimiter: new JiraRateLimiter(createMemoryJiraRateStore()) });
+}
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -24,6 +28,29 @@ afterEach(() => {
 });
 
 describe('createJiraClient', () => {
+  it('pauses on Retry-After: 0 and retries the same request after refill', async () => {
+    vi.useFakeTimers();
+    const headers = { 'X-RateLimit-Limit': '240', 'X-RateLimit-Remaining': '0', 'X-RateLimit-FillRate': '120', 'X-RateLimit-Interval-Seconds': '60', 'Retry-After': '0' };
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 429, headers }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createJiraClient('https://fake.test', 'test');
+    const promise = client.get('/rest/api/2/issue/1');
+    await vi.advanceTimersByTimeAsync(48_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(client.stats).toMatchObject({ requests: 2, rateLimited: 1, pausedMs: 49_000 });
+  });
+
+  it('reports RATE_LIMITED when elapsed retry time is exhausted', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Response('{}', { status: 429, headers: { 'Retry-After': '0' } })));
+    const client = createJiraClient('https://fake.test', 'test', { retryBudgetMs: 1000 });
+    const assertion = expect(client.get('/rest/api/2/issue/1')).rejects.toMatchObject({ code: 'RATE_LIMITED', statusCode: 429 });
+    await vi.runAllTimersAsync();
+    await assertion;
+  });
   it('normalizes the base URL and forwards auth and query params', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
     vi.stubGlobal('fetch', fetchMock);
@@ -52,7 +79,7 @@ describe('createJiraClient', () => {
     const client = createJiraClient('https://jira.example.internal', 'pat-123');
 
     await expect(client.get('/rest/api/2/myself')).rejects.toMatchObject({
-      message: expect.stringContaining('Jira auth error 401'),
+      message: expect.stringContaining('Jira API error 401'),
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
