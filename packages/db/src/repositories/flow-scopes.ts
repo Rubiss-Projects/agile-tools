@@ -87,23 +87,43 @@ export async function updateFlowScope(
   assertStatusSetsDisjoint(input.startStatusIds, input.doneStatusIds);
   const timezone = normalizeTimeZoneOrThrow(input.timezone);
 
+  if ('$transaction' in client) {
+    return client.$transaction((tx) => replaceFlowScopeConfiguration(tx, workspaceId, scopeId, { ...input, timezone }));
+  }
+  return replaceFlowScopeConfiguration(client, workspaceId, scopeId, { ...input, timezone });
+}
+
+async function replaceFlowScopeConfiguration(
+  client: Prisma.TransactionClient,
+  workspaceId: string,
+  scopeId: string,
+  input: UpdateFlowScopeInput,
+): Promise<FlowScope | null> {
   try {
-    return await client.flowScope.update({
+    const updated = await client.flowScope.update({
       where: { id: scopeId, workspaceId },
       data: {
         connectionId: input.connectionId,
         boardId: String(input.boardId),
         boardName: input.boardName,
-        timezone,
+        timezone: input.timezone,
         includedIssueTypeIds: input.includedIssueTypeIds,
         includedIssueTypeNames: input.includedIssueTypeNames,
         startStatusIds: input.startStatusIds,
         doneStatusIds: input.doneStatusIds,
         syncIntervalMinutes: input.syncIntervalMinutes,
         nextSyncAt: null, permanentFailureCount: 0, lastSyncError: null,
-        status: 'active',
       },
     });
+    // The configuration update holds the row lock until this transaction ends.
+    // Saving repairs a failed scope, but must preserve an operational pause.
+    if (updated.status === 'needs_attention') {
+      return client.flowScope.update({
+        where: { id: scopeId, workspaceId },
+        data: { status: 'active' },
+      });
+    }
+    return updated;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
       return null;

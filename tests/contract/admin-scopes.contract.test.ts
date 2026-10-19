@@ -264,6 +264,36 @@ describe('POST /v1/admin/scopes', () => {
 // ─── PUT /v1/admin/scopes/:id ─────────────────────────────────────────────────
 
 describe('PUT /v1/admin/scopes/:id', () => {
+  it.each([
+    { status: 'paused' as const, expectedStatus: 'paused' },
+    { status: 'needs_attention' as const, expectedStatus: 'active' },
+  ])('saves interval edits for $status scopes with status $expectedStatus', async ({ status, expectedStatus }) => {
+    const db = getPrismaClient();
+    await db.flowScope.update({
+      where: { id: scopeId },
+      data: { status, permanentFailureCount: 3, lastSyncError: 'Board cannot be viewed' },
+    });
+
+    const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
+      connectionId,
+      ...SCOPE_PAYLOAD,
+      syncIntervalMinutes: 30,
+    });
+    const res = await updateScope(req, { params: Promise.resolve({ scopeId }) });
+    expect(res.status).toBe(200);
+    expect(FlowScopeSchema.parse(await res.json())).toMatchObject({
+      status: expectedStatus,
+      syncIntervalMinutes: 30,
+    });
+    expect(await db.flowScope.findUniqueOrThrow({ where: { id: scopeId } })).toMatchObject({
+      status: expectedStatus,
+      syncIntervalMinutes: 30,
+      permanentFailureCount: 0,
+      lastSyncError: null,
+    });
+    expect(await db.syncRun.count({ where: { scopeId } })).toBe(0);
+  });
+
   it('returns 200 with updated FlowScope when input is valid', async () => {
     const req = makeRequest(`http://localhost/api/v1/admin/scopes/${scopeId}`, 'PUT', {
       connectionId,
