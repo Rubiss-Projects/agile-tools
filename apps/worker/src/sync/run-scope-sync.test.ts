@@ -1033,8 +1033,11 @@ describe('runScopeSync', () => {
     });
   });
 
-  it('cleans up staged work items when the run is superseded mid-stream', async () => {
+  it.each(['canceled', 'queued'])('only cleans up terminal stages when a run becomes %s mid-stream', async (status) => {
     const db = createDb({ doneStatusIds: [] });
+    db.syncRun.findUnique
+      .mockResolvedValueOnce({ id: 'run-1', scopeId: 'scope-1', status: 'queued' })
+      .mockResolvedValue({ id: 'run-1', scopeId: 'scope-1', status });
     const issues = Array.from({ length: 10 }, (_, index) =>
       makeIssue({
         id: `ISSUE-${index + 1}`,
@@ -1060,10 +1063,12 @@ describe('runScopeSync', () => {
     ).resolves.toBeUndefined();
 
     expect(db.syncWorkItemStage.createMany).toHaveBeenCalledTimes(1);
-    expect(db.syncWorkItemStage.deleteMany).toHaveBeenCalledTimes(2);
-    expect(db.syncWorkItemStage.deleteMany).toHaveBeenLastCalledWith({
-      where: { syncRunId: 'run-1' },
-    });
+    expect(db.syncWorkItemStage.deleteMany).toHaveBeenCalledTimes(status === 'canceled' ? 2 : 1);
+    if (status === 'canceled') {
+      expect(db.syncWorkItemStage.deleteMany).toHaveBeenLastCalledWith({
+        where: { syncRunId: 'run-1' },
+      });
+    }
     expect(db.workItem.upsert).not.toHaveBeenCalled();
     expect(updateConnectionHealthAfterSyncMock).not.toHaveBeenCalled();
   });

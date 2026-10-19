@@ -61,7 +61,7 @@ export class JiraRateLimiter {
         this.refill(state, now);
         state.leases = state.leases.filter((lease) => lease.expiresAt > now);
         const reserve = Math.min(state.limit - 1, state.limit * this.settings.reserveFraction);
-        const tokenWait = Math.max(0, reserve + 1 - state.remaining) / this.rate(state) * 1000;
+        const tokenWait = Math.max(0, reserve + 1 - state.remaining) / this.refillRate(state) * 1000;
         const concurrencyWait = state.leases.length >= this.settings.maxConcurrency ? 100 : 0;
         const delay = Math.max(0, state.nextAt - now, state.blockedUntil - now, tokenWait, concurrencyWait);
         if (delay > 0) return {
@@ -72,7 +72,7 @@ export class JiraRateLimiter {
         // The lease outlives the client's 30-second HTTP timeout, including body consumption.
         state.leases.push({ id, expiresAt: now + 60_000 });
         state.remaining = Math.max(0, state.remaining - 1);
-        state.nextAt = now + 1000 / this.rate(state);
+        state.nextAt = now + 1000 / this.pacingRate(state);
         return { milliseconds: 0, rateLimited: false };
       });
       if (wait.milliseconds === 0) break;
@@ -98,10 +98,10 @@ export class JiraRateLimiter {
         state.observedAt = now;
       }
       // Apply changed header rates to the very next request, too.
-      state.nextAt = Math.max(state.nextAt, now + 1000 / this.rate(state));
+      state.nextAt = Math.max(state.nextAt, now + 1000 / this.pacingRate(state));
       if (status === 429) {
         state.remaining = 0;
-        const refillMs = (state.limit * this.settings.reserveFraction + 1) / this.rate(state) * 1000;
+        const refillMs = (state.limit * this.settings.reserveFraction + 1) / this.refillRate(state) * 1000;
         const backoffMs = Math.min(60_000, 1000 * 2 ** Math.min(attempt, 6)) * (1 + Math.random());
         state.blockedUntil = Math.max(state.blockedUntil, now + parsed.retryAfterMs, now + refillMs, now + backoffMs);
       } else if (parsed.retryAfterMs > 0) {
@@ -111,14 +111,18 @@ export class JiraRateLimiter {
     });
   }
 
-  private rate(state: JiraRateState): number {
-    return Math.min(state.fillRate / state.intervalSeconds * this.settings.fraction,
+  private refillRate(state: JiraRateState): number {
+    return state.fillRate / state.intervalSeconds * this.settings.fraction;
+  }
+
+  private pacingRate(state: JiraRateState): number {
+    return Math.min(this.refillRate(state),
       this.settings.requestBudgetPerMinute ? this.settings.requestBudgetPerMinute / 60 : Infinity);
   }
 
   private refill(state: JiraRateState, now: number): void {
     // Estimate refill at our allocated fraction, leaving the rest for other account users.
-    state.remaining = Math.min(state.limit, state.remaining + Math.max(0, now - state.updatedAt) / 1000 * this.rate(state));
+    state.remaining = Math.min(state.limit, state.remaining + Math.max(0, now - state.updatedAt) / 1000 * this.refillRate(state));
     state.updatedAt = now;
   }
 }

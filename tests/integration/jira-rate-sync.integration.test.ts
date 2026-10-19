@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { getPrismaClient, disconnectPrisma, createPostgresJiraRateLimiter, claimConnectionSync, releaseConnectionSync, renewConnectionSync } from '@agile-tools/db';
 import { encryptSecret, resetConfig, JiraRateStateSchema } from '@agile-tools/shared';
 import { runScopeSync } from '../../apps/worker/src/sync/run-scope-sync';
+import { cancelActiveSyncRuns, trackActiveSyncRun, WORKER_SHUTDOWN_SYNC_ERROR_CODE } from '../../apps/worker/src/jobs/active-sync-runs';
 import { startPostgres, stopPostgres } from './support/postgres';
 
 const key = 'integration-encryption-key-at-least-32-characters';
@@ -91,6 +92,42 @@ async function sync(scopeId: string) {
 }
 
 describe('shared Jira sync persistence', () => {
+  it('preserves staged batches when shutdown pauses an attempt that still owns its lease', async () => {
+    issueCount = 20;
+    const db = getPrismaClient();
+    const item = await scope(95);
+    const run = await db.syncRun.create({ data: { scopeId: item.id, trigger: 'scheduled' } });
+    const originalFetch = globalThis.fetch;
+    let shutdownRequested = false;
+    vi.stubGlobal('fetch', vi.fn(async (...args: Parameters<typeof fetch>) => {
+      const input = args[0];
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!shutdownRequested && url.includes('/issue/95-10')) {
+        shutdownRequested = true;
+        expect(await db.syncWorkItemStage.count({ where: { syncRunId: run.id } })).toBe(10);
+        expect(await cancelActiveSyncRuns(db)).toBe(1);
+      }
+      return originalFetch(...args);
+    }));
+    const untrack = trackActiveSyncRun(run.id);
+    try {
+      await runScopeSync(db, run.id);
+    } finally {
+      untrack();
+    }
+    expect(shutdownRequested).toBe(true);
+    expect(await db.syncRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+      status: 'queued', errorCode: WORKER_SHUTDOWN_SYNC_ERROR_CODE,
+    });
+    expect(await db.syncWorkItemStage.count({ where: { syncRunId: run.id } })).toBe(10);
+    expect(await db.jiraConnection.findUniqueOrThrow({ where: { id: connectionId } })).toMatchObject({ activeSyncLeaseToken: null });
+    requests.length = 0;
+    await runScopeSync(db, run.id);
+    expect(await db.syncRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({ status: 'succeeded' });
+    expect(await db.workItem.count({ where: { scopeId: item.id, lastSyncRunId: run.id } })).toBe(20);
+    expect(requests).not.toContain('/rest/api/2/issue/95-0');
+  });
+
   it('publishes 12 scopes, removes departed issues and cuts unchanged requests by over 90%', async () => {
     const db = getPrismaClient();
     const scopes = await Promise.all(Array.from({ length: 12 }, (_, i) => scope(i + 1)));
