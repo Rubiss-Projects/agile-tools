@@ -97,6 +97,28 @@ beforeEach(async () => {
 });
 
 describe('resolveActiveSyncRun', () => {
+  it('preserves a long rate-limit pause until its recorded resume time is due', async () => {
+    const db = getPrismaClient();
+    const now = new Date();
+    const staleHeartbeat = new Date(now.getTime() - STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS - 1_000);
+    const resumeAfter = new Date(now.getTime() + 2 * 60 * 60_000);
+    const run = await db.syncRun.create({ data: {
+      scopeId, trigger: 'scheduled', status: 'queued', resumeAfter, errorCode: 'RATE_LIMITED',
+    } });
+    await db.$executeRaw`UPDATE "SyncRun" SET "updatedAt" = ${staleHeartbeat} WHERE id = ${run.id}`;
+    const resolveAt = (at: Date) => db.$transaction(async (tx) => {
+      await acquireScopeSyncLock(tx, scopeId);
+      return resolveActiveSyncRun(tx, workspaceId, scopeId, at);
+    });
+
+    expect(await resolveAt(now)).toMatchObject({
+      id: run.id, status: 'queued', errorCode: 'RATE_LIMITED', resumeAfter, updatedAt: staleHeartbeat,
+    });
+    expect(await resolveAt(resumeAfter)).toMatchObject({
+      id: run.id, status: 'queued', errorCode: 'SYNC_RESUMING', resumeAfter,
+    });
+  });
+
   it('resumes a stale queued sync in place', async () => {
     const db = getPrismaClient();
     const now = new Date('2026-04-30T12:00:00.000Z');

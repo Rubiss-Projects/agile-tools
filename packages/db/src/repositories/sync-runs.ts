@@ -196,6 +196,8 @@ export async function resolveActiveSyncRun(
         {
           status: 'queued',
           updatedAt: { lte: staleCutoff },
+          // Long Retry-After pauses are intentional, not abandoned queue jobs.
+          OR: [{ resumeAfter: null }, { resumeAfter: { lte: now } }],
         },
         {
           status: 'running',
