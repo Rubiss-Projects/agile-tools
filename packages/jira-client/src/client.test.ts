@@ -30,6 +30,7 @@ afterEach(() => {
 describe('createJiraClient', () => {
   it('bounds sibling requests waiting on a shared ten-minute Retry-After', async () => {
     vi.useFakeTimers();
+    const startedAt = Date.now();
     const store = createMemoryJiraRateStore();
     const fetchMock = vi.fn().mockImplementation(() => new Response('{}', {
       status: 429, headers: { 'Retry-After': '600' },
@@ -45,6 +46,9 @@ describe('createJiraClient', () => {
     })));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(clients[1]!.stats.requests).toBe(0);
+    for (const client of clients) {
+      expect(client.lastRateState?.blockedUntil).toBe(startedAt + 600_000);
+    }
   });
 
   it('pauses on Retry-After: 0 and retries the same request after refill', async () => {

@@ -405,21 +405,14 @@ export async function runScopeSync(db: PrismaClient, syncRunId: string): Promise
     let batch: RawJiraIssue[] = [];
     const projectIdsSet = new Set<string>();
     const checkpointItems = await db.syncWorkItemStage.findMany({
-      where: { syncRunId }, select: { jiraIssueId: true, projectId: true, jiraUpdatedAt: true },
+      where: { syncRunId }, select: { jiraIssueId: true },
     });
-    const checkpoints = new Map(checkpointItems.map((item) => [item.jiraIssueId, item]));
     const processedIssueIds = new Set<string>();
-    // A durable stage is reusable only after this attempt observes current membership
-    // and confirms Jira's update timestamp. Missing timestamps require reprocessing.
+    // Re-normalize even unchanged issues against this attempt's board mapping.
+    // Cached raw histories avoid repeating completed detail requests on resume.
     const shouldProcessIssue = (issue: RawJiraIssue) => {
       if (processedIssueIds.has(issue.id)) return false;
       processedIssueIds.add(issue.id);
-      const staged = checkpoints.get(issue.id);
-      if (issue.fields.updated && staged?.jiraUpdatedAt?.getTime() === Date.parse(issue.fields.updated)) {
-        projectIdsSet.add(staged.projectId);
-        jiraClient.stats.issuesSkipped++;
-        return false;
-      }
       return true;
     };
 

@@ -54,7 +54,7 @@ export class JiraRateLimiter {
     readonly settings: JiraRateSettings = DEFAULT_JIRA_RATE_SETTINGS,
   ) {}
 
-  async acquire(onWait?: (milliseconds: number, rateLimited: boolean) => Promise<void>): Promise<() => Promise<void>> {
+  async acquire(onWait?: (milliseconds: number, rateLimited: boolean, state: JiraRateState) => Promise<void>): Promise<() => Promise<void>> {
     const id = randomUUID();
     for (;;) {
       const wait = await this.store.update((state, now) => {
@@ -67,6 +67,7 @@ export class JiraRateLimiter {
         if (delay > 0) return {
           milliseconds: Math.min(5_000, Math.ceil(delay)),
           rateLimited: state.blockedUntil > now || tokenWait > 0,
+          state: structuredClone(state),
         };
         // The lease outlives the client's 30-second HTTP timeout, including body consumption.
         state.leases.push({ id, expiresAt: now + 60_000 });
@@ -75,7 +76,7 @@ export class JiraRateLimiter {
         return { milliseconds: 0, rateLimited: false };
       });
       if (wait.milliseconds === 0) break;
-      await onWait?.(wait.milliseconds, wait.rateLimited);
+      if (wait.state) await onWait?.(wait.milliseconds, wait.rateLimited, wait.state);
       await new Promise((resolve) => setTimeout(resolve, wait.milliseconds));
     }
     return async () => {

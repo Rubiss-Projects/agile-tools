@@ -13,6 +13,7 @@ let missingBoard = false;
 let removedFirstIssue = false;
 let changedSecondIssue = false;
 let missingThirdTimestamp = false;
+let columnName = 'Doing';
 const requests: string[] = [];
 
 beforeAll(async () => {
@@ -32,6 +33,7 @@ afterAll(async () => {
 beforeEach(async () => {
   requests.length = 0; blocked = false; missingBoard = false; removedFirstIssue = false; issueCount = 100;
   changedSecondIssue = false; missingThirdTimestamp = false;
+  columnName = 'Doing';
   const db = getPrismaClient();
   const workspace = await db.workspace.create({ data: { name: `rate-test-${crypto.randomUUID()}`, defaultTimezone: 'UTC' } });
   workspaceId = workspace.id;
@@ -47,7 +49,7 @@ beforeEach(async () => {
     // Accelerated bucket for persistence tests; exact 120/minute pacing is tested with a virtual clock.
     const headers = { 'X-RateLimit-Limit': '240', 'X-RateLimit-Remaining': '200', 'X-RateLimit-FillRate': '120000', 'X-RateLimit-Interval-Seconds': '60', 'Retry-After': '0' };
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers }));
-    if (path.endsWith('/configuration')) return missingBoard ? json({}, 404) : json({ name: 'Board', columnConfig: { columns: [{ name: 'Doing', statuses: [{ id: '10' }] }] } });
+    if (path.endsWith('/configuration')) return missingBoard ? json({}, 404) : json({ name: 'Board', columnConfig: { columns: [{ name: columnName, statuses: [{ id: '10' }] }] } });
     if (path.endsWith('/status')) return json([{ id: '10', name: 'Doing' }]);
     if (path.endsWith('/issuetype')) return json([{ id: 'story', name: 'Story' }]);
     if (path.endsWith('/field')) return json([]);
@@ -108,7 +110,7 @@ describe('shared Jira sync persistence', () => {
     expect(await db.syncRun.count({ where: { scope: { connectionId }, status: 'failed' } })).toBe(0);
   }, 180_000);
 
-  it('retains batches on 429 and resumes the same run without fetching completed issue details again', async () => {
+  it('resumes with the current board mapping without fetching completed issue details again', async () => {
     issueCount = 20; blocked = true;
     const db = getPrismaClient();
     const item = await scope(99);
@@ -118,12 +120,24 @@ describe('shared Jira sync persistence', () => {
     expect(await db.workItem.count({ where: { scopeId: item.id } })).toBe(0);
     const before = requests.filter((path) => path === '/rest/api/2/issue/99-0').length;
     blocked = false;
+    columnName = 'In progress';
     // Simulate Jira's bucket having refilled while the run was queued.
     await db.jiraRateLimitState.update({ where: { connectionId }, data: { state: JiraRateStateSchema.parse({ fillRate: 120000, updatedAt: Date.now() }) } });
     await runScopeSync(db, run.id);
     expect(await db.syncRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({ status: 'succeeded', errorCode: null });
     expect(requests.filter((path) => path === '/rest/api/2/issue/99-0')).toHaveLength(before);
     expect(await db.workItem.count({ where: { scopeId: item.id, lastSyncRunId: run.id } })).toBe(20);
+    expect(await db.workItem.count({ where: { scopeId: item.id, lastSyncRunId: run.id, currentColumn: columnName } })).toBe(20);
+  });
+
+  it('schedules a paused run after a shared limiter deadline even without receiving a 429 itself', async () => {
+    const db = getPrismaClient();
+    const item = await scope(96);
+    const limiter = createPostgresJiraRateLimiter(db, connectionId);
+    const state = await limiter.observe(new Headers({ 'Retry-After': '600' }), 429, 0);
+    const run = await sync(item.id);
+    expect(run).toMatchObject({ status: 'queued', errorCode: 'RATE_LIMITED', resumeAfter: new Date(state.blockedUntil) });
+    expect(requests).toHaveLength(0);
   });
 
   it('reconciles changed, departed, and undated staged issues before publishing a resumed run', async () => {
