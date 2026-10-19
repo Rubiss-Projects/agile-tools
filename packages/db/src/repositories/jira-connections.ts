@@ -185,6 +185,29 @@ export class JiraConnectionBusyError extends Error {
   }
 }
 
+/** Publish validation state only for the identity that made the Jira requests. */
+export async function updateJiraConnectionValidation(
+  client: JiraConnectionClient,
+  connection: Pick<JiraConnection, 'id' | 'workspaceId' | 'baseUrl' | 'authType' | 'encryptedSecretRef'>,
+  data: UpdateConnectionHealthInput & UpdateJiraConnectionCapabilitiesInput,
+): Promise<JiraConnection | null> {
+  try {
+    return await client.jiraConnection.update({
+      where: {
+        id: connection.id,
+        workspaceId: connection.workspaceId,
+        baseUrl: connection.baseUrl,
+        authType: connection.authType,
+        encryptedSecretRef: connection.encryptedSecretRef,
+      },
+      data,
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') return null;
+    throw err;
+  }
+}
+
 export async function updateJiraConnection(
   client: PrismaClient,
   workspaceId: string,

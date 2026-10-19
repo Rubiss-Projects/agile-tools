@@ -15,6 +15,7 @@ import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { NextRequest } from 'next/server';
 import { resetConfig, encryptSecret, JiraRateStateSchema } from '@agile-tools/shared';
+import { JiraClient } from '@agile-tools/jira-client';
 import { getPrismaClient, disconnectPrisma, createPostgresJiraRateLimiter, claimConnectionSync } from '@agile-tools/db';
 import {
   JiraConnectionSchema,
@@ -405,6 +406,38 @@ describe('PUT /v1/admin/jira-connections/:id', () => {
 // ─── POST /v1/admin/jira-connections/:id/validate ────────────────────────────
 
 describe('POST /v1/admin/jira-connections/:id/validate', () => {
+  it.each([
+    ['url', 'success'], ['url', 'failure'], ['pat', 'success'], ['pat', 'failure'],
+  ] as const)('discards stale validation after %s replacement on %s', async (kind, outcome) => {
+    const db = getPrismaClient();
+    const connection = await db.jiraConnection.create({ data: {
+      workspaceId, baseUrl: JIRA_BASE, encryptedSecretRef: encryptSecret(TEST_PAT, TEST_ENCRYPTION_KEY),
+    } });
+    const validation = vi.spyOn(JiraClient.prototype, 'validateConnection').mockImplementationOnce(async () => {
+      // Replace the identity after validation starts but before its result is persisted.
+      const replacement = await updateConnection(makeRequest(`http://localhost/api/v1/admin/jira-connections/${connection.id}`, 'PUT', {
+        baseUrl: kind === 'url' ? 'https://replacement.test' : JIRA_BASE,
+        ...(kind === 'pat' ? { pat: 'replacement-pat' } : {}),
+      }), { params: Promise.resolve({ connectionId: connection.id }) });
+      expect(replacement.status).toBe(200);
+      if (outcome === 'failure') throw new Error('Old identity validation failed');
+      return { version: '8.14.0', deploymentType: 'Server', baseUrl: JIRA_BASE };
+    });
+    try {
+      const res = await validateConnection(makeRequest(
+        `http://localhost/api/v1/admin/jira-connections/${connection.id}/validate`, 'POST',
+      ), { params: Promise.resolve({ connectionId: connection.id }) });
+      expect(res.status).toBe(409);
+      expect(ProblemSchema.parse(await res.json()).code).toBe('CONNECTION_CHANGED');
+      expect(await db.jiraConnection.findUniqueOrThrow({ where: { id: connection.id } })).toMatchObject({
+        healthStatus: 'draft', lastValidatedAt: null, lastHealthyAt: null, lastErrorCode: null,
+        jiraVersion: null, jiraDeploymentType: null, changelogStrategy: null, capabilitiesDetectedAt: null,
+      });
+    } finally {
+      validation.mockRestore();
+    }
+  });
+
   it('returns 200 with healthy validation when Jira responds normally', async () => {
     const req = makeRequest(
       `http://localhost/api/v1/admin/jira-connections/${connectionId}/validate`,

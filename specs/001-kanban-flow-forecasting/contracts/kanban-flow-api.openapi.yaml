@@ -131,6 +131,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '409':
+          description: Connection identity changed during validation; validate the updated connection again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/admin/jira-connections/{connectionId}/discovery/boards:
     get:
       tags: [Admin Connections]
