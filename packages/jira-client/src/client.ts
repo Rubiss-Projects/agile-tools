@@ -163,7 +163,8 @@ export class JiraClient {
     for (let attempt = 0; ; attempt++) {
       checkBudget();
       await this.options.onProgress?.();
-      const release = await this.limiter.acquire(async (milliseconds, sharedRateLimited) => {
+      const release = await this.limiter.acquire(async (milliseconds, sharedRateLimited, state) => {
+        this.lastRateState = state;
         rateLimited ||= sharedRateLimited;
         checkBudget();
         await this.options.onProgress?.();
