@@ -21,6 +21,22 @@ export async function createSyncRun(
   client: SyncRunClient,
   input: CreateSyncRunInput,
 ): Promise<SyncRun> {
+  if ('$transaction' in client) {
+    return client.$transaction((tx) => insertSyncRunWithConnectionLock(tx, input));
+  }
+  return insertSyncRunWithConnectionLock(client, input);
+}
+
+async function insertSyncRunWithConnectionLock(client: Prisma.TransactionClient, input: CreateSyncRunInput): Promise<SyncRun> {
+  // Keep the connection identity stable through insertion. Identity edits take
+  // this row exclusively before checking for active runs, so neither can slip
+  // between the other's check and write.
+  await client.$queryRaw`
+    SELECT connection.id FROM "JiraConnection" connection
+    JOIN "FlowScope" scope ON scope."connectionId" = connection.id
+    WHERE scope.id = ${input.scopeId}
+    FOR SHARE OF connection
+  `;
   return client.syncRun.create({
     data: {
       scopeId: input.scopeId,

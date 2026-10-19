@@ -1,13 +1,15 @@
 import { execSync } from 'node:child_process';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 
 import { disconnectPrisma, getPrismaClient } from '../client.js';
 import {
   STALE_ACTIVE_SYNC_RUN_TIMEOUT_MS,
   acquireScopeSyncLock,
+  createSyncRun,
   resolveActiveSyncRun,
 } from './sync-runs.js';
+import { JiraConnectionBusyError, updateJiraConnection } from './jira-connections.js';
 
 let workspaceId: string;
 let connectionId: string;
@@ -94,6 +96,51 @@ beforeEach(async () => {
     },
   });
   scopeId = scope.id;
+});
+
+describe('createSyncRun', () => {
+  it('holds identity replacement until a concurrently created sync is committed', async () => {
+    const db = getPrismaClient();
+    let markInserted!: () => void;
+    let commit!: () => void;
+    const inserted = new Promise<void>((resolve) => { markInserted = resolve; });
+    const canCommit = new Promise<void>((resolve) => { commit = resolve; });
+    const creation = db.$transaction(async (tx) => {
+      await acquireScopeSyncLock(tx, scopeId);
+      const run = await createSyncRun(tx, { scopeId, trigger: 'scheduled' });
+      markInserted();
+      await canCommit;
+      return run;
+    });
+    await inserted;
+    const replacement = expect(updateJiraConnection(db, workspaceId, connectionId, {
+      baseUrl: 'https://replacement.test',
+    })).rejects.toBeInstanceOf(JiraConnectionBusyError);
+    try {
+      await vi.waitFor(async () => {
+        const waiting = await db.$queryRaw<Array<{ count: number }>>`
+          SELECT count(*)::int AS count FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND query LIKE '%"JiraConnection"%FOR UPDATE%'
+        `;
+        expect(waiting[0]?.count).toBe(1);
+      });
+    } finally {
+      commit();
+    }
+    const run = await creation;
+    await replacement;
+    expect(run.status).toBe('queued');
+    expect(await db.jiraConnection.findUniqueOrThrow({ where: { id: connectionId } }))
+      .toMatchObject({ baseUrl: 'https://jira.example.internal' });
+  });
+
+  it('also locks run creation through the non-transactional client entry point', async () => {
+    const db = getPrismaClient();
+    const run = await createSyncRun(db, { scopeId, trigger: 'manual' });
+    expect(run).toMatchObject({ scopeId, status: 'queued' });
+    await expect(updateJiraConnection(db, workspaceId, connectionId, { baseUrl: 'https://replacement.test' }))
+      .rejects.toBeInstanceOf(JiraConnectionBusyError);
+  });
 });
 
 describe('resolveActiveSyncRun', () => {
