@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/exporter-prometheus": "^0.300.0",
+    "@opentelemetry/exporter-prometheus": "^0.301.0",
     "@opentelemetry/resources": "^3.0.0",
     "@opentelemetry/sdk-metrics": "^3.0.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
